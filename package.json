@@ -6,9 +6,15 @@
         "build": "vp build",
         "build:ssr": "vp build && vp build --ssr",
         "dev": "vp dev",
-        "check": "vp check",
-        "check:fix": "vp check --fix",
-        "types:check": "vue-tsc --noEmit"
+        "test": "vp test",
+        "test:watch": "vp test watch",
+        "lint": "vp lint --fix",
+        "lint:check": "vp lint",
+        "format": "vp fmt",
+        "format:check": "vp fmt --check",
+        "types:check": "vue-tsc --noEmit",
+        "check": "vp check && vue-tsc --noEmit && vp test",
+        "check:fix": "vp check --fix"
     },
     "dependencies": {
         "@inertiajs/vite": "^3.0.0",
@@ -30,7 +36,9 @@
         "@tailwindcss/vite": "^4.1.11",
         "@types/node": "^22.13.5",
         "@vitejs/plugin-vue": "^6.0.0",
+        "@vue/test-utils": "^2.5.1",
         "concurrently": "^10.0.3",
+        "happy-dom": "^20.14.5",
         "typescript": "^5.2.2",
         "vite": "^8.0.0",
         "vite-plus": "0.3.0",
