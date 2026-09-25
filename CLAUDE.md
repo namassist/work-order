@@ -6,6 +6,8 @@ Laravel 13 + Inertia v3 + Vue 3 (TypeScript) + Tailwind v4 + shadcn-vue (reka-ui
 
 @AGENTS.md
 
+@docs/DESIGN.md
+
 ## Commands
 
 The script names are the same in composer (backend) and npm (frontend):
