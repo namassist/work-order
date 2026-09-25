@@ -79,7 +79,6 @@
   color utility to any element that depends on these defaults.
 */
 @layer base {
-
     *,
     ::after,
     ::before,
@@ -90,7 +89,6 @@
 }
 
 @layer utilities {
-
     body,
     html {
         --font-sans:
@@ -104,116 +102,116 @@
 :root {
     --radius: 0.5rem;
 
-    --brand-green: #1C322D;
-    --brand-yellow: #EBB552;
+    --brand-green: #1c322d;
+    --brand-yellow: #ebb552;
 
-    --background: #F7F7F5;
+    --background: #f7f7f5;
     /* putih lembut, netral */
-    --foreground: #1A1A1A;
+    --foreground: #1a1a1a;
     /* hitam lembut untuk teks */
 
-    --card: #FDFDFC;
-    --card-foreground: #1A1A1A;
-    --popover: #FDFDFC;
-    --popover-foreground: #1A1A1A;
+    --card: #fdfdfc;
+    --card-foreground: #1a1a1a;
+    --popover: #fdfdfc;
+    --popover-foreground: #1a1a1a;
 
-    --primary: #1C322D;
+    --primary: #1c322d;
     /* hijau brand: aksi utama */
-    --primary-foreground: #FDFDFC;
-    --secondary: #EEEEEB;
+    --primary-foreground: #fdfdfc;
+    --secondary: #eeeeeb;
     /* netral */
-    --secondary-foreground: #1A1A1A;
-    --accent: #FBF1DC;
+    --secondary-foreground: #1a1a1a;
+    --accent: #fbf1dc;
     /* tint kuning: hover/selected */
-    --accent-foreground: #1A1A1A;
-    --muted: #EEEEEB;
-    --muted-foreground: #6B6B66;
+    --accent-foreground: #1a1a1a;
+    --muted: #eeeeeb;
+    --muted-foreground: #6b6b66;
 
-    --destructive: #B42318;
-    --destructive-foreground: #FDFDFC;
+    --destructive: #b42318;
+    --destructive-foreground: #fdfdfc;
 
-    --border: #E4E4E0;
-    --input: #E4E4E0;
-    --ring: #EBB552;
+    --border: #e4e4e0;
+    --input: #e4e4e0;
+    --ring: #ebb552;
     /* kuning brand: focus ring */
 
-    --success: #2F7D5B;
-    --success-foreground: #FDFDFC;
-    --warning: #EBB552;
-    --warning-foreground: #1A1A1A;
-    --info: #2B6CB0;
-    --info-foreground: #FDFDFC;
+    --success: #2f7d5b;
+    --success-foreground: #fdfdfc;
+    --warning: #ebb552;
+    --warning-foreground: #1a1a1a;
+    --info: #2b6cb0;
+    --info-foreground: #fdfdfc;
 
-    --chart-1: #1C322D;
-    --chart-2: #EBB552;
-    --chart-3: #5E8C7A;
-    --chart-4: #C9A04A;
-    --chart-5: #A3A39E;
+    --chart-1: #1c322d;
+    --chart-2: #ebb552;
+    --chart-3: #5e8c7a;
+    --chart-4: #c9a04a;
+    --chart-5: #a3a39e;
 
     /* Sidebar hijau brand */
-    --sidebar: #1C322D;
-    --sidebar-foreground: #F7F7F5;
-    --sidebar-primary: #EBB552;
-    --sidebar-primary-foreground: #1A1A1A;
+    --sidebar: #1c322d;
+    --sidebar-foreground: #f7f7f5;
+    --sidebar-primary: #ebb552;
+    --sidebar-primary-foreground: #1a1a1a;
     --sidebar-accent: #264540;
-    --sidebar-accent-foreground: #FDFDFC;
-    --sidebar-border: #2B4841;
-    --sidebar-ring: #EBB552;
+    --sidebar-accent-foreground: #fdfdfc;
+    --sidebar-border: #2b4841;
+    --sidebar-ring: #ebb552;
 }
 
 /* ---------- Dark: off-black ---------- */
 .dark {
-    --brand-green: #3F7A66;
+    --brand-green: #3f7a66;
     /* hijau dicerahkan agar terlihat di atas hitam */
-    --brand-yellow: #EBB552;
+    --brand-yellow: #ebb552;
 
     --background: #141414;
-    --foreground: #EDEDEA;
+    --foreground: #ededea;
 
-    --card: #1C1C1C;
-    --card-foreground: #EDEDEA;
-    --popover: #1C1C1C;
-    --popover-foreground: #EDEDEA;
+    --card: #1c1c1c;
+    --card-foreground: #ededea;
+    --popover: #1c1c1c;
+    --popover-foreground: #ededea;
 
-    --primary: #EBB552;
+    --primary: #ebb552;
     /* kuning brand: aksi utama di mode gelap */
     --primary-foreground: #141414;
     --secondary: #262626;
-    --secondary-foreground: #EDEDEA;
-    --accent: #2A2721;
+    --secondary-foreground: #ededea;
+    --accent: #2a2721;
     /* tint kuning gelap */
-    --accent-foreground: #EDEDEA;
+    --accent-foreground: #ededea;
     --muted: #262626;
-    --muted-foreground: #A3A39E;
+    --muted-foreground: #a3a39e;
 
-    --destructive: #F87171;
+    --destructive: #f87171;
     --destructive-foreground: #141414;
 
-    --border: #2C2C2C;
-    --input: #2C2C2C;
-    --ring: #EBB552;
+    --border: #2c2c2c;
+    --input: #2c2c2c;
+    --ring: #ebb552;
 
-    --success: #5FBF8F;
+    --success: #5fbf8f;
     --success-foreground: #141414;
-    --warning: #EBB552;
+    --warning: #ebb552;
     --warning-foreground: #141414;
-    --info: #7DB3E8;
+    --info: #7db3e8;
     --info-foreground: #141414;
 
-    --chart-1: #EBB552;
-    --chart-2: #5FBF8F;
-    --chart-3: #3F7A66;
-    --chart-4: #C9A04A;
-    --chart-5: #A3A39E;
+    --chart-1: #ebb552;
+    --chart-2: #5fbf8f;
+    --chart-3: #3f7a66;
+    --chart-4: #c9a04a;
+    --chart-5: #a3a39e;
 
-    --sidebar: #1C322D;
-    --sidebar-foreground: #EDEDEA;
-    --sidebar-primary: #EBB552;
+    --sidebar: #1c322d;
+    --sidebar-foreground: #ededea;
+    --sidebar-primary: #ebb552;
     --sidebar-primary-foreground: #141414;
     --sidebar-accent: #264540;
-    --sidebar-accent-foreground: #EDEDEA;
-    --sidebar-border: #2B4841;
-    --sidebar-ring: #EBB552;
+    --sidebar-accent-foreground: #ededea;
+    --sidebar-border: #2b4841;
+    --sidebar-ring: #ebb552;
 }
 
 @layer base {
