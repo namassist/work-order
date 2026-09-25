@@ -60,3 +60,6 @@ jobs:
 
       - name: Run CI Checks
         run: composer ci:check
+        env:
+          # Vitest boots a Vite dev server; laravel-vite-plugin refuses that in CI by default.
+          LARAVEL_BYPASS_ENV_CHECK: 1
