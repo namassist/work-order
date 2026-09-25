@@ -89,7 +89,7 @@ describe('store', function () {
 
         $this->actingAs(userWithPermissions(Permission::DepartmentsCreate))
             ->post(route('admin.departments.store'), ['code' => 'FIN', 'name' => 'Lain', 'is_active' => true])
-            ->assertSessionHasErrors(['code' => 'The code has already been taken.']);
+            ->assertSessionHasErrors(['code' => 'Kode sudah ada sebelumnya.']);
     });
 
     it('offers to restore when the code belongs to a deleted department', function () {
@@ -97,7 +97,7 @@ describe('store', function () {
 
         $this->actingAs(userWithPermissions(Permission::DepartmentsCreate, Permission::DepartmentsRestore))
             ->post(route('admin.departments.store'), ['code' => 'FIN', 'name' => 'Lain', 'is_active' => true])
-            ->assertSessionHasErrors(['code' => 'Code ini dipakai oleh data yang sudah dihapus. Pulihkan data tersebut lewat filter "Tampilkan terhapus".']);
+            ->assertSessionHasErrors(['code' => 'Kode ini dipakai oleh data yang sudah dihapus. Pulihkan data tersebut lewat filter "Tampilkan terhapus".']);
 
         expect(Department::withTrashed()->count())->toBe(1);
     });
@@ -107,7 +107,7 @@ describe('store', function () {
 
         $this->actingAs(userWithPermissions(Permission::DepartmentsCreate))
             ->post(route('admin.departments.store'), ['code' => 'FIN', 'name' => 'Lain', 'is_active' => true])
-            ->assertSessionHasErrors(['code' => 'The code has already been taken.']);
+            ->assertSessionHasErrors(['code' => 'Kode sudah ada sebelumnya.']);
     });
 });
 

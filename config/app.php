@@ -69,6 +69,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Display Timezone
+    |--------------------------------------------------------------------------
+    |
+    | Timestamps are stored in UTC and converted to this timezone only when
+    | shown to users (App\Support\DisplayDate, resources/js/lib/format.ts)
+    | or when user-entered dates are turned into query bounds.
+    |
+    */
+
+    'display_timezone' => env('DISPLAY_TIMEZONE', 'Asia/Makassar'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |
@@ -78,7 +91,7 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    'locale' => env('APP_LOCALE', 'id'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 

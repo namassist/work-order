@@ -35,11 +35,12 @@ Frontend tooling is **Vite+** (`vite-plus`, CLI `vp`). It bundles Vite, Vitest, 
 - `name`
 - `auth.user`
 - `auth.permissions` (the user's permission names, including those granted through roles)
+- `displayTimezone` (see Dates and time)
 - `sidebarOpen` (read from the `sidebar_state` cookie)
 
 **Layouts are assigned by page name in `resources/js/app.ts`, not inside pages:**
 
-- `Welcome` gets no layout.
+- `ErrorPage` gets no layout.
 - `auth/*` pages get `AuthLayout`.
 - `settings/*` pages get `AppLayout` with `settings/Layout` nested inside.
 - Every other page gets `AppLayout`.
@@ -52,6 +53,23 @@ Put new pages in the directory that gives them the right layout.
 
 **Wayfinder.** `resources/js/actions/`, `resources/js/routes/`, and `resources/js/wayfinder/` are gitignored. The Vite plugin (`formVariants: true`) generates them from Laravel routes and controllers. Use them instead of hardcoded URLs. After changing routes, the dev server regenerates them; otherwise run `php artisan wayfinder:generate`.
 
+`/` only redirects: to the dashboard when signed in, otherwise to login.
+
+**App shell.** The sidebar (`components/AppSidebar.vue`) is a list of `navGroups` (Dashboard, Master Data, Administrasi). Each item names the `permission` that shows it, and `visibleNavGroups()` drops groups left empty. A comment marks where the Work Order group goes. Every page starts with `components/PageHeader.vue` (serif h1, description, one primary action in the `actions` slot) and sets `breadcrumbs` in its layout props; a group label crumb such as `{ title: 'Master Data' }` has no `href`. Empty tables use `components/EmptyState.vue` inside `TableEmpty`: "Belum ada …" plus the create action when `isFiltering(props.filters)` is false, otherwise "Tidak ada … yang cocok" plus a "Hapus filter" link to the bare index URL. `DashboardController` serves the dashboard; its WO metric cards are placeholders until the WO module exists.
+
+**Error pages.** Outside debug mode, `Inertia::handleExceptionsUsing()` in `bootstrap/app.php` renders `pages/ErrorPage.vue` for 403, 404, 419, 500, and 503 (JSON requests still get JSON). With `APP_DEBUG=true` you see Laravel's stack trace page instead, so set it to `false` locally to view them.
+
+**Localization.** The UI is Indonesian (`APP_LOCALE=id`). Framework messages live in `lang/id/*.php` and `lang/id.json`, published by `laravel-lang/lang` (dev dependency; refresh with `php artisan lang:update`) and excluded from Pint. Validation attribute names (`kode`, `nama`, …) are in the `attributes` key of `lang/id/validation.php`; add new form fields there. Write app strings in Indonesian directly, e.g. `__('Profil diperbarui.')`.
+
+**Dates and time.** Store UTC, convert only at the edges:
+
+- `app.timezone` stays `UTC`; timestamps are stored and serialized (ISO 8601) in UTC.
+- The display timezone is WITA: `DISPLAY_TIMEZONE` (`config('app.display_timezone')`, default `Asia/Makassar`), shared to the frontend as `displayTimezone`.
+- Frontend display goes through `resources/js/lib/format.ts` (`useFormatDate()` in components): `25 Sep 2026 10:15`, `25 Sep 2026`. Never call `toLocaleString()` or `Intl` directly in components.
+- Server-written text (toasts, later exports/PDF) uses `App\Support\DisplayDate::dateTime()`/`date()`, which produce the same strings.
+- User-entered dates used as filters become UTC bounds through `DisplayDate::startOfDayUtc()`/`endOfDayUtc()` (see `ActivityLogController::index`), so a 07:30 WITA entry is found under its WITA day.
+- Date-only values (e.g. future WO due dates) use `DATE` columns and are never timezone-converted.
+
 **Flash toasts.** On the backend, call `Inertia::flash('toast', ['type' => 'success', 'message' => ...])`. On the frontend, `resources/js/lib/flashToast.ts` listens for the router `flash` event and shows the message with `vue-sonner`.
 
 **Audit trail (spatie/laravel-activitylog v5).** Everything goes to the `activity_log` table, readable at Admin › Log Aktivitas (`Admin\ActivityLogController`, permission `activity-log.view`, admin only).
@@ -63,7 +81,7 @@ Put new pages in the directory that gives them the right layout.
 - Event names and their labels live in `App\Enums\AuditEvent`, and subject labels in `App\Enums\AuditSubject`. `ActivityResource` turns an entry into labelled before/after rows.
 - **Retention.** `activitylog:clean` runs daily (`routes/console.php`) and keeps `ACTIVITYLOG_CLEAN_AFTER_DAYS` days (default 365). Production needs the scheduler running (`schedule:run` in cron).
 
-**Appearance (light/dark).** The `appearance` cookie is read server-side by `HandleAppearance` and client-side by `composables/useAppearance.ts`. The `appearance` and `sidebar_state` cookies are deliberately left unencrypted in `bootstrap/app.php` so the frontend can read them.
+**Appearance (light/dark).** `components/ThemeToggle.vue` (app header and auth pages) flips light/dark; Settings › Tampilan also offers "Sistem". The `appearance` cookie is read server-side by `HandleAppearance` and client-side by `composables/useAppearance.ts`. The `appearance` and `sidebar_state` cookies are deliberately left unencrypted in `bootstrap/app.php` so the frontend can read them.
 
 ## Master data module pattern
 
@@ -82,10 +100,10 @@ Put new pages in the directory that gives them the right layout.
     - `app/Http/Controllers/Admin/<Resource>Controller.php`: `index` validates the filters, requires `viewTrashed` for `trashed=1`, returns `paginate(15)->withQueryString()` plus a `can` map; the other actions flash a toast.
     - Routes in `routes/admin.php`.
 - **Frontend.**
-    - Page: `resources/js/pages/admin/<resources>/Index.vue`. Small forms use a dialog in `components/admin/` (`DepartmentFormDialog.vue`); large forms use `Create`/`Edit` pages sharing a form component (`UserForm.vue`).
+    - Page: `resources/js/pages/admin/<resources>/Index.vue`, with `PageHeader`, a group crumb plus its own crumb, and `EmptyState` for both empty cases. Small forms use a dialog in `components/admin/` (`DepartmentFormDialog.vue`); large forms use `Create`/`Edit` pages sharing a form component (`UserForm.vue`).
     - Filters: `composables/useListFilters.ts` (debounced search, `ALL` sentinel for selects, booleans sent as `1`).
     - Table: `components/ui/table`, `components/admin/TablePagination.vue`, `StatusBadge.vue`, and `ConfirmDialog.vue` for deletes.
-    - Types go in `types/admin.ts`, and the sidebar entry in `AppSidebar.vue` `adminNavItems` with a `permission`.
+    - Types go in `types/admin.ts`, and the sidebar entry in the right `navGroups` group of `AppSidebar.vue` with a `permission`.
 - **Required Pest tests** (see `tests/Feature/Admin/DepartmentControllerTest.php`):
     - Search, filter, and pagination.
     - Deleted rows hidden by default, and the deleted list forbidden without `restore`.

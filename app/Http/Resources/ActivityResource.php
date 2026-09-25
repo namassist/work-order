@@ -6,7 +6,10 @@ use App\Enums\AuditEvent;
 use App\Enums\AuditSubject;
 use App\Models\Department;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Collection;
@@ -43,6 +46,23 @@ class ActivityResource extends JsonResource
     public function __construct(Activity $resource, private readonly array $departmentCodes = [])
     {
         parent::__construct($resource);
+    }
+
+    /**
+     * Activity with what this resource renders (subject, causer including
+     * deleted users) eager loaded, newest first.
+     *
+     * @return Builder<Activity>
+     */
+    public static function query(): Builder
+    {
+        return Activity::query()
+            ->with([
+                'subject',
+                'causer' => fn (Relation $causer) => $causer->withoutGlobalScope(SoftDeletingScope::class),
+            ])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
     }
 
     /**

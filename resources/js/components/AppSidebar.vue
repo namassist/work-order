@@ -27,55 +27,65 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useCan } from '@/composables/useCan';
-import { visibleNavItems } from '@/lib/navigation';
+import { visibleNavGroups } from '@/lib/navigation';
 import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+import type { NavGroup } from '@/types';
 
-const mainNavItems: NavItem[] = [
+/**
+ * Sidebar sections in display order. Each item names the permission that
+ * shows it (a UI hint only; the server authorizes every request), and a
+ * group whose items are all hidden disappears with its heading.
+ */
+const navGroups: NavGroup[] = [
     {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
+        items: [{ title: 'Dashboard', href: dashboard(), icon: LayoutGrid }],
     },
-];
-
-const adminNavItems: NavItem[] = [
+    // Work Order group goes here, above Master Data, once the WO module exists:
+    // { label: 'Work Order', items: [{ title: 'Daftar WO', href: ..., icon: ClipboardList, permission: 'work-orders.view' }] },
     {
-        title: 'Departemen',
-        href: DepartmentController.index(),
-        icon: Building2,
-        permission: 'departments.view',
-    },
-    {
-        title: 'Kategori WO',
-        href: WorkOrderCategoryController.index(),
-        icon: Tags,
-        permission: 'work-order-categories.view',
-    },
-    {
-        title: 'Pengguna',
-        href: UserController.index(),
-        icon: Users,
-        permission: 'users.view',
-    },
-    {
-        title: 'Role & Permission',
-        href: RoleController.index(),
-        icon: ShieldCheck,
-        permission: 'roles.manage',
+        label: 'Master Data',
+        items: [
+            {
+                title: 'Departemen',
+                href: DepartmentController.index(),
+                icon: Building2,
+                permission: 'departments.view',
+            },
+            {
+                title: 'Kategori WO',
+                href: WorkOrderCategoryController.index(),
+                icon: Tags,
+                permission: 'work-order-categories.view',
+            },
+        ],
     },
     {
-        title: 'Log Aktivitas',
-        href: ActivityLogController.index(),
-        icon: History,
-        permission: 'activity-log.view',
+        label: 'Administrasi',
+        items: [
+            {
+                title: 'Pengguna',
+                href: UserController.index(),
+                icon: Users,
+                permission: 'users.view',
+            },
+            {
+                title: 'Role & Hak Akses',
+                href: RoleController.index(),
+                icon: ShieldCheck,
+                permission: 'roles.manage',
+            },
+            {
+                title: 'Log Aktivitas',
+                href: ActivityLogController.index(),
+                icon: History,
+                permission: 'activity-log.view',
+            },
+        ],
     },
 ];
 
 const can = useCan();
-const visibleAdminNavItems = computed(() =>
-    visibleNavItems(adminNavItems, can),
-);
+const visibleGroups = computed(() => visibleNavGroups(navGroups, can));
 </script>
 
 <template>
@@ -93,11 +103,11 @@ const visibleAdminNavItems = computed(() =>
         </SidebarHeader>
 
         <SidebarContent>
-            <NavMain :items="mainNavItems" />
             <NavMain
-                v-if="visibleAdminNavItems.length > 0"
-                :items="visibleAdminNavItems"
-                label="Administrasi"
+                v-for="(group, index) in visibleGroups"
+                :key="group.label ?? index"
+                :items="group.items"
+                :label="group.label"
             />
         </SidebarContent>
 

@@ -8,10 +8,10 @@ import { initializeFlashToast } from '@/lib/flashToast';
 const appName = import.meta.env.VITE_APP_NAME || 'WOrder';
 
 void createInertiaApp({
-    title: (title) => (title ? `${title} - ${appName}` : appName),
+    title: (title) => (title ? `${title} · ${appName}` : appName),
     layout: (name) => {
         switch (true) {
-            case name === 'Welcome':
+            case name === 'ErrorPage':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;
@@ -31,7 +31,7 @@ void createInertiaApp({
         });
     },
     progress: {
-        color: '#4B5563',
+        color: '#EBB552',
     },
 });
 

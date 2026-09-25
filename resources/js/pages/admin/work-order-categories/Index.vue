@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
-import { History, Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
-import { ref } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import {
+    History,
+    Pencil,
+    Plus,
+    RotateCcw,
+    Search,
+    SearchX,
+    Tags,
+    Trash2,
+} from '@lucide/vue';
+import { computed, ref } from 'vue';
 import WorkOrderCategoryController from '@/actions/App/Http/Controllers/Admin/WorkOrderCategoryController';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
@@ -29,7 +38,9 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { useCan } from '@/composables/useCan';
-import { useListFilters } from '@/composables/useListFilters';
+import { isFiltering, useListFilters } from '@/composables/useListFilters';
+import EmptyState from '@/components/EmptyState.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import type { ListAbilities, Paginated, WorkOrderCategory } from '@/types';
 
 const props = defineProps<{
@@ -41,6 +52,7 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
+            { title: 'Master Data' },
             {
                 title: 'Kategori WO',
                 href: WorkOrderCategoryController.index(),
@@ -53,6 +65,8 @@ const filters = useListFilters(
     { ...props.filters, status: props.filters.status || 'all' },
     () => WorkOrderCategoryController.index(),
 );
+
+const filtered = computed(() => isFiltering(props.filters));
 
 const formOpen = ref(false);
 const editing = ref<WorkOrderCategory | null>(null);
@@ -110,18 +124,16 @@ const openHistory = (category: WorkOrderCategory) => {
     <Head title="Kategori WO" />
 
     <div class="flex flex-1 flex-col gap-4 p-4">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-            <div>
-                <h1 class="font-serif text-3xl">Kategori Work Order</h1>
-                <p class="text-sm text-muted-foreground">
-                    Kategori nonaktif tetap tampil; yang dihapus hanya terlihat
-                    lewat filter "Tampilkan terhapus".
-                </p>
-            </div>
-            <Button v-if="can.create" @click="openCreate">
-                <Plus /> Tambah kategori
-            </Button>
-        </div>
+        <PageHeader
+            title="Kategori Work Order"
+            description='Kategori nonaktif tetap tampil; yang dihapus hanya terlihat lewat filter "Tampilkan terhapus".'
+        >
+            <template #actions>
+                <Button v-if="can.create" @click="openCreate">
+                    <Plus /> Tambah kategori
+                </Button>
+            </template>
+        </PageHeader>
 
         <div class="rounded-2xl border bg-card">
             <div class="flex flex-wrap items-center gap-3 border-b p-4">
@@ -232,7 +244,34 @@ const openHistory = (category: WorkOrderCategory) => {
                         v-if="categories.data.length === 0"
                         :colspan="5"
                     >
-                        Tidak ada kategori yang cocok.
+                        <EmptyState
+                            v-if="filtered"
+                            :icon="SearchX"
+                            title="Tidak ada kategori yang cocok"
+                            description="Ubah kata kunci atau filter pencarian."
+                        >
+                            <Button variant="outline" size="sm" as-child>
+                                <Link
+                                    :href="WorkOrderCategoryController.index()"
+                                >
+                                    Hapus filter
+                                </Link>
+                            </Button>
+                        </EmptyState>
+                        <EmptyState
+                            v-else
+                            :icon="Tags"
+                            title="Belum ada kategori"
+                            description="Kategori menentukan jenis pekerjaan pada work order."
+                        >
+                            <Button
+                                v-if="can.create"
+                                size="sm"
+                                @click="openCreate"
+                            >
+                                <Plus /> Tambah kategori
+                            </Button>
+                        </EmptyState>
                     </TableEmpty>
                 </TableBody>
             </Table>

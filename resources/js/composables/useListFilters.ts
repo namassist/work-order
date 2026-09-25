@@ -29,6 +29,16 @@ export function toFilterQuery(
 }
 
 /**
+ * Whether any filter narrows the list, which tells an empty table's "no
+ * match" state apart from "no data yet".
+ */
+export function isFiltering(
+    filters: Record<string, string | boolean>,
+): boolean {
+    return Object.keys(toFilterQuery(filters)).length > 0;
+}
+
+/**
  * Keeps list filters in the query string. Changing a filter reloads the page
  * from page 1; the optional search box is debounced.
  */

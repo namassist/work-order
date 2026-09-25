@@ -9,6 +9,8 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Inertia\ExceptionResponse;
+use Inertia\Inertia;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -31,4 +33,18 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request): bool => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // Branded pages outside debug mode; while debugging keep the stack trace page.
+        Inertia::handleExceptionsUsing(function (ExceptionResponse $response): ?ExceptionResponse {
+            if (config('app.debug')
+                || $response->request->expectsJson()
+                || ! in_array($response->statusCode(), [403, 404, 419, 500, 503], true)) {
+                return null;
+            }
+
+            return $response
+                ->render('ErrorPage', ['status' => $response->statusCode()])
+                ->usingMiddleware(HandleInertiaRequests::class)
+                ->withSharedData();
+        });
     })->create();

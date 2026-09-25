@@ -7,12 +7,10 @@ use App\Enums\AuditSubject;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ActivityResource;
 use App\Models\User;
+use App\Support\DisplayDate;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -45,7 +43,7 @@ class ActivityLogController extends Controller
         // A record filter only means something together with its type.
         $filters['subject_id'] = isset($filters['subject_type']) ? ($filters['subject_id'] ?? null) : null;
 
-        $activities = $this->activityQuery()
+        $activities = ActivityResource::query()
             ->when($filters['subject_type'] ?? null, fn (Builder $query, string $type) => $query->where('subject_type', $type))
             ->when($filters['subject_id'], fn (Builder $query, int $id) => $query->where('subject_id', $id))
             ->when($filters['causer'] ?? null, fn (Builder $query, int $id) => $query
@@ -53,9 +51,9 @@ class ActivityLogController extends Controller
                 ->where('causer_id', $id))
             ->when($filters['event'] ?? null, fn (Builder $query, string $event) => $query->where('event', $event))
             ->when($filters['from'] ?? null, fn (Builder $query, string $from) => $query
-                ->where('created_at', '>=', Carbon::parse($from)->startOfDay()))
+                ->where('created_at', '>=', DisplayDate::startOfDayUtc($from)))
             ->when($filters['to'] ?? null, fn (Builder $query, string $to) => $query
-                ->where('created_at', '<', Carbon::parse($to)->addDay()->startOfDay()))
+                ->where('created_at', '<=', DisplayDate::endOfDayUtc($to)))
             ->paginate(15)
             ->withQueryString();
 
@@ -90,7 +88,7 @@ class ActivityLogController extends Controller
     {
         Gate::authorize('viewAny', Activity::class);
 
-        $activities = $this->activityQuery()
+        $activities = ActivityResource::query()
             ->where('subject_type', $subjectType)
             ->where('subject_id', $subjectId)
             ->limit(self::HISTORY_LIMIT)
@@ -103,21 +101,5 @@ class ActivityLogController extends Controller
                 ->map(fn (Activity $activity): array => (new ActivityResource($activity, $departmentCodes))->resolve($request))
                 ->all(),
         ]);
-    }
-
-    /**
-     * Activity with its subject and causer (deleted users included), newest first.
-     *
-     * @return Builder<Activity>
-     */
-    private function activityQuery(): Builder
-    {
-        return Activity::query()
-            ->with([
-                'subject',
-                'causer' => fn (Relation $causer) => $causer->withoutGlobalScope(SoftDeletingScope::class),
-            ])
-            ->orderByDesc('created_at')
-            ->orderByDesc('id');
     }
 }

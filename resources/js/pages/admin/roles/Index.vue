@@ -4,6 +4,7 @@ import { Lock, Pencil, Plus, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,7 +24,8 @@ defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Role & Permission', href: RoleController.index() },
+            { title: 'Administrasi' },
+            { title: 'Role & Hak Akses', href: RoleController.index() },
         ],
     },
 });
@@ -54,29 +56,28 @@ const destroy = () => {
 </script>
 
 <template>
-    <Head title="Role & Permission" />
+    <Head title="Role & Hak Akses" />
 
     <div class="flex flex-1 flex-col gap-4 p-4">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-            <div>
-                <h1 class="font-serif text-3xl">Role &amp; Permission</h1>
-                <p class="text-sm text-muted-foreground">
-                    Atur permission tiap role tanpa perlu deploy.
-                </p>
-            </div>
-            <Button as-child>
-                <Link :href="RoleController.create()">
-                    <Plus /> Tambah role
-                </Link>
-            </Button>
-        </div>
+        <PageHeader
+            title="Role & Hak Akses"
+            description="Atur hak akses tiap role tanpa perlu deploy."
+        >
+            <template #actions>
+                <Button as-child>
+                    <Link :href="RoleController.create()">
+                        <Plus /> Tambah role
+                    </Link>
+                </Button>
+            </template>
+        </PageHeader>
 
         <div class="rounded-2xl border bg-card">
             <Table>
                 <TableHeader>
                     <TableRow>
                         <TableHead>Role</TableHead>
-                        <TableHead class="text-right">Permission</TableHead>
+                        <TableHead class="text-right">Hak akses</TableHead>
                         <TableHead class="text-right">Pengguna</TableHead>
                         <TableHead class="w-0"
                             ><span class="sr-only">Aksi</span></TableHead

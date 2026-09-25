@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { X } from '@lucide/vue';
+import { Head, Link } from '@inertiajs/vue3';
+import { History, SearchX, X } from '@lucide/vue';
 import { computed, watch } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
 import ActivityChanges from '@/components/admin/ActivityChanges.vue';
@@ -26,8 +26,10 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { ALL, useListFilters } from '@/composables/useListFilters';
-import { formatDateTime } from '@/lib/activity';
+import { ALL, isFiltering, useListFilters } from '@/composables/useListFilters';
+import { useFormatDate } from '@/composables/useFormatDate';
+import EmptyState from '@/components/EmptyState.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import type { ActivityEntry, Paginated, SelectOption } from '@/types';
 
 const props = defineProps<{
@@ -45,13 +47,18 @@ const props = defineProps<{
     causers: { id: number; name: string }[];
 }>();
 
+const { formatDateTime } = useFormatDate();
+
 defineOptions({
     layout: {
         breadcrumbs: [
+            { title: 'Administrasi' },
             { title: 'Log Aktivitas', href: ActivityLogController.index() },
         ],
     },
 });
+
+const filtered = computed(() => isFiltering(props.filters));
 
 const filters = useListFilters(
     {
@@ -81,13 +88,10 @@ const subjectTypeLabel = computed(
     <Head title="Log Aktivitas" />
 
     <div class="flex flex-1 flex-col gap-4 p-4">
-        <div>
-            <h1 class="font-serif text-3xl">Log Aktivitas</h1>
-            <p class="text-sm text-muted-foreground">
-                Perubahan data master, role, dan aktivitas login. Password tidak
-                pernah dicatat.
-            </p>
-        </div>
+        <PageHeader
+            title="Log Aktivitas"
+            description="Perubahan data master, role, dan aktivitas login. Password tidak pernah dicatat."
+        />
 
         <div class="rounded-2xl border bg-card">
             <div class="flex flex-wrap items-end gap-3 border-b p-4">
@@ -226,7 +230,24 @@ const subjectTypeLabel = computed(
                         v-if="activities.data.length === 0"
                         :colspan="5"
                     >
-                        Tidak ada aktivitas yang cocok.
+                        <EmptyState
+                            v-if="filtered"
+                            :icon="SearchX"
+                            title="Tidak ada aktivitas yang cocok"
+                            description="Ubah kata kunci atau filter pencarian."
+                        >
+                            <Button variant="outline" size="sm" as-child>
+                                <Link :href="ActivityLogController.index()">
+                                    Hapus filter
+                                </Link>
+                            </Button>
+                        </EmptyState>
+                        <EmptyState
+                            v-else
+                            :icon="History"
+                            title="Belum ada aktivitas"
+                            description="Aktivitas tercatat otomatis saat data diubah atau pengguna masuk."
+                        />
                     </TableEmpty>
                 </TableBody>
             </Table>

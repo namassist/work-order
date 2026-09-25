@@ -5,6 +5,7 @@ import { ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import UserForm from '@/components/admin/UserForm.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { useCan } from '@/composables/useCan';
 import type { DepartmentOption, EditableUser } from '@/types';
@@ -19,8 +20,9 @@ defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
+            { title: 'Administrasi' },
             { title: 'Pengguna', href: UserController.index() },
-            { title: 'Ubah', href: UserController.index() },
+            { title: 'Ubah' },
         ],
     },
 });
@@ -33,16 +35,21 @@ const historyOpen = ref(false);
     <Head :title="`Ubah ${user.name}`" />
 
     <div class="flex flex-1 flex-col gap-4 p-4">
-        <div class="flex max-w-3xl flex-wrap items-end justify-between gap-4">
-            <h1 class="font-serif text-3xl">Ubah pengguna</h1>
-            <Button
-                v-if="hasPermission('activity-log.view')"
-                variant="outline"
-                @click="historyOpen = true"
-            >
-                <History /> Riwayat
-            </Button>
-        </div>
+        <PageHeader
+            class="max-w-3xl"
+            title="Ubah pengguna"
+            :description="user.email"
+        >
+            <template #actions>
+                <Button
+                    v-if="hasPermission('activity-log.view')"
+                    variant="outline"
+                    @click="historyOpen = true"
+                >
+                    <History /> Riwayat
+                </Button>
+            </template>
+        </PageHeader>
         <div class="max-w-3xl rounded-2xl border bg-card p-6">
             <UserForm
                 :user="user"
