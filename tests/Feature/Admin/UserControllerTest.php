@@ -4,7 +4,7 @@ use App\Enums\Permission;
 use App\Enums\SystemRole;
 use App\Models\Department;
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -89,8 +89,9 @@ describe('index', function () {
 });
 
 describe('store', function () {
-    it('creates a user with roles and emails a set-password link', function () {
+    it('creates a user with roles and the default password without sending email', function () {
         Notification::fake();
+        config(['auth.default_user_password' => 'Rahasia#2026']);
         $department = Department::factory()->create();
 
         $this->actingAs(adminUser())
@@ -107,9 +108,22 @@ describe('store', function () {
         expect($user)
             ->department_id->toBe($department->id)
             ->is_active->toBeTrue()
+            ->and(Hash::check('Rahasia#2026', $user->password))->toBeTrue()
             ->and($user->getRoleNames()->sort()->values()->all())->toBe(['approver', 'pemohon']);
-        Notification::assertSentTo($user, ResetPassword::class);
+        Notification::assertNothingSent();
     });
+
+    it('refuses to create a user when no default password is configured', function () {
+        config(['auth.default_user_password' => null]);
+
+        $this->withoutExceptionHandling()
+            ->actingAs(adminUser())
+            ->post(route('admin.users.store'), [
+                'name' => 'Budi',
+                'email' => 'budi@example.com',
+                'department_id' => Department::factory()->create()->id,
+            ]);
+    })->throws(RuntimeException::class, 'DEFAULT_USER_PASSWORD');
 
     it('rejects an empty payload', function () {
         $this->actingAs(adminUser())

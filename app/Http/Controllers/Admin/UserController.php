@@ -12,10 +12,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
@@ -97,14 +96,20 @@ class UserController extends Controller
     }
 
     /**
-     * Store a new user and email them a link to set their password.
+     * Store a new user with the configured default password.
      */
     public function store(StoreUserRequest $request): RedirectResponse
     {
-        $user = DB::transaction(function () use ($request): User {
+        $defaultPassword = config('auth.default_user_password');
+
+        if (! is_string($defaultPassword) || $defaultPassword === '') {
+            throw new RuntimeException('Set DEFAULT_USER_PASSWORD in .env before creating users.');
+        }
+
+        $user = DB::transaction(function () use ($request, $defaultPassword): User {
             $user = User::create([
                 ...$request->safe()->only(['name', 'email', 'department_id']),
-                'password' => Str::password(32),
+                'password' => $defaultPassword,
             ]);
 
             if ($request->has('roles')) {
@@ -114,9 +119,7 @@ class UserController extends Controller
             return $user;
         });
 
-        Password::broker(config('fortify.passwords'))->sendResetLink(['email' => $user->email]);
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Pengguna :name dibuat. Tautan untuk membuat password telah dikirim ke email.', ['name' => $user->name])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Pengguna :name dibuat dengan password default.', ['name' => $user->name])]);
 
         return to_route('admin.users.index');
     }

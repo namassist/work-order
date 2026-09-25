@@ -114,4 +114,17 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Default User Password
+    |--------------------------------------------------------------------------
+    |
+    | Initial password given to users created by an admin. Users should change
+    | it under Settings > Security after their first login. Creating users
+    | fails when this is not set.
+    |
+    */
+
+    'default_user_password' => env('DEFAULT_USER_PASSWORD'),
+
 ];

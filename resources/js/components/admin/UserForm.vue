@@ -138,8 +138,8 @@ const submit = () => {
         </fieldset>
 
         <p v-if="!user" class="text-sm text-muted-foreground">
-            Setelah disimpan, pengguna menerima email berisi tautan untuk
-            membuat password.
+            Pengguna baru login dengan password default. Minta mereka
+            menggantinya di Pengaturan &rsaquo; Security setelah login pertama.
         </p>
 
         <div class="flex items-center gap-2">
