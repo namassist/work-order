@@ -110,6 +110,7 @@ class UserController extends Controller
             $user = User::create([
                 ...$request->safe()->only(['name', 'email', 'department_id']),
                 'password' => $defaultPassword,
+                'must_change_password' => true,
             ]);
 
             if ($request->has('roles')) {

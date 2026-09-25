@@ -108,6 +108,7 @@ describe('store', function () {
         expect($user)
             ->department_id->toBe($department->id)
             ->is_active->toBeTrue()
+            ->must_change_password->toBeTrue()
             ->and(Hash::check('Rahasia#2026', $user->password))->toBeTrue()
             ->and($user->getRoleNames()->sort()->values()->all())->toBe(['approver', 'pemohon']);
         Notification::assertNothingSent();

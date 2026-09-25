@@ -31,7 +31,18 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
             'is_active' => true,
+            'must_change_password' => false,
         ];
+    }
+
+    /**
+     * Indicate that the user still has the default password.
+     */
+    public function mustChangePassword(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'must_change_password' => true,
+        ]);
     }
 
     /**
