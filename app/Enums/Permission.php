@@ -29,6 +29,12 @@ enum Permission: string
     case WorkOrdersUpdate = 'work-orders.update';
     case WorkOrdersDelete = 'work-orders.delete';
 
+    case WorkOrderCategoriesView = 'work-order-categories.view';
+    case WorkOrderCategoriesCreate = 'work-order-categories.create';
+    case WorkOrderCategoriesUpdate = 'work-order-categories.update';
+    case WorkOrderCategoriesDelete = 'work-order-categories.delete';
+    case WorkOrderCategoriesRestore = 'work-order-categories.restore';
+
     /**
      * The resource this permission belongs to, e.g. "departments".
      */
