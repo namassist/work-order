@@ -47,15 +47,6 @@ export function isListValue(value: ActivityValue): value is string[] {
     return Array.isArray(value);
 }
 
-const dateTimeFormat = new Intl.DateTimeFormat('id-ID', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-});
-
-export function formatDateTime(iso: string): string {
-    return dateTimeFormat.format(new Date(iso));
-}
-
 const PROPERTY_LABELS: Record<string, string> = {
     email: 'Email',
     ip: 'IP',

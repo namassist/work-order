@@ -117,7 +117,7 @@ describe('store', function () {
 
         $this->actingAs(userWithPermissions(Permission::WorkOrderCategoriesCreate))
             ->post(route('admin.work-order-categories.store'), ['code' => 'LST', 'name' => 'Lain', 'is_active' => true])
-            ->assertSessionHasErrors(['code' => 'The code has already been taken.']);
+            ->assertSessionHasErrors(['code' => 'Kode sudah ada sebelumnya.']);
     });
 
     it('offers to restore when the code belongs to a deleted category', function () {
@@ -125,7 +125,7 @@ describe('store', function () {
 
         $this->actingAs(userWithPermissions(Permission::WorkOrderCategoriesCreate, Permission::WorkOrderCategoriesRestore))
             ->post(route('admin.work-order-categories.store'), ['code' => 'LST', 'name' => 'Lain', 'is_active' => true])
-            ->assertSessionHasErrors(['code' => 'Code ini dipakai oleh data yang sudah dihapus. Pulihkan data tersebut lewat filter "Tampilkan terhapus".']);
+            ->assertSessionHasErrors(['code' => 'Kode ini dipakai oleh data yang sudah dihapus. Pulihkan data tersebut lewat filter "Tampilkan terhapus".']);
 
         expect(WorkOrderCategory::withTrashed()->count())->toBe(1);
     });
@@ -135,7 +135,7 @@ describe('store', function () {
 
         $this->actingAs(userWithPermissions(Permission::WorkOrderCategoriesCreate))
             ->post(route('admin.work-order-categories.store'), ['code' => 'LST', 'name' => 'Lain', 'is_active' => true])
-            ->assertSessionHasErrors(['code' => 'The code has already been taken.']);
+            ->assertSessionHasErrors(['code' => 'Kode sudah ada sebelumnya.']);
     });
 });
 
@@ -164,7 +164,7 @@ describe('update', function () {
 
         $this->actingAs(userWithPermissions(Permission::WorkOrderCategoriesUpdate))
             ->put(route('admin.work-order-categories.update', $category), ['code' => 'BGN', 'name' => 'X', 'is_active' => true])
-            ->assertSessionHasErrors(['code' => 'The code has already been taken.']);
+            ->assertSessionHasErrors(['code' => 'Kode sudah ada sebelumnya.']);
     });
 });
 

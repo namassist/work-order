@@ -44,7 +44,7 @@ class SecurityController extends Controller
 
         $this->logAuthActivity($wasDefaultPassword ? AuditEvent::PasswordInitialChanged : AuditEvent::PasswordChanged, $user);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Password diperbarui.')]);
 
         return back();
     }

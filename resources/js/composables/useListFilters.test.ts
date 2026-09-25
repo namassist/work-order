@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { ALL, toFilterQuery } from '@/composables/useListFilters';
+import { ALL, isFiltering, toFilterQuery } from '@/composables/useListFilters';
 
 describe('toFilterQuery', () => {
     it('drops empty, unchecked, and "all" filters', () => {
@@ -12,5 +12,19 @@ describe('toFilterQuery', () => {
         expect(
             toFilterQuery({ search: 'fin', status: 'active', trashed: true }),
         ).toEqual({ search: 'fin', status: 'active', trashed: 1 });
+    });
+});
+
+describe('isFiltering', () => {
+    it('is false when every filter is at its "show everything" value', () => {
+        expect(isFiltering({ search: '', status: ALL, trashed: false })).toBe(
+            false,
+        );
+    });
+
+    it('is true once any filter narrows the list', () => {
+        expect(isFiltering({ search: '', status: ALL, trashed: true })).toBe(
+            true,
+        );
     });
 });

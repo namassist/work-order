@@ -83,15 +83,28 @@ describe('index', function () {
                 ->where('filters', ['subject_type' => 'department', 'subject_id' => '', 'causer' => (string) $other->id, 'event' => 'updated', 'from' => '', 'to' => '']));
     });
 
-    it('filters by an inclusive date range', function () {
+    it('filters by an inclusive date range in the display timezone', function () {
         $auditor = auditor();
-        foreach (['2026-09-01 08:00', '2026-09-10 23:59', '2026-09-11 00:00'] as $moment) {
-            activity()->createdAt(Carbon::parse($moment))->event('updated')->log('updated');
+        // UTC moments at the WITA (UTC+8) edges of 1–10 Sep.
+        foreach (['2026-08-31 15:59', '2026-08-31 16:00', '2026-09-10 15:59', '2026-09-10 16:00', '2026-09-10 20:00'] as $moment) {
+            activity()->createdAt(Carbon::parse($moment, 'UTC'))->event('updated')->log('updated');
         }
 
         $this->actingAs($auditor)
             ->get(route('admin.activity-log.index', ['from' => '2026-09-01', 'to' => '2026-09-10', 'event' => 'updated']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('activities.total', 2));
+    });
+
+    it('files late-evening UTC activity under the next WITA day', function () {
+        $auditor = auditor();
+        // 23:30 UTC on 25 Sep is 07:30 WITA on 26 Sep.
+        activity()->createdAt(Carbon::parse('2026-09-25 23:30', 'UTC'))->event('updated')->log('updated');
+        $this->actingAs($auditor);
+
+        $this->get(route('admin.activity-log.index', ['from' => '2026-09-26', 'to' => '2026-09-26', 'event' => 'updated']))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('activities.total', 1));
+        $this->get(route('admin.activity-log.index', ['from' => '2026-09-25', 'to' => '2026-09-25', 'event' => 'updated']))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('activities.total', 0));
     });
 
     it('offers only users who caused activity as causer options', function () {

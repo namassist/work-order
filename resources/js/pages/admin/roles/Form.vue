@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, setLayoutProps, useForm } from '@inertiajs/vue3';
+import { computed, watchEffect } from 'vue';
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
 import InputError from '@/components/InputError.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -13,14 +15,20 @@ const props = defineProps<{
     permissionGroups: Record<string, string[]>;
 }>();
 
-defineOptions({
-    layout: {
+const pageTitle = computed(() =>
+    props.role ? `Ubah role ${props.role.name}` : 'Tambah role',
+);
+
+// Create and edit share this page, so keep the last crumb in step with the prop.
+watchEffect(() =>
+    setLayoutProps({
         breadcrumbs: [
-            { title: 'Role & Permission', href: RoleController.index() },
-            { title: 'Form', href: RoleController.index() },
+            { title: 'Administrasi' },
+            { title: 'Role & Hak Akses', href: RoleController.index() },
+            { title: props.role ? 'Ubah' : 'Tambah' },
         ],
-    },
-});
+    }),
+);
 
 const locked = props.role?.is_system ?? false;
 
@@ -51,12 +59,13 @@ const submit = () => {
 </script>
 
 <template>
-    <Head :title="role ? `Ubah role ${role.name}` : 'Tambah role'" />
+    <Head :title="pageTitle" />
 
     <div class="flex flex-1 flex-col gap-4 p-4">
-        <h1 class="font-serif text-3xl">
-            {{ role ? `Ubah role ${role.name}` : 'Tambah role' }}
-        </h1>
+        <PageHeader
+            :title="pageTitle"
+            description="Centang hak akses yang dimiliki role ini."
+        />
 
         <form
             class="max-w-3xl space-y-6 rounded-2xl border bg-card p-6"
@@ -87,7 +96,7 @@ const submit = () => {
             </div>
 
             <fieldset class="space-y-4">
-                <legend class="text-sm font-medium">Permission</legend>
+                <legend class="text-sm font-medium">Hak akses</legend>
                 <div
                     v-for="(permissions, resource) in permissionGroups"
                     :key="resource"

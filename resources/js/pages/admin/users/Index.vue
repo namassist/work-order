@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { History, Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
-import { ref } from 'vue';
+import {
+    History,
+    Pencil,
+    Plus,
+    RotateCcw,
+    Search,
+    SearchX,
+    Trash2,
+    Users,
+} from '@lucide/vue';
+import { computed, ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
@@ -29,7 +38,9 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { useCan } from '@/composables/useCan';
-import { ALL, useListFilters } from '@/composables/useListFilters';
+import { ALL, isFiltering, useListFilters } from '@/composables/useListFilters';
+import EmptyState from '@/components/EmptyState.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import type {
     DepartmentOption,
     ListAbilities,
@@ -53,9 +64,14 @@ const props = defineProps<{
 
 defineOptions({
     layout: {
-        breadcrumbs: [{ title: 'Pengguna', href: UserController.index() }],
+        breadcrumbs: [
+            { title: 'Administrasi' },
+            { title: 'Pengguna', href: UserController.index() },
+        ],
     },
 });
+
+const filtered = computed(() => isFiltering(props.filters));
 
 const filters = useListFilters(
     {
@@ -109,19 +125,18 @@ const openHistory = (user: ManagedUser) => {
     <Head title="Pengguna" />
 
     <div class="flex flex-1 flex-col gap-4 p-4">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-            <div>
-                <h1 class="font-serif text-3xl">Pengguna</h1>
-                <p class="text-sm text-muted-foreground">
-                    Kelola akun, departemen, dan role pengguna.
-                </p>
-            </div>
-            <Button v-if="can.create" as-child>
-                <Link :href="UserController.create()">
-                    <Plus /> Tambah pengguna
-                </Link>
-            </Button>
-        </div>
+        <PageHeader
+            title="Pengguna"
+            description="Kelola akun, departemen, dan role pengguna."
+        >
+            <template #actions>
+                <Button v-if="can.create" as-child>
+                    <Link :href="UserController.create()">
+                        <Plus /> Tambah pengguna
+                    </Link>
+                </Button>
+            </template>
+        </PageHeader>
 
         <div class="rounded-2xl border bg-card">
             <div class="flex flex-wrap items-center gap-3 border-b p-4">
@@ -280,7 +295,30 @@ const openHistory = (user: ManagedUser) => {
                         </TableCell>
                     </TableRow>
                     <TableEmpty v-if="users.data.length === 0" :colspan="5">
-                        Tidak ada pengguna yang cocok.
+                        <EmptyState
+                            v-if="filtered"
+                            :icon="SearchX"
+                            title="Tidak ada pengguna yang cocok"
+                            description="Ubah kata kunci atau filter pencarian."
+                        >
+                            <Button variant="outline" size="sm" as-child>
+                                <Link :href="UserController.index()">
+                                    Hapus filter
+                                </Link>
+                            </Button>
+                        </EmptyState>
+                        <EmptyState
+                            v-else
+                            :icon="Users"
+                            title="Belum ada pengguna"
+                            description="Pengguna dibuat oleh admin dengan password default."
+                        >
+                            <Button v-if="can.create" size="sm" as-child>
+                                <Link :href="UserController.create()">
+                                    <Plus /> Tambah pengguna
+                                </Link>
+                            </Button>
+                        </EmptyState>
                     </TableEmpty>
                 </TableBody>
             </Table>

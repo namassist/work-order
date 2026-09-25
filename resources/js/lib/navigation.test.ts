@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { visibleNavItems } from '@/lib/navigation';
-import type { NavItem } from '@/types';
+import { visibleNavGroups, visibleNavItems } from '@/lib/navigation';
+import type { NavGroup, NavItem } from '@/types';
 
 const items: NavItem[] = [
     { title: 'Dashboard', href: '/dashboard' },
@@ -27,5 +27,24 @@ describe('visibleNavItems', () => {
         expect(
             visibleNavItems(items, () => false).map((item) => item.title),
         ).toEqual(['Dashboard']);
+    });
+});
+
+describe('visibleNavGroups', () => {
+    const groups: NavGroup[] = [
+        { items: [items[0]] },
+        { label: 'Master Data', items: [items[1]] },
+        { label: 'Administrasi', items: [items[2]] },
+    ];
+
+    it('drops groups left with no visible items', () => {
+        const granted = new Set(['departments.view']);
+
+        expect(
+            visibleNavGroups(groups, (permission) => granted.has(permission)),
+        ).toEqual([
+            { items: [items[0]] },
+            { label: 'Master Data', items: [items[1]] },
+        ]);
     });
 });

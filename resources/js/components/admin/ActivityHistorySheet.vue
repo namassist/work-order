@@ -13,7 +13,7 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatDateTime } from '@/lib/activity';
+import { useFormatDate } from '@/composables/useFormatDate';
 import type { ActivityEntry, HistorySubjectType } from '@/types';
 
 /**
@@ -25,6 +25,8 @@ const props = defineProps<{
     subjectId: number | null;
     title: string;
 }>();
+
+const { formatDateTime } = useFormatDate();
 
 const open = defineModel<boolean>('open', { required: true });
 

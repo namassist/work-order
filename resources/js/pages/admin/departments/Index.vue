@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
-import { History, Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
-import { ref } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import {
+    Building2,
+    History,
+    Pencil,
+    Plus,
+    RotateCcw,
+    Search,
+    SearchX,
+    Trash2,
+} from '@lucide/vue';
+import { computed, ref } from 'vue';
 import DepartmentController from '@/actions/App/Http/Controllers/Admin/DepartmentController';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
@@ -29,7 +38,9 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { useCan } from '@/composables/useCan';
-import { useListFilters } from '@/composables/useListFilters';
+import { isFiltering, useListFilters } from '@/composables/useListFilters';
+import EmptyState from '@/components/EmptyState.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import type { Department, ListAbilities, Paginated } from '@/types';
 
 const props = defineProps<{
@@ -41,6 +52,7 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
+            { title: 'Master Data' },
             { title: 'Departemen', href: DepartmentController.index() },
         ],
     },
@@ -50,6 +62,8 @@ const filters = useListFilters(
     { ...props.filters, status: props.filters.status || 'all' },
     () => DepartmentController.index(),
 );
+
+const filtered = computed(() => isFiltering(props.filters));
 
 const formOpen = ref(false);
 const editing = ref<Department | null>(null);
@@ -107,18 +121,16 @@ const openHistory = (department: Department) => {
     <Head title="Departemen" />
 
     <div class="flex flex-1 flex-col gap-4 p-4">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-            <div>
-                <h1 class="font-serif text-3xl">Departemen</h1>
-                <p class="text-sm text-muted-foreground">
-                    Departemen nonaktif tetap tampil; yang dihapus hanya
-                    terlihat lewat filter "Tampilkan terhapus".
-                </p>
-            </div>
-            <Button v-if="can.create" @click="openCreate">
-                <Plus /> Tambah departemen
-            </Button>
-        </div>
+        <PageHeader
+            title="Departemen"
+            description='Departemen nonaktif tetap tampil; yang dihapus hanya terlihat lewat filter "Tampilkan terhapus".'
+        >
+            <template #actions>
+                <Button v-if="can.create" @click="openCreate">
+                    <Plus /> Tambah departemen
+                </Button>
+            </template>
+        </PageHeader>
 
         <div class="rounded-2xl border bg-card">
             <div class="flex flex-wrap items-center gap-3 border-b p-4">
@@ -226,7 +238,32 @@ const openHistory = (department: Department) => {
                         v-if="departments.data.length === 0"
                         :colspan="5"
                     >
-                        Tidak ada departemen yang cocok.
+                        <EmptyState
+                            v-if="filtered"
+                            :icon="SearchX"
+                            title="Tidak ada departemen yang cocok"
+                            description="Ubah kata kunci atau filter pencarian."
+                        >
+                            <Button variant="outline" size="sm" as-child>
+                                <Link :href="DepartmentController.index()">
+                                    Hapus filter
+                                </Link>
+                            </Button>
+                        </EmptyState>
+                        <EmptyState
+                            v-else
+                            :icon="Building2"
+                            title="Belum ada departemen"
+                            description="Departemen dipakai untuk mengelompokkan pengguna dan work order."
+                        >
+                            <Button
+                                v-if="can.create"
+                                size="sm"
+                                @click="openCreate"
+                            >
+                                <Plus /> Tambah departemen
+                            </Button>
+                        </EmptyState>
                     </TableEmpty>
                 </TableBody>
             </Table>

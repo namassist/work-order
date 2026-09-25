@@ -17,3 +17,11 @@ it('shares the permissions granted through roles with the frontend', function ()
             Permission::WorkOrdersView->value,
         ]));
 });
+
+it('shares the configured display timezone with the frontend', function () {
+    config(['app.display_timezone' => 'Asia/Jakarta']);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('displayTimezone', 'Asia/Jakarta'));
+});
