@@ -76,3 +76,37 @@ export type ListAbilities = {
     delete: boolean;
     restore: boolean;
 };
+
+export type SelectOption = {
+    value: string;
+    label: string;
+};
+
+export type ActivityValue = string | number | string[] | null;
+
+export type ActivityChange = {
+    field: string;
+    label: string;
+    old: ActivityValue;
+    new: ActivityValue;
+};
+
+export type ActivityEntry = {
+    id: number;
+    log_name: string | null;
+    event: string;
+    event_label: string;
+    subject: {
+        type: string;
+        type_label: string;
+        id: number | null;
+        label: string;
+    } | null;
+    causer: { id: number; name: string } | null;
+    changes: ActivityChange[];
+    properties: Record<string, string>;
+    created_at: string;
+};
+
+/** Morph aliases that have a history panel, see AuditSubject::withHistoryPanel(). */
+export type HistorySubjectType = 'user' | 'department' | 'wo-category';

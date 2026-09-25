@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\AuditSubject;
+use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\UserController;
@@ -25,4 +27,10 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
         ->name('users.restore');
 
     Route::resource('roles', RoleController::class)->except(['show']);
+
+    Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log.index');
+    Route::get('activity-log/{subjectType}/{subjectId}', [ActivityLogController::class, 'history'])
+        ->whereIn('subjectType', AuditSubject::withHistoryPanel())
+        ->whereNumber('subjectId')
+        ->name('activity-log.history');
 });

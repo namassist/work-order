@@ -54,6 +54,15 @@ Put new pages in the directory that gives them the right layout.
 
 **Flash toasts.** On the backend, call `Inertia::flash('toast', ['type' => 'success', 'message' => ...])`. On the frontend, `resources/js/lib/flashToast.ts` listens for the router `flash` event and shows the message with `vue-sonner`.
 
+**Audit trail (spatie/laravel-activitylog v5).** Everything goes to the `activity_log` table, readable at Admin › Log Aktivitas (`Admin\ActivityLogController`, permission `activity-log.view`, admin only).
+
+- **Model changes** (log `audit`): models use `App\Concerns\LogsModelActivity`, which logs created, updated, deleted, and restored with only the fillable attributes that changed. An update that flips `is_active` is logged as `activated`/`deactivated`. Override `activityLogOptions()` to ignore housekeeping columns (see `User`).
+- **Changes model events can't see**, such as pivot syncs (a user's roles, a role's permissions): call `logAuditChange()` from `App\Concerns\LogsAuditChanges` with the state before and after. It logs only the keys that changed, in the same shape as model changes.
+- **Auth events** (log `auth`): `App\Listeners\RecordAuthActivity` (event discovery) plus `App\Concerns\LogsAuthActivity` log login, logout, failed login (email tried and IP, no causer), password changes, and resets. Because each failed login writes a row, the `login` rate limiter caps attempts both per email+IP (5/min) and per IP (30/min).
+- **Never log secrets.** `password`, `remember_token`, and the 2FA columns are excluded globally in `config/activitylog.php`. `Illuminate\Auth\Events\Failed` carries the typed password in `credentials`, so read only `email` from it.
+- Event names and their labels live in `App\Enums\AuditEvent`, and subject labels in `App\Enums\AuditSubject`. `ActivityResource` turns an entry into labelled before/after rows.
+- **Retention.** `activitylog:clean` runs daily (`routes/console.php`) and keeps `ACTIVITYLOG_CLEAN_AFTER_DAYS` days (default 365). Production needs the scheduler running (`schedule:run` in cron).
+
 **Appearance (light/dark).** The `appearance` cookie is read server-side by `HandleAppearance` and client-side by `composables/useAppearance.ts`. The `appearance` and `sidebar_state` cookies are deliberately left unencrypted in `bootstrap/app.php` so the frontend can read them.
 
 ## Master data module pattern
@@ -63,6 +72,7 @@ Put new pages in the directory that gives them the right layout.
 - **Active vs deleted.** `is_active = false` means deactivated: the record stays in lists with a `StatusBadge` and can still be referenced. Soft delete (`SoftDeletes`) hides it from lists and dropdowns. It shows up only under "Tampilkan terhapus", which needs `*.restore`, with a Pulihkan action (`PATCH <resource>/{id}/restore`, route `->withTrashed()`). The UI never force-deletes. **Relationships from other modules to master data use `->withTrashed()`** so history still resolves.
 - **Unique vs trashed.** Unique indexes still cover deleted rows. Use `Rule::unique(...)->withoutTrashed()` plus `App\Rules\NotTakenByTrashed`. That rule shows the "pulihkan" hint only to users who can `viewTrashed`, and everyone else gets the standard "taken" message. See `app/Concerns/DepartmentValidationRules.php`.
 - **Delete guards.** Refuse deletes that would orphan live data with an error toast and `back()`, not an exception. Example: `DepartmentController::destroy` refuses while `$department->users()->exists()` and suggests deactivating instead.
+- **Audit trail.** The model uses `LogsModelActivity` (and gets a morph alias, see Conventions). Controller writes that model events miss, such as pivot syncs, call `logAuditChange()`. Add the alias to `AuditSubject` (and to `withHistoryPanel()`), the label of any new attribute to `ActivityResource::FIELD_LABELS`, and new event names to `AuditEvent`. Index rows get a "Riwayat" icon button (`History`, shown with `useCan()('activity-log.view')`) that opens the shared `components/admin/ActivityHistorySheet.vue`.
 - **Permissions and policy.** Add `App\Enums\Permission` cases `<resource>.view|create|update|delete|restore` (kebab-case plural resource). `app/Policies/DepartmentPolicy.php` maps them as follows: `viewAny`→`view`, `viewTrashed`/`restore`→`restore`, and `forceDelete` returns `false`. Every check uses `$user->checkPermissionTo(...)`.
 - **Seeder.** `database/seeders/RolePermissionSeeder.php` creates every enum case with `findOrCreate`, calling `forgetCachedPermissions()` before and after (without the second call, `syncPermissions` can't see the new permissions). It then syncs `admin` to all permissions. Grants for other roles go in `INITIAL_ROLES`, which only applies when the role is first created.
 - **Backend files.**
@@ -83,9 +93,11 @@ Put new pages in the directory that gives them the right layout.
     - Unique conflict with a deleted row, both with and without the restore permission.
     - Soft delete, the delete guard, and restore.
     - A dataset proving each endpoint returns 403 without its permission, using the `userWithPermissions()` helper.
+    - The model in the `logged models` dataset of `tests/Feature/ActivityLog/ModelActivityTest.php`.
 
 ## Conventions and gotchas
 
+- **Morph map is enforced** (`Relation::enforceMorphMap()` in `AppServiceProvider`). Polymorphic columns (`model_has_roles`, `model_has_permissions`, `activity_log`, and the upcoming attachments) store short aliases such as `user` and `wo-category`, not class names. Every model used polymorphically must be registered there, or it throws `ClassMorphViolationException`. In tests, compare against `$model->getMorphClass()`, not `Model::class`.
 - `resources/js/components/ui/*` is generated shadcn-vue code (`components.json`). Lint and format both ignore it, so add or replace components with the shadcn CLI instead of restyling them by hand.
 - Rector (`rector.php`) deliberately skips `declare(strict_types=1)`, and skips `: void` on closures in `tests/`. The codebase doesn't use strict_types, so don't add it.
 - PHPStan covers `app/`, `config/`, `database/`, `routes/`, and `bootstrap/app.php`. It does not cover `tests/`.

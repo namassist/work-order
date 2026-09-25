@@ -30,9 +30,9 @@ export function toFilterQuery(
 
 /**
  * Keeps list filters in the query string. Changing a filter reloads the page
- * from page 1; the search box is debounced.
+ * from page 1; the optional search box is debounced.
  */
-export function useListFilters<T extends { search: string }>(
+export function useListFilters<T extends Record<string, string | boolean>>(
     initial: T,
     route: () => RouteDefinition<'get'>,
 ) {
@@ -52,10 +52,12 @@ export function useListFilters<T extends { search: string }>(
 
     const applyDebounced = useDebounceFn(apply, SEARCH_DEBOUNCE_MS);
 
-    watch(
-        () => filters.search,
-        () => applyDebounced(),
-    );
+    if ('search' in initial) {
+        watch(
+            () => filters.search,
+            () => applyDebounced(),
+        );
+    }
     // Read only the non-search keys so typing does not bypass the debounce.
     const otherKeys = Object.keys(initial).filter((key) => key !== 'search');
     watch(

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
 use Database\Factories\WorkOrderCategoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
 class WorkOrderCategory extends Model
 {
     /** @use HasFactory<WorkOrderCategoryFactory> */
-    use HasFactory, SearchesColumns, SoftDeletes;
+    use HasFactory, LogsModelActivity, SearchesColumns, SoftDeletes;
 
     /**
      * Search by code or name.

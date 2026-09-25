@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Concerns\LogsAuditChanges;
+use App\Enums\AuditEvent;
 use App\Enums\Permission;
 use App\Enums\SystemRole;
 use App\Http\Controllers\Controller;
@@ -13,10 +15,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Permission\Models\Permission as PermissionModel;
 use Spatie\Permission\Models\Role;
 
 class RoleController extends Controller
 {
+    use LogsAuditChanges;
+
     /**
      * List roles with their user and permission counts.
      */
@@ -64,6 +69,7 @@ class RoleController extends Controller
             $role = new Role(['name' => $request->validated('name'), 'guard_name' => 'web']);
             $role->save();
             $role->syncPermissions($request->validated('permissions'));
+            $this->logAuditChange($role, AuditEvent::Created, [], $this->auditState($role));
 
             return $role;
         });
@@ -97,8 +103,10 @@ class RoleController extends Controller
     public function update(UpdateRoleRequest $request, Role $role): RedirectResponse
     {
         DB::transaction(function () use ($request, $role): void {
+            $before = $this->auditState($role);
             $role->update(['name' => $request->validated('name')]);
             $role->syncPermissions($request->validated('permissions'));
+            $this->logAuditChange($role, AuditEvent::Updated, $before, $this->auditState($role));
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Role :name diperbarui.', ['name' => $role->name])]);
@@ -126,11 +134,32 @@ class RoleController extends Controller
             return back();
         }
 
-        $role->delete();
+        DB::transaction(function () use ($role): void {
+            $this->logAuditChange($role, AuditEvent::Deleted, $this->auditState($role), []);
+            $role->delete();
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Role :name dihapus.', ['name' => $role->name])]);
 
         return to_route('admin.roles.index');
+    }
+
+    /**
+     * The role as recorded in the audit log.
+     *
+     * @return array{name: string, permissions: list<string>}
+     */
+    private function auditState(Role $role): array
+    {
+        return [
+            'name' => $role->name,
+            'permissions' => array_values(PermissionModel::query()
+                ->whereRelation('roles', 'roles.id', $role->id)
+                ->orderBy('name')
+                ->get()
+                ->map(fn (PermissionModel $permission): string => $permission->name)
+                ->all()),
+        ];
     }
 
     /**

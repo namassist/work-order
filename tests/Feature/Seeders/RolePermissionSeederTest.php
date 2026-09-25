@@ -23,3 +23,9 @@ it('does not overwrite role permissions edited after the first run', function ()
 
     expect(Role::findByName('viewer')->permissions->pluck('name')->all())->toBe([Permission::UsersView->value]);
 });
+
+it('keeps the activity log to the admin role', function () {
+    $this->seed(RolePermissionSeeder::class);
+
+    expect(Role::permission(Permission::ActivityLogView->value)->pluck('name')->all())->toBe([SystemRole::Admin->value]);
+});

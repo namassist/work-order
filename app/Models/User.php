@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
 use App\Enums\Permission;
 use Database\Factories\UserFactory;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
@@ -40,7 +42,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasRoles, Notifiable, SearchesColumns, SoftDeletes;
+    use HasFactory, HasRoles, LogsModelActivity, Notifiable, SearchesColumns, SoftDeletes;
 
     /**
      * The department the user belongs to, even if it was deleted later.
@@ -79,6 +81,15 @@ class User extends Authenticatable
             ->where('is_active', true)
             ->whereKeyNot($this->getKey())
             ->exists();
+    }
+
+    /**
+     * Password changes and login housekeeping are logged as auth events
+     * instead, so they never produce an "updated" entry.
+     */
+    protected function activityLogOptions(LogOptions $options): LogOptions
+    {
+        return $options->dontLogIfAttributesChangedOnly(['updated_at', 'remember_token', 'password', 'must_change_password']);
     }
 
     /**

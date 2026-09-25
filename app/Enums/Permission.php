@@ -35,6 +35,8 @@ enum Permission: string
     case WorkOrderCategoriesDelete = 'work-order-categories.delete';
     case WorkOrderCategoriesRestore = 'work-order-categories.restore';
 
+    case ActivityLogView = 'activity-log.view';
+
     /**
      * The resource this permission belongs to, e.g. "departments".
      */

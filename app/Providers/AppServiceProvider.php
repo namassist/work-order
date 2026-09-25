@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrderCategory;
+use App\Policies\ActivityPolicy;
 use App\Policies\RolePolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -35,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureMorphMap();
 
         Gate::policy(Role::class, RolePolicy::class);
+        Gate::policy(Activity::class, ActivityPolicy::class);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
 use Database\Factories\DepartmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
 class Department extends Model
 {
     /** @use HasFactory<DepartmentFactory> */
-    use HasFactory, SearchesColumns, SoftDeletes;
+    use HasFactory, LogsModelActivity, SearchesColumns, SoftDeletes;
 
     /**
      * Users assigned to the department (soft-deleted users excluded).
