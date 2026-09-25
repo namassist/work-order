@@ -12,14 +12,14 @@ selalu pakai kelas token Tailwind (`bg-primary`, `text-muted-foreground`, dst).
 
 Dasar netral putih/hitam lembut; hijau dan kuning adalah warna brand (logo perusahaan).
 
-| Token | Light | Dark | Peran |
-|---|---|---|---|
-| background | #F7F7F5 | #141414 | latar halaman |
-| card | #FDFDFC | #1C1C1C | panel, tabel, form |
-| foreground | #1A1A1A | #EDEDEA | teks utama |
-| primary | #1C322D hijau | #EBB552 kuning | tombol aksi utama |
-| ring / sidebar-primary | #EBB552 kuning | #EBB552 | focus ring, menu aktif |
-| sidebar | #1C322D hijau | #1C322D hijau | sidebar brand di kedua mode |
+| Token                  | Light          | Dark           | Peran                       |
+| ---------------------- | -------------- | -------------- | --------------------------- |
+| background             | #F7F7F5        | #141414        | latar halaman               |
+| card                   | #FDFDFC        | #1C1C1C        | panel, tabel, form          |
+| foreground             | #1A1A1A        | #EDEDEA        | teks utama                  |
+| primary                | #1C322D hijau  | #EBB552 kuning | tombol aksi utama           |
+| ring / sidebar-primary | #EBB552 kuning | #EBB552        | focus ring, menu aktif      |
+| sidebar                | #1C322D hijau  | #1C322D hijau  | sidebar brand di kedua mode |
 
 Aturan kontras: teks di atas kuning selalu gelap (#1A1A1A/#141414), jangan putih.
 Warna brand dipakai hemat: sidebar, aksi utama, dan highlight. Sisanya netral.
