@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
+import { History, Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import DepartmentController from '@/actions/App/Http/Controllers/Admin/DepartmentController';
+import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import DepartmentFormDialog from '@/components/admin/DepartmentFormDialog.vue';
 import StatusBadge from '@/components/admin/StatusBadge.vue';
@@ -27,6 +28,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useCan } from '@/composables/useCan';
 import { useListFilters } from '@/composables/useListFilters';
 import type { Department, ListAbilities, Paginated } from '@/types';
 
@@ -89,6 +91,15 @@ const restore = (department: Department) => {
     router.visit(DepartmentController.restore(department.id), {
         preserveScroll: true,
     });
+};
+
+const hasPermission = useCan();
+const historyOpen = ref(false);
+const historyOf = ref<Department | null>(null);
+
+const openHistory = (department: Department) => {
+    historyOf.value = department;
+    historyOpen.value = true;
 };
 </script>
 
@@ -170,6 +181,15 @@ const restore = (department: Department) => {
                             />
                         </TableCell>
                         <TableCell class="text-right whitespace-nowrap">
+                            <Button
+                                v-if="hasPermission('activity-log.view')"
+                                variant="ghost"
+                                size="icon"
+                                :aria-label="`Riwayat ${department.code}`"
+                                @click="openHistory(department)"
+                            >
+                                <History />
+                            </Button>
                             <template v-if="department.deleted_at">
                                 <Button
                                     v-if="can.restore"
@@ -216,6 +236,14 @@ const restore = (department: Department) => {
     </div>
 
     <DepartmentFormDialog v-model:open="formOpen" :department="editing" />
+
+    <ActivityHistorySheet
+        v-if="hasPermission('activity-log.view')"
+        v-model:open="historyOpen"
+        subject-type="department"
+        :subject-id="historyOf?.id ?? null"
+        :title="historyOf?.code ?? ''"
+    />
 
     <ConfirmDialog
         v-model:open="deleteOpen"

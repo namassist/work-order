@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Actions\Fortify\ResetUserPassword;
+use App\Concerns\LogsAuthActivity;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -18,6 +19,13 @@ use Laravel\Fortify\Fortify;
 
 class FortifyServiceProvider extends ServiceProvider
 {
+    use LogsAuthActivity;
+
+    /**
+     * Login attempts one IP may make per minute across all emails.
+     */
+    private const int LOGIN_ATTEMPTS_PER_IP_PER_MINUTE = 30;
+
     /**
      * Register any application services.
      */
@@ -47,6 +55,8 @@ class FortifyServiceProvider extends ServiceProvider
 
     /**
      * Only active users may log in. Soft-deleted users are never found.
+     *
+     * A refused inactive user fires no Failed event, so it is logged here.
      */
     private function configureAuthentication(): void
     {
@@ -58,6 +68,8 @@ class FortifyServiceProvider extends ServiceProvider
             }
 
             if (! $user->is_active) {
+                $this->logFailedLogin($user->email, reason: 'inactive');
+
                 throw ValidationException::withMessages([
                     Fortify::username() => __('Akun Anda telah dinonaktifkan.'),
                 ]);
@@ -96,10 +108,15 @@ class FortifyServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
 
-        RateLimiter::for('login', function (Request $request) {
+        RateLimiter::for('login', function (Request $request): array {
             $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
 
-            return Limit::perMinute(5)->by($throttleKey);
+            return [
+                Limit::perMinute(5)->by($throttleKey),
+                // Every failed attempt writes an audit row, so also cap one IP
+                // cycling through many emails. Offices share an IP, hence the headroom.
+                Limit::perMinute(self::LOGIN_ATTEMPTS_PER_IP_PER_MINUTE)->by($request->ip()),
+            ];
         });
 
     }

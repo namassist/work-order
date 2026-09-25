@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
+import { History, Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
+import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import StatusBadge from '@/components/admin/StatusBadge.vue';
 import TablePagination from '@/components/admin/TablePagination.vue';
@@ -27,6 +28,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useCan } from '@/composables/useCan';
 import { ALL, useListFilters } from '@/composables/useListFilters';
 import type {
     DepartmentOption,
@@ -91,6 +93,15 @@ const destroy = () => {
 
 const restore = (user: ManagedUser) => {
     router.visit(UserController.restore(user.id), { preserveScroll: true });
+};
+
+const hasPermission = useCan();
+const historyOpen = ref(false);
+const historyOf = ref<ManagedUser | null>(null);
+
+const openHistory = (user: ManagedUser) => {
+    historyOf.value = user;
+    historyOpen.value = true;
 };
 </script>
 
@@ -220,6 +231,15 @@ const restore = (user: ManagedUser) => {
                             />
                         </TableCell>
                         <TableCell class="text-right whitespace-nowrap">
+                            <Button
+                                v-if="hasPermission('activity-log.view')"
+                                variant="ghost"
+                                size="icon"
+                                :aria-label="`Riwayat ${user.name}`"
+                                @click="openHistory(user)"
+                            >
+                                <History />
+                            </Button>
                             <template v-if="user.deleted_at">
                                 <Button
                                     v-if="can.restore"
@@ -268,6 +288,14 @@ const restore = (user: ManagedUser) => {
             <TablePagination :paginator="users" />
         </div>
     </div>
+
+    <ActivityHistorySheet
+        v-if="hasPermission('activity-log.view')"
+        v-model:open="historyOpen"
+        subject-type="user"
+        :subject-id="historyOf?.id ?? null"
+        :title="historyOf?.name ?? ''"
+    />
 
     <ConfirmDialog
         v-model:open="deleteOpen"

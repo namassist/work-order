@@ -295,7 +295,7 @@ describe('destroy', function () {
             ->assertInertiaFlash('toast.type', 'success');
 
         $this->assertSoftDeleted($user);
-        $this->assertDatabaseHas('model_has_roles', ['model_id' => $user->id, 'model_type' => User::class]);
+        $this->assertDatabaseHas('model_has_roles', ['model_id' => $user->id, 'model_type' => $user->getMorphClass()]);
     });
 
     it('forbids deleting yourself', function () {

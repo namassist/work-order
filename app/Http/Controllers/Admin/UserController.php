@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Concerns\LogsAuditChanges;
+use App\Enums\AuditEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
@@ -19,6 +21,8 @@ use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
+    use LogsAuditChanges;
+
     /**
      * List users with search, filters, and pagination.
      */
@@ -115,6 +119,7 @@ class UserController extends Controller
 
             if ($request->has('roles')) {
                 $user->syncRoles($request->validated('roles'));
+                $this->logRoleChange($user, []);
             }
 
             return $user;
@@ -156,7 +161,9 @@ class UserController extends Controller
             $user->update($request->safe()->only(['name', 'email', 'department_id', 'is_active']));
 
             if ($request->has('roles')) {
+                $rolesBefore = $this->sortedRoleNames($user);
                 $user->syncRoles($request->validated('roles'));
+                $this->logRoleChange($user, $rolesBefore);
             }
         });
 
@@ -197,6 +204,29 @@ class UserController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Pengguna :name dipulihkan.', ['name' => $user->name])]);
 
         return back();
+    }
+
+    /**
+     * Log the user's roles before and after a sync, if they changed.
+     *
+     * @param  list<string>  $rolesBefore
+     */
+    private function logRoleChange(User $user, array $rolesBefore): void
+    {
+        $this->logAuditChange($user, AuditEvent::RolesUpdated, ['roles' => $rolesBefore], ['roles' => $this->sortedRoleNames($user)]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function sortedRoleNames(User $user): array
+    {
+        return array_values(Role::query()
+            ->whereRelation('users', 'users.id', $user->id)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Role $role): string => $role->name)
+            ->all());
     }
 
     /**

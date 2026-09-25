@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
+import { History, Pencil, Plus, RotateCcw, Search, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import WorkOrderCategoryController from '@/actions/App/Http/Controllers/Admin/WorkOrderCategoryController';
+import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import StatusBadge from '@/components/admin/StatusBadge.vue';
 import TablePagination from '@/components/admin/TablePagination.vue';
@@ -27,6 +28,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useCan } from '@/composables/useCan';
 import { useListFilters } from '@/composables/useListFilters';
 import type { ListAbilities, Paginated, WorkOrderCategory } from '@/types';
 
@@ -92,6 +94,15 @@ const restore = (category: WorkOrderCategory) => {
     router.visit(WorkOrderCategoryController.restore(category.id), {
         preserveScroll: true,
     });
+};
+
+const hasPermission = useCan();
+const historyOpen = ref(false);
+const historyOf = ref<WorkOrderCategory | null>(null);
+
+const openHistory = (category: WorkOrderCategory) => {
+    historyOf.value = category;
+    historyOpen.value = true;
 };
 </script>
 
@@ -176,6 +187,15 @@ const restore = (category: WorkOrderCategory) => {
                             />
                         </TableCell>
                         <TableCell class="text-right whitespace-nowrap">
+                            <Button
+                                v-if="hasPermission('activity-log.view')"
+                                variant="ghost"
+                                size="icon"
+                                :aria-label="`Riwayat ${category.code}`"
+                                @click="openHistory(category)"
+                            >
+                                <History />
+                            </Button>
                             <template v-if="category.deleted_at">
                                 <Button
                                     v-if="can.restore"
@@ -222,6 +242,14 @@ const restore = (category: WorkOrderCategory) => {
     </div>
 
     <WorkOrderCategoryFormDialog v-model:open="formOpen" :category="editing" />
+
+    <ActivityHistorySheet
+        v-if="hasPermission('activity-log.view')"
+        v-model:open="historyOpen"
+        subject-type="wo-category"
+        :subject-id="historyOf?.id ?? null"
+        :title="historyOf?.code ?? ''"
+    />
 
     <ConfirmDialog
         v-model:open="deleteOpen"

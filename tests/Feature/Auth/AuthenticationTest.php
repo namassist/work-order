@@ -3,6 +3,7 @@
 use App\Models\User;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
+use Spatie\Activitylog\Models\Activity;
 
 test('login screen can be rendered', function () {
     $response = $this->get(route('login'));
@@ -74,4 +75,16 @@ test('users are rate limited', function () {
     ]);
 
     $response->assertTooManyRequests();
+});
+
+test('an IP cycling through many emails is rate limited without logging each attempt', function () {
+    RateLimiter::increment(md5('login127.0.0.1'), amount: 30);
+
+    $response = $this->post(route('login.store'), [
+        'email' => 'belum-dicoba@example.com',
+        'password' => 'wrong-password',
+    ]);
+
+    $response->assertTooManyRequests();
+    expect(Activity::query()->forEvent('login_failed')->exists())->toBeFalse();
 });

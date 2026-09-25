@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { Building2, LayoutGrid, ShieldCheck, Tags, Users } from '@lucide/vue';
+import {
+    Building2,
+    History,
+    LayoutGrid,
+    ShieldCheck,
+    Tags,
+    Users,
+} from '@lucide/vue';
 import { computed } from 'vue';
+import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
 import DepartmentController from '@/actions/App/Http/Controllers/Admin/DepartmentController';
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
@@ -55,6 +63,12 @@ const adminNavItems: NavItem[] = [
         href: RoleController.index(),
         icon: ShieldCheck,
         permission: 'roles.manage',
+    },
+    {
+        title: 'Log Aktivitas',
+        href: ActivityLogController.index(),
+        icon: History,
+        permission: 'activity-log.view',
     },
 ];
 
