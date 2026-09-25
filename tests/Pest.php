@@ -1,5 +1,9 @@
 <?php
 
+use App\Enums\Permission;
+use App\Enums\SystemRole;
+use App\Models\User;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -42,7 +46,24 @@ expect()->extend('toBeOne', fn () => $this->toBe(1));
 |
 */
 
-function something(): void
+/**
+ * Create a user holding exactly the given permissions (granted directly).
+ */
+function userWithPermissions(Permission ...$permissions): User
 {
-    // ..
+    test()->seed(RolePermissionSeeder::class);
+
+    return User::factory()->create()->givePermissionTo(
+        array_map(fn (Permission $permission): string => $permission->value, $permissions),
+    );
+}
+
+/**
+ * Create a user with the seeded admin role.
+ */
+function adminUser(): User
+{
+    test()->seed(RolePermissionSeeder::class);
+
+    return User::factory()->create()->assignRole(SystemRole::Admin->value);
 }
