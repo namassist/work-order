@@ -12,17 +12,17 @@ Laravel 13 + Inertia v3 + Vue 3 (TypeScript) + Tailwind v4 + shadcn-vue (reka-ui
 
 The script names are the same in composer (backend) and npm (frontend):
 
-| Task | Backend (`composer …`) | Frontend (`npm run …`) |
-|---|---|---|
-| Test | `test` (Pest) | `test` (Vitest via `vp test`), `test:watch` |
-| Lint (fix / check) | `lint` / `lint:check` (Rector) | `lint` / `lint:check` (oxlint via `vp lint`) |
-| Format (fix / check) | `format` / `format:check` (Pint) | `format` / `format:check` (oxfmt via `vp fmt`) |
-| Typecheck | `types:check` (PHPStan/Larastan level 7) | `types:check` (vue-tsc) |
-| Everything | `check` | `check` |
+| Task                 | Backend (`composer …`)                   | Frontend (`npm run …`)                         |
+| -------------------- | ---------------------------------------- | ---------------------------------------------- |
+| Test                 | `test` (Pest)                            | `test` (Vitest via `vp test`), `test:watch`    |
+| Lint (fix / check)   | `lint` / `lint:check` (Rector)           | `lint` / `lint:check` (oxlint via `vp lint`)   |
+| Format (fix / check) | `format` / `format:check` (Pint)         | `format` / `format:check` (oxfmt via `vp fmt`) |
+| Typecheck            | `types:check` (PHPStan/Larastan level 7) | `types:check` (vue-tsc)                        |
+| Everything           | `check`                                  | `check`                                        |
 
 - `composer ci:check` runs `npm run check` and `composer check`. CI (`.github/workflows/tests.yml`) runs exactly this, so it must pass before pushing.
 - `composer dev` (`php artisan dev`) starts `serve`, `queue:listen`, `pail`, and `vite` together.
-- `composer setup` runs a first-time install: `.env`, key, migrate, npm install, build.
+- `composer setup` runs a first-time install: `.env`, key, migrate, npm install, build. Postgres must be running first, with the `work_order` database created.
 - Single backend test: `php artisan test --compact --filter='test name'` or `php artisan test --compact tests/Feature/Auth/AuthenticationTest.php`.
 - Single frontend test: `npx vp test resources/js/composables/useInitials.test.ts` or `npx vp test -t 'test name'`.
 
@@ -30,12 +30,15 @@ Frontend tooling is **Vite+** (`vite-plus`, CLI `vp`). It bundles Vite, Vitest, 
 
 ## Architecture
 
-**Request → page flow.** Routes in `routes/web.php` and `routes/settings.php` render Inertia pages, by name, from `resources/js/pages/`. Simple pages use `Route::inertia()`. `HandleInertiaRequests` shares these props on every page:
+**Request → page flow.** Routes in `routes/web.php`, `routes/settings.php`, and `routes/admin.php` (prefix `admin`, names `admin.*`) render Inertia pages, by name, from `resources/js/pages/`. Simple pages use `Route::inertia()`. `HandleInertiaRequests` shares these props on every page:
+
 - `name`
 - `auth.user`
+- `auth.permissions` (the user's permission names, including those granted through roles)
 - `sidebarOpen` (read from the `sidebar_state` cookie)
 
 **Layouts are assigned by page name in `resources/js/app.ts`, not inside pages:**
+
 - `Welcome` gets no layout.
 - `auth/*` pages get `AuthLayout`.
 - `settings/*` pages get `AppLayout` with `settings/Layout` nested inside.
@@ -43,7 +46,9 @@ Frontend tooling is **Vite+** (`vite-plus`, CLI `vp`). It bundles Vite, Vitest, 
 
 Put new pages in the directory that gives them the right layout.
 
-**Auth is Laravel Fortify (headless).** Fortify registers the auth routes and controllers. `FortifyServiceProvider` maps its views to Inertia pages (`auth/Login`, etc.), and user creation and password reset go through `app/Actions/Fortify`. Only `registration` and `resetPasswords` are enabled in `config/fortify.php`. Two-factor auth and email verification are **off**: the `users` table has no 2FA columns, and tests for those features call `$this->skipUnlessFortifyHas(...)` (defined in `tests/TestCase.php`), so they show as skipped. Validation rules shared between Fortify actions and settings controllers live in `app/Concerns/*ValidationRules.php`.
+**Auth is Laravel Fortify (headless).** Fortify registers the auth routes and controllers. `FortifyServiceProvider` maps its views to Inertia pages (`auth/Login`, etc.), and password reset goes through `app/Actions/Fortify`. Only `resetPasswords` is enabled in `config/fortify.php`. There is no public registration and no self-delete: admins create users in `Admin\UserController`, which emails a Fortify password-reset link so the user sets their own password. Login goes through `Fortify::authenticateUsing` and refuses inactive users. `EnsureUserIsActive` (web group) logs out a session whose user was deactivated. Soft-deleted users are never found by the user provider, so their login and sessions fail with no extra code. Two-factor auth and email verification are **off**: the `users` table has no 2FA columns, and tests for those features call `$this->skipUnlessFortifyHas(...)` (defined in `tests/TestCase.php`), so they show as skipped. Validation rules shared between Fortify actions and settings controllers live in `app/Concerns/*ValidationRules.php`.
+
+**Authorization is data-driven (spatie/laravel-permission).** Roles and their permissions live in the database and admins edit them on the Role page. Code only checks permissions, never role names. The exception is the `admin` role (`App\Enums\SystemRole`): it always holds every permission and cannot be renamed, reduced, or deleted. Permission names are cases of `App\Enums\Permission` (`resource.action`). To add one, add a case, check it in a policy, and re-run `php artisan db:seed --class=RolePermissionSeeder`, which syncs admin to all permissions but leaves other roles alone. Policies call `$user->checkPermissionTo(...)`, not `hasPermissionTo()`, which throws for unknown permissions. The frontend hides menus and buttons with `useCan()` and the `permission` field of `NavItem`, but that is only a hint: every endpoint still authorizes on the server. In tests, `userWithPermissions(...)` and `adminUser()` from `tests/Pest.php` create authorized users.
 
 **Wayfinder.** `resources/js/actions/`, `resources/js/routes/`, and `resources/js/wayfinder/` are gitignored. The Vite plugin (`formVariants: true`) generates them from Laravel routes and controllers. Use them instead of hardcoded URLs. After changing routes, the dev server regenerates them; otherwise run `php artisan wayfinder:generate`.
 
@@ -53,8 +58,16 @@ Put new pages in the directory that gives them the right layout.
 
 ## Conventions and gotchas
 
+- **Master data is soft-deleted, never force-deleted from the UI.** `User` and `Department` use `SoftDeletes` plus a separate `is_active` flag:
+    - Deactivated records stay in lists (with a status badge).
+    - Soft-deleted records are hidden from lists and dropdowns, and appear only in the "Tampilkan terhapus" filter with a Restore action (`*.restore` permissions).
+    - Unique indexes still cover deleted rows. Validate with `Rule::unique(...)->withoutTrashed()` plus `App\Rules\NotTakenByTrashed`, so a conflict tells the user to restore the old record instead of failing in the database.
+    - **Any relationship from another module to `User` or `Department` must use `->withTrashed()`** so historical records (e.g. who created a work order) still resolve after deletion.
+    - New master models (WO categories, vendors, etc.) follow the same pattern.
+
 - `resources/js/components/ui/*` is generated shadcn-vue code (`components.json`). Lint and format both ignore it, so add or replace components with the shadcn CLI instead of restyling them by hand.
 - Rector (`rector.php`) deliberately skips `declare(strict_types=1)`, and skips `: void` on closures in `tests/`. The codebase doesn't use strict_types, so don't add it.
 - PHPStan covers `app/`, `config/`, `database/`, `routes/`, and `bootstrap/app.php`. It does not cover `tests/`.
-- Tests use in-memory SQLite (`phpunit.xml`). Feature tests use `RefreshDatabase` through `tests/Pest.php`.
+- The database is **PostgreSQL** in every environment. Locally it's the shared `postgres-dev` container from `~/Workspaces/databases/docker-compose.yml` (`docker compose up -d postgres` there), with the databases `work_order` (dev) and `work_order_test` (tests; set in `phpunit.xml`). CI runs a `postgres:16` service, and production uses its own server. Postgres `LIKE` is case-sensitive, so search through `App\Concerns\SearchesColumns` (ILIKE with escaped wildcards) instead of a raw `where(..., 'like', ...)`.
+- Feature tests use `RefreshDatabase` through `tests/Pest.php`, so Postgres must be running before `composer test`.
 - `.npmrc` sets `ignore-scripts=true`, so npm packages' install scripts don't run.
