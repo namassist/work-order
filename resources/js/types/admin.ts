@@ -27,6 +27,15 @@ export type Department = DepartmentOption & {
     deleted_at: string | null;
 };
 
+export type WorkOrderCategory = {
+    id: number;
+    code: string;
+    name: string;
+    description: string | null;
+    is_active: boolean;
+    deleted_at: string | null;
+};
+
 export type ManagedUser = {
     id: number;
     name: string;

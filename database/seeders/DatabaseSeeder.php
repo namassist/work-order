@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\SystemRole;
 use App\Models\Department;
 use App\Models\User;
+use App\Models\WorkOrderCategory;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -28,5 +29,9 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ])->assignRole(SystemRole::Admin->value);
+
+        foreach (['LST' => 'Listrik', 'BGN' => 'Bangunan', 'KND' => 'Kendaraan'] as $code => $name) {
+            WorkOrderCategory::factory()->create(['code' => $code, 'name' => $name, 'description' => null]);
+        }
     }
 }

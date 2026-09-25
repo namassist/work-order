@@ -56,14 +56,35 @@ Put new pages in the directory that gives them the right layout.
 
 **Appearance (light/dark).** The `appearance` cookie is read server-side by `HandleAppearance` and client-side by `composables/useAppearance.ts`. The `appearance` and `sidebar_state` cookies are deliberately left unencrypted in `bootstrap/app.php` so the frontend can read them.
 
-## Conventions and gotchas
+## Master data module pattern
 
-- **Master data is soft-deleted, never force-deleted from the UI.** `User` and `Department` use `SoftDeletes` plus a separate `is_active` flag:
-    - Deactivated records stay in lists (with a status badge).
-    - Soft-deleted records are hidden from lists and dropdowns, and appear only in the "Tampilkan terhapus" filter with a Restore action (`*.restore` permissions).
-    - Unique indexes still cover deleted rows. Validate with `Rule::unique(...)->withoutTrashed()` plus `App\Rules\NotTakenByTrashed`, so a conflict tells the user to restore the old record instead of failing in the database.
-    - **Any relationship from another module to `User` or `Department` must use `->withTrashed()`** so historical records (e.g. who created a work order) still resolve after deletion.
-    - New master models (WO categories, vendors, etc.) follow the same pattern.
+`Department` is the reference implementation. New master data (WO categories, vendors, etc.) copies it file for file. `User` follows the same rules with extra account logic.
+
+- **Active vs deleted.** `is_active = false` means deactivated: the record stays in lists with a `StatusBadge` and can still be referenced. Soft delete (`SoftDeletes`) hides it from lists and dropdowns. It shows up only under "Tampilkan terhapus", which needs `*.restore`, with a Pulihkan action (`PATCH <resource>/{id}/restore`, route `->withTrashed()`). The UI never force-deletes. **Relationships from other modules to master data use `->withTrashed()`** so history still resolves.
+- **Unique vs trashed.** Unique indexes still cover deleted rows. Use `Rule::unique(...)->withoutTrashed()` plus `App\Rules\NotTakenByTrashed`. That rule shows the "pulihkan" hint only to users who can `viewTrashed`, and everyone else gets the standard "taken" message. See `app/Concerns/DepartmentValidationRules.php`.
+- **Delete guards.** Refuse deletes that would orphan live data with an error toast and `back()`, not an exception. Example: `DepartmentController::destroy` refuses while `$department->users()->exists()` and suggests deactivating instead.
+- **Permissions and policy.** Add `App\Enums\Permission` cases `<resource>.view|create|update|delete|restore` (kebab-case plural resource). `app/Policies/DepartmentPolicy.php` maps them as follows: `viewAny`→`view`, `viewTrashed`/`restore`→`restore`, and `forceDelete` returns `false`. Every check uses `$user->checkPermissionTo(...)`.
+- **Seeder.** `database/seeders/RolePermissionSeeder.php` creates every enum case with `findOrCreate`, calling `forgetCachedPermissions()` before and after (without the second call, `syncPermissions` can't see the new permissions). It then syncs `admin` to all permissions. Grants for other roles go in `INITIAL_ROLES`, which only applies when the role is first created.
+- **Backend files.**
+    - Model with an `inactive()` factory state and a `#[Scope] search` via `SearchesColumns`: `app/Models/Department.php`.
+    - Shared rules trait: `app/Concerns/<Resource>ValidationRules.php`.
+    - `Store`/`Update<Resource>Request` in `app/Http/Requests/Admin/`, with `authorize()` via the policy.
+    - `app/Http/Controllers/Admin/<Resource>Controller.php`: `index` validates the filters, requires `viewTrashed` for `trashed=1`, returns `paginate(15)->withQueryString()` plus a `can` map; the other actions flash a toast.
+    - Routes in `routes/admin.php`.
+- **Frontend.**
+    - Page: `resources/js/pages/admin/<resources>/Index.vue`. Small forms use a dialog in `components/admin/` (`DepartmentFormDialog.vue`); large forms use `Create`/`Edit` pages sharing a form component (`UserForm.vue`).
+    - Filters: `composables/useListFilters.ts` (debounced search, `ALL` sentinel for selects, booleans sent as `1`).
+    - Table: `components/ui/table`, `components/admin/TablePagination.vue`, `StatusBadge.vue`, and `ConfirmDialog.vue` for deletes.
+    - Types go in `types/admin.ts`, and the sidebar entry in `AppSidebar.vue` `adminNavItems` with a `permission`.
+- **Required Pest tests** (see `tests/Feature/Admin/DepartmentControllerTest.php`):
+    - Search, filter, and pagination.
+    - Deleted rows hidden by default, and the deleted list forbidden without `restore`.
+    - Create/update happy path plus validation.
+    - Unique conflict with a deleted row, both with and without the restore permission.
+    - Soft delete, the delete guard, and restore.
+    - A dataset proving each endpoint returns 403 without its permission, using the `userWithPermissions()` helper.
+
+## Conventions and gotchas
 
 - `resources/js/components/ui/*` is generated shadcn-vue code (`components.json`). Lint and format both ignore it, so add or replace components with the shadcn CLI instead of restyling them by hand.
 - Rector (`rector.php`) deliberately skips `declare(strict_types=1)`, and skips `: void` on closures in `tests/`. The codebase doesn't use strict_types, so don't add it.
