@@ -169,7 +169,8 @@ Files on any model, through spatie/laravel-medialibrary. Work orders are the fir
     - 50 work orders from the last ~3 months: 15 Draft, 25 Diajukan, 6 Draft → Dibatalkan, 4 Diajukan → Dibatalkan.
     - Urgency mix: 5 rendah, 30 normal, 10 tinggi, 5 mendesak (10/60/20/10%).
     - 5 of the Diajukan WOs are **overdue** (target date already passed), for the dashboard's "Terlambat" card once it is built.
-    - Every WO is created and moved through `CreateWorkOrder`/`TransitionWorkOrder` in chronological order with the clock set to that moment, so numbers follow submission time (restarting monthly per department), and the status history and activity log (with causers) are genuine.
+    - Every WO is created, commented on, and moved through `CreateWorkOrder`/the comment actions/`TransitionWorkOrder` in chronological order with the clock set to that moment, so numbers follow submission time (restarting monthly per department), and the status history and activity log (with causers) are genuine.
+    - About 40% of WOs have 1–3 comments between the requester and their department's approver (before any cancellation), some edited within the window and one posted by mistake and deleted ("Komentar dihapus").
     - About a dozen WOs have sample documents (`dokumen.pdf`, `foto.jpg` from `tests/Fixtures/attachments`).
 - **Accounts** (all `@worder.test`, password `DEFAULT_USER_PASSWORD`). Every department has an approver and at least one pemohon. The ones marked \* still have `must_change_password`:
 
