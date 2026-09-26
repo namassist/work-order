@@ -19,6 +19,7 @@
     "dependencies": {
         "@inertiajs/vite": "^3.0.0",
         "@inertiajs/vue3": "^3.0.0",
+        "@internationalized/date": "3.12.4",
         "@lucide/vue": "^1.17.0",
         "@unovis/ts": "^1.7.0",
         "@unovis/vue": "^1.7.0",
