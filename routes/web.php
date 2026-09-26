@@ -17,7 +17,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     // Before the resource, so work-orders/{workOrder} does not catch it.
     Route::get('work-orders/export', WorkOrderExportController::class)
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:wo-export')
         ->name('work-orders.export');
     Route::resource('work-orders', WorkOrderController::class)->parameters(['work-orders' => 'workOrder']);
     Route::patch('work-orders/{workOrder}/restore', [WorkOrderController::class, 'restore'])
@@ -25,11 +25,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         ->name('work-orders.restore');
     Route::post('work-orders/{workOrder}/transitions', [WorkOrderTransitionController::class, 'store'])
         ->name('work-orders.transitions.store');
-    // Named buckets: a bare throttle:N,1 counts per user across every route using one.
     Route::post('work-orders/{workOrder}/comments', [WorkOrderCommentController::class, 'store'])
-        ->middleware('throttle:10,1,wo-comment-post')
+        ->middleware('throttle:wo-comment-post')
         ->name('work-orders.comments.store');
-    Route::scopeBindings()->middleware('throttle:10,1,wo-comment-change')->group(function (): void {
+    Route::scopeBindings()->middleware('throttle:wo-comment-change')->group(function (): void {
         Route::patch('work-orders/{workOrder}/comments/{comment}', [WorkOrderCommentController::class, 'update'])
             ->name('work-orders.comments.update');
         Route::delete('work-orders/{workOrder}/comments/{comment}', [WorkOrderCommentController::class, 'destroy'])
@@ -38,7 +37,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     Route::post('attachments/{attachableType}/{attachableId}/{collection}', [AttachmentController::class, 'store'])
         ->whereNumber('attachableId')
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:attachment-upload')
         ->name('attachments.store');
     Route::get('attachments/{media:uuid}', [AttachmentController::class, 'show'])
         ->whereUuid('media')
