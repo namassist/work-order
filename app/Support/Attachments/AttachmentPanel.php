@@ -29,7 +29,7 @@ class AttachmentPanel
             'target' => ['type' => $parent->getMorphClass(), 'id' => $id, 'collection' => $rules->name],
             'rules' => $rules->toFrontend(),
             'items' => array_values(array_map(
-                fn (Media $media): array => (new AttachmentResource($media))->resolve($request),
+                fn (Media $media): array => new AttachmentResource($media)->resolve($request),
                 $parent->attachmentsIn($rules->name)->all(),
             )),
             'can' => [

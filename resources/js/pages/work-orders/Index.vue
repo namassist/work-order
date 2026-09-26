@@ -5,6 +5,7 @@ import {
     Ban,
     CircleDot,
     ClipboardList,
+    Download,
     FilePen,
     History,
     Pencil,
@@ -16,7 +17,9 @@ import {
     Trash2,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
+import WorkOrderExportController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderExportController';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import TablePagination from '@/components/admin/TablePagination.vue';
@@ -56,7 +59,12 @@ import {
 import WorkOrderStatusBadge from '@/components/work-orders/WorkOrderStatusBadge.vue';
 import { useCan } from '@/composables/useCan';
 import { useFormatDate } from '@/composables/useFormatDate';
-import { ALL, isFiltering, useListFilters } from '@/composables/useListFilters';
+import {
+    ALL,
+    isFiltering,
+    toFilterQuery,
+    useListFilters,
+} from '@/composables/useListFilters';
 import { panelTableClass } from '@/lib/panel';
 import type {
     CategoryOption,
@@ -85,7 +93,9 @@ const props = defineProps<{
     /** Null unless the user sees every department's work orders. */
     departments: DepartmentOption[] | null;
     categories: CategoryOption[];
-    can: { create: boolean; restore: boolean };
+    can: { create: boolean; restore: boolean; export: boolean };
+    /** The most work orders one export may hold. */
+    exportMaxRows: number;
 }>();
 
 defineOptions({
@@ -124,6 +134,23 @@ const filters = useListFilters(
 );
 
 const filtered = computed(() => isFiltering(props.filters));
+
+/** The export holds exactly the list as the server last filtered it. */
+const exportUrl = computed(() =>
+    WorkOrderExportController.url({ query: toFilterQuery(props.filters) }),
+);
+
+/** The server refuses too large an export too; this saves the round trip. */
+const checkExportSize = (event: MouseEvent) => {
+    const count = props.workOrders.total;
+
+    if (count > props.exportMaxRows) {
+        event.preventDefault();
+        toast.error(
+            `Hasil filter berisi ${count} work order, melebihi batas ekspor ${props.exportMaxRows}. Persempit filter lalu coba lagi.`,
+        );
+    }
+};
 const { formatDateTime, formatCalendarDate } = useFormatDate();
 const hasPermission = useCan();
 
@@ -182,11 +209,16 @@ const openHistory = (workOrder: WorkOrderListItem) => {
         <StatStrip :items="statItems" />
 
         <ListToolbar>
-            <template v-if="can.create" #actions>
-                <Button as-child>
+            <template v-if="can.create || can.export" #actions>
+                <Button v-if="can.create" as-child>
                     <Link :href="WorkOrderController.create()">
                         <Plus /> Buat work order
                     </Link>
+                </Button>
+                <Button v-if="can.export" variant="outline" as-child>
+                    <a :href="exportUrl" @click="checkExportSize">
+                        <Download /> Ekspor
+                    </a>
                 </Button>
             </template>
 

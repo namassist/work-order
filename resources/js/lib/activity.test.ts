@@ -47,6 +47,15 @@ describe('describeProperties', () => {
         ]);
     });
 
+    it('labels export details', () => {
+        expect(
+            describeProperties({ filter: 'Status: Draft', jumlah_baris: '12' }),
+        ).toEqual([
+            { label: 'Filter', value: 'Status: Draft' },
+            { label: 'Jumlah baris', value: '12' },
+        ]);
+    });
+
     it('shows unknown keys and reasons as they were logged', () => {
         expect(describeProperties({ source: 'import', reason: 'x' })).toEqual([
             { label: 'source', value: 'import' },

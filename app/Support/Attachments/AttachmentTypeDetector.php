@@ -50,7 +50,7 @@ class AttachmentTypeDetector
      */
     public function detect(string $path): ?AttachmentType
     {
-        $mimeType = (new finfo(FILEINFO_MIME_TYPE))->file($path);
+        $mimeType = new finfo(FILEINFO_MIME_TYPE)->file($path);
 
         if ($mimeType === false) {
             return null;

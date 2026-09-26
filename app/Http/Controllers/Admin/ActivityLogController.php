@@ -61,7 +61,7 @@ class ActivityLogController extends Controller
 
         return Inertia::render('admin/activity-log/Index', [
             'activities' => $activities->through(
-                fn (Activity $activity): array => (new ActivityResource($activity, $referenceCodes))->resolve($request),
+                fn (Activity $activity): array => new ActivityResource($activity, $referenceCodes)->resolve($request),
             ),
             'filters' => [
                 'subject_type' => $filters['subject_type'] ?? '',
@@ -98,7 +98,7 @@ class ActivityLogController extends Controller
 
         return response()->json([
             'data' => $activities
-                ->map(fn (Activity $activity): array => (new ActivityResource($activity, $referenceCodes))->resolve($request))
+                ->map(fn (Activity $activity): array => new ActivityResource($activity, $referenceCodes)->resolve($request))
                 ->all(),
         ]);
     }

@@ -51,6 +51,8 @@ const PROPERTY_LABELS: Record<string, string> = {
     email: 'Email',
     ip: 'IP',
     reason: 'Alasan',
+    filter: 'Filter',
+    jumlah_baris: 'Jumlah baris',
 };
 
 const REASON_LABELS: Record<string, string> = {

@@ -97,7 +97,7 @@ abstract class WorkOrderStatus extends State
      */
     public static function options(): array
     {
-        return array_map(fn (string $class): array => (new $class(new WorkOrder))->toOption(), [
+        return array_map(fn (string $class): array => new $class(new WorkOrder)->toOption(), [
             Draft::class,
             Diajukan::class,
             Dibatalkan::class,

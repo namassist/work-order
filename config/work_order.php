@@ -37,4 +37,18 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Export
+    |--------------------------------------------------------------------------
+    |
+    | The most work orders one Excel export of the list may hold. Above it,
+    | the user is asked to narrow the filters.
+    |
+    */
+
+    'export' => [
+        'max_rows' => (int) env('WO_EXPORT_MAX_ROWS', 5000),
+    ],
+
 ];
