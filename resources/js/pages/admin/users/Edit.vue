@@ -5,7 +5,8 @@ import { ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import UserForm from '@/components/admin/UserForm.vue';
-import PageHeader from '@/components/PageHeader.vue';
+import ListToolbar from '@/components/ListToolbar.vue';
+import PagePanel from '@/components/PagePanel.vue';
 import { Button } from '@/components/ui/button';
 import { useCan } from '@/composables/useCan';
 import type { DepartmentOption, EditableUser } from '@/types';
@@ -34,31 +35,22 @@ const historyOpen = ref(false);
 <template>
     <Head :title="`Ubah ${user.name}`" />
 
-    <div class="flex flex-1 flex-col gap-4 p-4">
-        <PageHeader
-            class="max-w-3xl"
-            title="Ubah pengguna"
-            :description="user.email"
-        >
+    <PagePanel title="Ubah pengguna">
+        <template #meta>{{ user.email }}</template>
+        <ListToolbar v-if="hasPermission('activity-log.view')">
             <template #actions>
-                <Button
-                    v-if="hasPermission('activity-log.view')"
-                    variant="outline"
-                    @click="historyOpen = true"
-                >
+                <Button variant="outline" @click="historyOpen = true">
                     <History /> Riwayat
                 </Button>
             </template>
-        </PageHeader>
-        <div class="max-w-3xl rounded-2xl border bg-card p-6">
-            <UserForm
-                :user="user"
-                :departments="departments"
-                :roles="roles"
-                :is-self="isSelf"
-            />
-        </div>
-    </div>
+        </ListToolbar>
+        <UserForm
+            :user="user"
+            :departments="departments"
+            :roles="roles"
+            :is-self="isSelf"
+        />
+    </PagePanel>
 
     <ActivityHistorySheet
         v-if="hasPermission('activity-log.view')"

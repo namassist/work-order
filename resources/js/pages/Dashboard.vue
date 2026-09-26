@@ -9,12 +9,12 @@ import {
     Wrench,
 } from '@lucide/vue';
 import { computed } from 'vue';
-import type { Component } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
 import ActivityEventBadge from '@/components/admin/ActivityEventBadge.vue';
 import EmptyState from '@/components/EmptyState.vue';
-import PageHeader from '@/components/PageHeader.vue';
-import { Badge } from '@/components/ui/badge';
+import PagePanel from '@/components/PagePanel.vue';
+import type { StatItem } from '@/components/StatStrip.vue';
+import StatStrip from '@/components/StatStrip.vue';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormatDate } from '@/composables/useFormatDate';
@@ -44,121 +44,62 @@ const title = computed(
         `${greeting(new Date(), page.props.displayTimezone)}, ${page.props.auth.user.name}`,
 );
 
-type Metric = {
-    label: string;
-    icon: Component;
-    tone: string;
-    /** Undefined while loading, null when unavailable or not built yet. */
-    value: number | null | undefined;
-    /** Set for metrics whose WO stage does not exist yet. */
-    comingSoon?: boolean;
-};
-
 /**
  * Work order metrics over the WO the user may see. "Menunggu Persetujuan"
  * counts submitted WOs in the provisional flow; the execution metrics wait
- * for their WO stages. Tones follow the status colours in docs/DESIGN.md.
+ * for their WO stages.
  */
-const metrics = computed<Metric[]>(() => [
-    {
-        label: 'Total WO',
-        icon: ClipboardList,
-        tone: 'bg-secondary text-secondary-foreground',
-        value:
-            props.workOrderCounts === undefined
-                ? undefined
-                : (props.workOrderCounts?.total ?? null),
-    },
-    {
-        label: 'Menunggu Persetujuan',
-        icon: Hourglass,
-        tone: 'bg-warning text-warning-foreground',
-        value:
-            props.workOrderCounts === undefined
-                ? undefined
-                : (props.workOrderCounts?.pending ?? null),
-    },
-    {
-        label: 'Dalam Pengerjaan',
-        icon: Wrench,
-        tone: 'bg-info text-info-foreground',
-        value: null,
-        comingSoon: true,
-    },
-    {
-        label: 'Terlambat',
-        icon: AlarmClock,
-        tone: 'bg-destructive/10 text-destructive',
-        value: null,
-        comingSoon: true,
-    },
-]);
+const metrics = computed<StatItem[]>(() => {
+    const counts = props.workOrderCounts;
+
+    return [
+        {
+            label: 'Total WO',
+            icon: ClipboardList,
+            value: counts === undefined ? undefined : (counts?.total ?? null),
+        },
+        {
+            label: 'Menunggu Persetujuan',
+            icon: Hourglass,
+            value: counts === undefined ? undefined : (counts?.pending ?? null),
+        },
+        {
+            label: 'Dalam Pengerjaan',
+            icon: Wrench,
+            value: null,
+            hint: 'Segera hadir',
+        },
+        {
+            label: 'Terlambat',
+            icon: AlarmClock,
+            value: null,
+            hint: 'Segera hadir',
+        },
+    ];
+});
 </script>
 
 <template>
     <Head title="Dashboard" />
 
-    <div class="flex flex-1 flex-col gap-4 p-4">
-        <PageHeader
-            :title="title"
-            :description="
+    <PagePanel :title="title">
+        <template #meta>
+            {{
                 department
                     ? `${department.name} (${department.code})`
                     : 'Belum terdaftar di departemen'
-            "
-        />
+            }}
+        </template>
 
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div
-                v-for="metric in metrics"
-                :key="metric.label"
-                class="flex flex-col gap-4 rounded-2xl border bg-card p-6"
-            >
-                <div class="flex items-center justify-between gap-2">
-                    <p class="text-sm font-medium text-muted-foreground">
-                        {{ metric.label }}
-                    </p>
-                    <span
-                        :class="[
-                            'flex size-8 items-center justify-center rounded-lg',
-                            metric.tone,
-                        ]"
-                    >
-                        <component
-                            :is="metric.icon"
-                            class="size-4"
-                            aria-hidden="true"
-                        />
-                    </span>
-                </div>
-                <div class="flex items-end justify-between gap-2">
-                    <Skeleton
-                        v-if="metric.value === undefined"
-                        class="h-9 w-16"
-                    />
-                    <p
-                        v-else-if="metric.value === null"
-                        class="text-3xl font-semibold text-muted-foreground tabular-nums"
-                        aria-hidden="true"
-                    >
-                        —
-                    </p>
-                    <p v-else class="text-3xl font-semibold tabular-nums">
-                        {{ metric.value }}
-                    </p>
-                    <Badge v-if="metric.comingSoon" variant="outline">
-                        Segera hadir
-                    </Badge>
-                </div>
-            </div>
-        </div>
+        <StatStrip :items="metrics" />
 
         <section
             v-if="recentActivities !== null"
-            class="rounded-2xl border bg-card"
             aria-labelledby="recent-activity-heading"
         >
-            <div class="flex items-center justify-between gap-2 border-b p-4">
+            <div
+                class="flex items-center justify-between gap-2 border-b px-4 py-3 sm:px-6"
+            >
                 <h2 id="recent-activity-heading" class="font-medium">
                     Aktivitas terbaru
                 </h2>
@@ -168,9 +109,12 @@ const metrics = computed<Metric[]>(() => [
                     </Link>
                 </Button>
             </div>
-
             <ul v-if="recentActivities === undefined" class="divide-y">
-                <li v-for="n in 4" :key="n" class="flex items-center gap-3 p-4">
+                <li
+                    v-for="n in 4"
+                    :key="n"
+                    class="flex items-center gap-3 px-4 py-4 sm:px-6"
+                >
                     <Skeleton class="h-5 w-24" />
                     <Skeleton class="h-4 flex-1" />
                     <Skeleton class="h-4 w-28" />
@@ -192,7 +136,7 @@ const metrics = computed<Metric[]>(() => [
                 <li
                     v-for="entry in recentActivities"
                     :key="entry.id"
-                    class="flex flex-wrap items-center gap-x-3 gap-y-1 p-4 text-sm"
+                    class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm sm:px-6"
                 >
                     <ActivityEventBadge :entry="entry" />
                     <span class="min-w-0 flex-1 truncate">
@@ -216,5 +160,5 @@ const metrics = computed<Metric[]>(() => [
                 </li>
             </ul>
         </section>
-    </div>
+    </PagePanel>
 </template>

@@ -20,7 +20,9 @@ const { isCurrentUrl } = useCurrentUrl();
 
 <template>
     <SidebarGroup class="px-2 py-0">
-        <SidebarGroupLabel v-if="label">{{ label }}</SidebarGroupLabel>
+        <SidebarGroupLabel v-if="label" class="tracking-wider uppercase">{{
+            label
+        }}</SidebarGroupLabel>
         <SidebarMenu>
             <SidebarMenuItem v-for="item in items" :key="item.title">
                 <SidebarMenuButton

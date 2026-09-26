@@ -1,29 +1,23 @@
 <script setup lang="ts">
-import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import ThemeToggle from '@/components/ThemeToggle.vue';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import type { BreadcrumbItem } from '@/types';
+import UserMenu from '@/components/UserMenu.vue';
 
-withDefaults(
-    defineProps<{
-        breadcrumbs?: BreadcrumbItem[];
-    }>(),
-    {
-        breadcrumbs: () => [],
-    },
-);
+/**
+ * The topbar: sidebar toggle on the left; theme toggle and the avatar menu
+ * on the right. Breadcrumbs live in each page's panel header. Global search
+ * and notifications join here once those features exist.
+ */
 </script>
 
 <template>
     <header
-        class="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/70 px-6 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-4"
+        class="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/70 px-4"
     >
-        <div class="flex items-center gap-2">
-            <SidebarTrigger class="-ml-1" />
-            <template v-if="breadcrumbs && breadcrumbs.length > 0">
-                <Breadcrumbs :breadcrumbs="breadcrumbs" />
-            </template>
+        <SidebarTrigger class="-ml-1" />
+        <div class="ml-auto flex items-center gap-1">
+            <ThemeToggle />
+            <UserMenu />
         </div>
-        <ThemeToggle class="ml-auto" />
     </header>
 </template>

@@ -16,11 +16,11 @@ defineProps<{
     <div
         class="flex max-w-sm flex-col items-center gap-3 text-center whitespace-normal"
     >
-        <div
-            class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
-        >
-            <component :is="icon" class="size-5" aria-hidden="true" />
-        </div>
+        <component
+            :is="icon"
+            class="size-5 text-muted-foreground"
+            aria-hidden="true"
+        />
         <div class="space-y-1">
             <p class="font-medium">{{ title }}</p>
             <p v-if="description" class="text-sm text-muted-foreground">

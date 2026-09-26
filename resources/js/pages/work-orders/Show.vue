@@ -6,7 +6,8 @@ import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkO
 import AttachmentPanel from '@/components/attachments/AttachmentPanel.vue';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
-import PageHeader from '@/components/PageHeader.vue';
+import ListToolbar from '@/components/ListToolbar.vue';
+import PagePanel from '@/components/PagePanel.vue';
 import { Button } from '@/components/ui/button';
 import StatusTimeline from '@/components/work-orders/StatusTimeline.vue';
 import TransitionDialog from '@/components/work-orders/TransitionDialog.vue';
@@ -67,52 +68,60 @@ const destroy = () => {
 <template>
     <Head :title="`${workOrder.display_number} · ${workOrder.title}`" />
 
-    <div class="flex flex-1 flex-col gap-4 p-4">
-        <PageHeader :title="workOrder.title">
-            <template #description>
-                <span class="flex flex-wrap items-center gap-2">
-                    <span class="font-mono">{{
-                        workOrder.display_number
-                    }}</span>
-                    <WorkOrderStatusBadge :status="workOrder.status" />
-                </span>
-            </template>
-            <template #actions>
-                <Button
-                    v-for="(transition, index) in transitions"
-                    :key="transition.value"
-                    :variant="index === 0 ? 'default' : 'outline'"
-                    @click="openTransition(transition)"
-                >
-                    {{ transition.label }}
-                </Button>
-                <Button v-if="can.update" variant="outline" as-child>
-                    <Link :href="WorkOrderController.edit(workOrder.id)">
-                        <Pencil /> Ubah
-                    </Link>
-                </Button>
-                <Button
-                    v-if="can.delete"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Hapus draft"
-                    @click="deleteOpen = true"
-                >
-                    <Trash2 />
-                </Button>
-                <Button
-                    v-if="hasPermission('activity-log.view')"
-                    variant="ghost"
-                    @click="historyOpen = true"
-                >
-                    <History /> Riwayat
-                </Button>
-            </template>
-        </PageHeader>
+    <PagePanel :title="workOrder.title">
+        <template #meta>
+            <span class="flex flex-wrap items-center gap-2">
+                <span class="font-mono">{{ workOrder.display_number }}</span>
+                <WorkOrderStatusBadge :status="workOrder.status" />
+            </span>
+        </template>
 
-        <div class="grid gap-4 lg:grid-cols-3">
+        <ListToolbar
+            v-if="
+                transitions.length > 0 ||
+                can.update ||
+                can.delete ||
+                hasPermission('activity-log.view')
+            "
+        >
+            <template #actions>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Button
+                        v-for="(transition, index) in transitions"
+                        :key="transition.value"
+                        :variant="index === 0 ? 'default' : 'outline'"
+                        @click="openTransition(transition)"
+                    >
+                        {{ transition.label }}
+                    </Button>
+                    <Button v-if="can.update" variant="outline" as-child>
+                        <Link :href="WorkOrderController.edit(workOrder.id)">
+                            <Pencil /> Ubah
+                        </Link>
+                    </Button>
+                    <Button
+                        v-if="hasPermission('activity-log.view')"
+                        variant="ghost"
+                        @click="historyOpen = true"
+                    >
+                        <History /> Riwayat
+                    </Button>
+                    <Button
+                        v-if="can.delete"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Hapus draft"
+                        @click="deleteOpen = true"
+                    >
+                        <Trash2 />
+                    </Button>
+                </div>
+            </template>
+        </ListToolbar>
+
+        <div class="grid lg:grid-cols-3">
             <section
-                class="rounded-2xl border bg-card p-6 lg:col-span-2"
+                class="px-4 py-6 sm:px-6 lg:col-span-2"
                 aria-labelledby="wo-detail-heading"
             >
                 <h2 id="wo-detail-heading" class="sr-only">Detail</h2>
@@ -165,7 +174,7 @@ const destroy = () => {
             </section>
 
             <section
-                class="rounded-2xl border bg-card p-6"
+                class="border-t px-4 py-6 sm:px-6 lg:border-t-0 lg:border-l"
                 aria-labelledby="wo-timeline-heading"
             >
                 <h2 id="wo-timeline-heading" class="mb-4 font-medium">
@@ -173,24 +182,22 @@ const destroy = () => {
                 </h2>
                 <StatusTimeline :entries="timeline" />
             </section>
-
-            <section
-                class="rounded-2xl border bg-card p-6 lg:col-span-2"
-                aria-labelledby="wo-documents-heading"
-            >
-                <h2 id="wo-documents-heading" class="mb-4 font-medium">
-                    Dokumen
-                </h2>
-                <AttachmentPanel
-                    :rules="attachments.rules"
-                    :target="attachments.target"
-                    :items="attachments.items"
-                    :can-upload="attachments.can.upload"
-                    :can-delete="attachments.can.delete"
-                />
-            </section>
         </div>
-    </div>
+
+        <section
+            class="border-t px-4 py-6 sm:px-6"
+            aria-labelledby="wo-documents-heading"
+        >
+            <h2 id="wo-documents-heading" class="mb-4 font-medium">Dokumen</h2>
+            <AttachmentPanel
+                :rules="attachments.rules"
+                :target="attachments.target"
+                :items="attachments.items"
+                :can-upload="attachments.can.upload"
+                :can-delete="attachments.can.delete"
+            />
+        </section>
+    </PagePanel>
 
     <TransitionDialog
         v-model:open="transitionOpen"

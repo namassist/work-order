@@ -18,11 +18,9 @@ import WorkOrderCategoryController from '@/actions/App/Http/Controllers/Admin/Wo
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
-import NavUser from '@/components/NavUser.vue';
 import {
     Sidebar,
     SidebarContent,
-    SidebarFooter,
     SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
@@ -121,10 +119,6 @@ const visibleGroups = computed(() => visibleNavGroups(navGroups, can));
                 :label="group.label"
             />
         </SidebarContent>
-
-        <SidebarFooter>
-            <NavUser />
-        </SidebarFooter>
     </Sidebar>
     <slot />
 </template>

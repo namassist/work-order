@@ -29,7 +29,10 @@ import {
 import { ALL, isFiltering, useListFilters } from '@/composables/useListFilters';
 import { useFormatDate } from '@/composables/useFormatDate';
 import EmptyState from '@/components/EmptyState.vue';
-import PageHeader from '@/components/PageHeader.vue';
+import ListToolbar from '@/components/ListToolbar.vue';
+import PagePanel from '@/components/PagePanel.vue';
+import PersonName from '@/components/PersonName.vue';
+import { panelTableClass } from '@/lib/panel';
 import type { ActivityEntry, Paginated, SelectOption } from '@/types';
 
 const props = defineProps<{
@@ -87,172 +90,187 @@ const subjectTypeLabel = computed(
 <template>
     <Head title="Log Aktivitas" />
 
-    <div class="flex flex-1 flex-col gap-4 p-4">
-        <PageHeader
-            title="Log Aktivitas"
-            description="Perubahan data master, role, dan aktivitas login. Password tidak pernah dicatat."
-        />
-
-        <div class="rounded-2xl border bg-card">
-            <div class="flex flex-wrap items-end gap-3 border-b p-4">
-                <Select v-model="filters.subject_type">
-                    <SelectTrigger class="w-44" aria-label="Filter jenis data">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem :value="ALL">Semua data</SelectItem>
-                        <SelectItem
-                            v-for="option in subjectTypes"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ option.label }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select v-model="filters.event">
-                    <SelectTrigger class="w-48" aria-label="Filter peristiwa">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem :value="ALL">Semua peristiwa</SelectItem>
-                        <SelectItem
-                            v-for="option in events"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ option.label }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select v-model="filters.causer">
-                    <SelectTrigger class="w-48" aria-label="Filter pelaku">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem :value="ALL">Semua pelaku</SelectItem>
-                        <SelectItem
-                            v-for="causer in causers"
-                            :key="causer.id"
-                            :value="String(causer.id)"
-                        >
-                            {{ causer.name }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <div class="grid gap-1">
-                    <Label for="filter-from" class="text-xs">Dari</Label>
-                    <Input
-                        id="filter-from"
-                        v-model="filters.from"
-                        type="date"
-                        class="w-40"
-                    />
-                </div>
-                <div class="grid gap-1">
-                    <Label for="filter-to" class="text-xs">Sampai</Label>
-                    <Input
-                        id="filter-to"
-                        v-model="filters.to"
-                        type="date"
-                        class="w-40"
-                        :min="filters.from || undefined"
-                    />
-                </div>
-                <Button
-                    v-if="filters.subject_id"
-                    variant="outline"
-                    size="sm"
-                    @click="filters.subject_id = ''"
+    <PagePanel title="Log Aktivitas">
+        <ListToolbar>
+            <Select v-model="filters.subject_type">
+                <SelectTrigger
+                    class="w-full sm:w-44"
+                    aria-label="Filter jenis data"
                 >
-                    {{ subjectTypeLabel }} #{{ filters.subject_id }}
-                    <X />
-                    <span class="sr-only">Hapus filter data</span>
-                </Button>
-            </div>
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem :value="ALL">Semua data</SelectItem>
+                    <SelectItem
+                        v-for="option in subjectTypes"
+                        :key="option.value"
+                        :value="option.value"
+                    >
+                        {{ option.label }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <Select v-model="filters.event">
+                <SelectTrigger
+                    class="w-full sm:w-48"
+                    aria-label="Filter peristiwa"
+                >
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem :value="ALL">Semua peristiwa</SelectItem>
+                    <SelectItem
+                        v-for="option in events"
+                        :key="option.value"
+                        :value="option.value"
+                    >
+                        {{ option.label }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <Select v-model="filters.causer">
+                <SelectTrigger
+                    class="w-full sm:w-48"
+                    aria-label="Filter pelaku"
+                >
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem :value="ALL">Semua pelaku</SelectItem>
+                    <SelectItem
+                        v-for="causer in causers"
+                        :key="causer.id"
+                        :value="String(causer.id)"
+                    >
+                        {{ causer.name }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <fieldset class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+                <legend class="sr-only">Tanggal</legend>
+                <Label for="filter-from" class="text-muted-foreground">
+                    Tanggal
+                </Label>
+                <Input
+                    id="filter-from"
+                    v-model="filters.from"
+                    type="date"
+                    class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+                    aria-label="Dari tanggal"
+                />
+                <span class="text-muted-foreground" aria-hidden="true">–</span>
+                <Input
+                    id="filter-to"
+                    v-model="filters.to"
+                    type="date"
+                    class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+                    aria-label="Sampai tanggal"
+                    :min="filters.from || undefined"
+                />
+            </fieldset>
+            <Button
+                v-if="filters.subject_id"
+                variant="outline"
+                size="sm"
+                @click="filters.subject_id = ''"
+            >
+                {{ subjectTypeLabel }} #{{ filters.subject_id }}
+                <X />
+                <span class="sr-only">Hapus filter data</span>
+            </Button>
+        </ListToolbar>
 
-            <Table>
-                <TableHeader class="sticky top-0 bg-card">
-                    <TableRow>
-                        <TableHead>Waktu</TableHead>
-                        <TableHead>Peristiwa</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Oleh</TableHead>
-                        <TableHead>Perubahan</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <TableRow
-                        v-for="entry in activities.data"
-                        :key="entry.id"
-                        class="align-top"
+        <Table :class="panelTableClass">
+            <TableHeader class="sticky top-0 bg-card">
+                <TableRow>
+                    <TableHead>Waktu</TableHead>
+                    <TableHead class="hidden md:table-cell"
+                        >Peristiwa</TableHead
                     >
-                        <TableCell class="whitespace-nowrap tabular-nums">
-                            <time :datetime="entry.created_at">
-                                {{ formatDateTime(entry.created_at) }}
-                            </time>
-                        </TableCell>
-                        <TableCell>
-                            <ActivityEventBadge :entry="entry" />
-                        </TableCell>
-                        <TableCell>
-                            <template v-if="entry.subject">
-                                <div class="text-xs text-muted-foreground">
-                                    {{ entry.subject.type_label }}
-                                </div>
-                                <div
-                                    :class="{
-                                        'font-mono':
-                                            entry.subject.type !== 'user',
-                                    }"
-                                >
-                                    {{ entry.subject.label }}
-                                </div>
-                            </template>
-                            <span v-else class="text-muted-foreground">—</span>
-                        </TableCell>
-                        <TableCell>
-                            {{ entry.causer?.name ?? 'Sistem' }}
-                        </TableCell>
-                        <TableCell class="min-w-72 whitespace-normal">
-                            <div class="flex flex-col gap-1.5">
-                                <ActivityChanges
-                                    v-if="entry.changes.length > 0"
-                                    :changes="entry.changes"
-                                />
-                                <ActivityProperties
-                                    :properties="entry.properties"
-                                />
-                            </div>
-                        </TableCell>
-                    </TableRow>
-                    <TableEmpty
-                        v-if="activities.data.length === 0"
-                        :colspan="5"
+                    <TableHead>Data</TableHead>
+                    <TableHead class="hidden md:table-cell">Oleh</TableHead>
+                    <TableHead class="hidden md:table-cell"
+                        >Perubahan</TableHead
                     >
-                        <EmptyState
-                            v-if="filtered"
-                            :icon="SearchX"
-                            title="Tidak ada aktivitas yang cocok"
-                            description="Ubah kata kunci atau filter pencarian."
-                        >
-                            <Button variant="outline" size="sm" as-child>
-                                <Link :href="ActivityLogController.index()">
-                                    Hapus filter
-                                </Link>
-                            </Button>
-                        </EmptyState>
-                        <EmptyState
-                            v-else
-                            :icon="History"
-                            title="Belum ada aktivitas"
-                            description="Aktivitas tercatat otomatis saat data diubah atau pengguna masuk."
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                <TableRow
+                    v-for="entry in activities.data"
+                    :key="entry.id"
+                    class="align-top"
+                >
+                    <TableCell class="whitespace-nowrap tabular-nums">
+                        <time :datetime="entry.created_at" class="block">
+                            {{ formatDateTime(entry.created_at) }}
+                        </time>
+                        <ActivityEventBadge
+                            :entry="entry"
+                            class="mt-1 md:hidden"
                         />
-                    </TableEmpty>
-                </TableBody>
-            </Table>
+                    </TableCell>
+                    <TableCell class="hidden md:table-cell">
+                        <ActivityEventBadge :entry="entry" />
+                    </TableCell>
+                    <TableCell>
+                        <template v-if="entry.subject">
+                            <div class="text-xs text-muted-foreground">
+                                {{ entry.subject.type_label }}
+                            </div>
+                            <div
+                                :class="{
+                                    'font-mono': entry.subject.type !== 'user',
+                                }"
+                            >
+                                {{ entry.subject.label }}
+                            </div>
+                        </template>
+                        <span v-else class="text-muted-foreground">—</span>
+                    </TableCell>
+                    <TableCell class="hidden md:table-cell">
+                        <PersonName
+                            v-if="entry.causer"
+                            :name="entry.causer.name"
+                        />
+                        <span v-else class="text-muted-foreground">Sistem</span>
+                    </TableCell>
+                    <TableCell
+                        class="hidden min-w-72 whitespace-normal md:table-cell"
+                    >
+                        <div class="flex flex-col gap-1.5">
+                            <ActivityChanges
+                                v-if="entry.changes.length > 0"
+                                :changes="entry.changes"
+                            />
+                            <ActivityProperties
+                                :properties="entry.properties"
+                            />
+                        </div>
+                    </TableCell>
+                </TableRow>
+                <TableEmpty v-if="activities.data.length === 0" :colspan="5">
+                    <EmptyState
+                        v-if="filtered"
+                        :icon="SearchX"
+                        title="Tidak ada aktivitas yang cocok"
+                        description="Ubah kata kunci atau filter pencarian."
+                    >
+                        <Button variant="outline" size="sm" as-child>
+                            <Link :href="ActivityLogController.index()">
+                                Hapus filter
+                            </Link>
+                        </Button>
+                    </EmptyState>
+                    <EmptyState
+                        v-else
+                        :icon="History"
+                        title="Belum ada aktivitas"
+                        description="Aktivitas tercatat otomatis saat data diubah atau pengguna masuk."
+                    />
+                </TableEmpty>
+            </TableBody>
+        </Table>
 
-            <TablePagination :paginator="activities" />
-        </div>
-    </div>
+        <TablePagination :paginator="activities" />
+    </PagePanel>
 </template>
