@@ -84,10 +84,9 @@ class WorkOrderCategoryController extends Controller
     }
 
     /**
-     * Soft-delete the work order category.
-     *
-     * No work orders reference categories yet. Once they do, refuse the delete
-     * while `$category->workOrders()->exists()`, as DepartmentController does.
+     * Soft-delete the work order category. Allowed even while work orders use
+     * it: they reference categories withTrashed(), and deleting only removes
+     * the category from new forms.
      */
     public function destroy(WorkOrderCategory $category): RedirectResponse
     {

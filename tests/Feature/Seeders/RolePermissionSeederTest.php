@@ -29,3 +29,10 @@ it('keeps the activity log to the admin role', function () {
 
     expect(Role::permission(Permission::ActivityLogView->value)->pluck('name')->all())->toBe([SystemRole::Admin->value]);
 });
+
+it('lets only admin, approver, and keuangan see work orders of every department at first', function () {
+    $this->seed(RolePermissionSeeder::class);
+
+    expect(Role::permission(Permission::WorkOrdersViewAll->value)->pluck('name')->sort()->values()->all())
+        ->toBe(['admin', 'approver', 'keuangan']);
+});

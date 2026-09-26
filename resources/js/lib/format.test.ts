@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { formatDate, formatDateTime } from '@/lib/format';
+import { formatCalendarDate, formatDate, formatDateTime } from '@/lib/format';
 
 const WITA = 'Asia/Makassar';
 
@@ -26,5 +26,12 @@ describe('formatDateTime', () => {
 describe('formatDate', () => {
     it('drops the time', () => {
         expect(formatDate('2026-05-31T16:00:00Z', WITA)).toBe('1 Jun 2026');
+    });
+});
+
+describe('formatCalendarDate', () => {
+    it('shows the calendar day without shifting it across timezones', () => {
+        expect(formatCalendarDate('2026-08-31')).toBe('31 Agu 2026');
+        expect(formatCalendarDate('2026-01-01')).toBe('1 Jan 2026');
     });
 });

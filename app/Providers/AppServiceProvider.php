@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Department;
 use App\Models\User;
+use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Policies\ActivityPolicy;
 use App\Policies\RolePolicy;
@@ -51,6 +52,7 @@ class AppServiceProvider extends ServiceProvider
             'user' => User::class,
             'department' => Department::class,
             'wo-category' => WorkOrderCategory::class,
+            'work-order' => WorkOrder::class,
             'role' => Role::class,
             'permission' => Permission::class,
         ]);

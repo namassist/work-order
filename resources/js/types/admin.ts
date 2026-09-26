@@ -109,4 +109,8 @@ export type ActivityEntry = {
 };
 
 /** Morph aliases that have a history panel, see AuditSubject::withHistoryPanel(). */
-export type HistorySubjectType = 'user' | 'department' | 'wo-category';
+export type HistorySubjectType =
+    | 'user'
+    | 'department'
+    | 'wo-category'
+    | 'work-order';

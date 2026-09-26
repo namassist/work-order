@@ -10,6 +10,7 @@ enum AuditSubject: string
     case User = 'user';
     case Department = 'department';
     case WorkOrderCategory = 'wo-category';
+    case WorkOrder = 'work-order';
     case Role = 'role';
 
     /**
@@ -21,6 +22,7 @@ enum AuditSubject: string
             self::User => 'Pengguna',
             self::Department => 'Departemen',
             self::WorkOrderCategory => 'Kategori WO',
+            self::WorkOrder => 'Work Order',
             self::Role => 'Role',
         };
     }
@@ -32,7 +34,7 @@ enum AuditSubject: string
      */
     public static function withHistoryPanel(): array
     {
-        return [self::User->value, self::Department->value, self::WorkOrderCategory->value];
+        return [self::User->value, self::Department->value, self::WorkOrderCategory->value, self::WorkOrder->value];
     }
 
     /**

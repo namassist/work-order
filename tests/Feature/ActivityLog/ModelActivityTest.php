@@ -3,6 +3,7 @@
 use App\Enums\Permission;
 use App\Models\Department;
 use App\Models\User;
+use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Models\Activity;
@@ -15,31 +16,44 @@ function latestActivityFor(Model $model): ?Activity
     return Activity::query()->forSubject($model)->latest('id')->first();
 }
 
+/**
+ * @return array<string, array{Closure, string, string}>
+ */
+function activatableModels(): array
+{
+    return [
+        'user' => [fn (): User => User::factory()->create(['name' => 'Lama']), 'user', 'name'],
+        'department' => [fn (): Department => Department::factory()->create(['name' => 'Lama']), 'department', 'name'],
+        'work order category' => [fn (): WorkOrderCategory => WorkOrderCategory::factory()->create(['name' => 'Lama']), 'wo-category', 'name'],
+    ];
+}
+
+dataset('activatable models', activatableModels());
+
 dataset('logged models', [
-    'user' => [fn (): User => User::factory()->create(['name' => 'Lama']), 'user'],
-    'department' => [fn (): Department => Department::factory()->create(['name' => 'Lama']), 'department'],
-    'work order category' => [fn (): WorkOrderCategory => WorkOrderCategory::factory()->create(['name' => 'Lama']), 'wo-category'],
+    ...activatableModels(),
+    'work order' => [fn (): WorkOrder => WorkOrder::factory()->create(['title' => 'Lama']), 'work-order', 'title'],
 ]);
 
-it('logs creation with the tracked attributes under the model alias', function (Closure $create, string $alias) {
+it('logs creation with the tracked attributes under the model alias', function (Closure $create, string $alias, string $field) {
     $model = $create();
 
     expect(latestActivityFor($model))
         ->log_name->toBe('audit')
         ->event->toBe('created')
         ->subject_type->toBe($alias)
-        ->and(latestActivityFor($model)->attribute_changes->get('attributes'))->toMatchArray(['name' => 'Lama']);
+        ->and(latestActivityFor($model)->attribute_changes->get('attributes'))->toMatchArray([$field => 'Lama']);
 })->with('logged models');
 
-it('logs only the attributes that changed on update', function (Closure $create) {
+it('logs only the attributes that changed on update', function (Closure $create, string $alias, string $field) {
     $model = $create();
 
-    $model->update(['name' => 'Baru']);
+    $model->update([$field => 'Baru']);
 
     expect(latestActivityFor($model)->event)->toBe('updated')
         ->and(latestActivityFor($model)->attribute_changes->all())->toBe([
-            'attributes' => ['name' => 'Baru'],
-            'old' => ['name' => 'Lama'],
+            'attributes' => [$field => 'Baru'],
+            'old' => [$field => 'Lama'],
         ]);
 })->with('logged models');
 
@@ -71,7 +85,7 @@ it('names activation changes as activated and deactivated', function (Closure $c
     expect($deactivated->event)->toBe('deactivated')
         ->and($deactivated->attribute_changes->get('old'))->toBe(['is_active' => true])
         ->and(latestActivityFor($model)->event)->toBe('activated');
-})->with('logged models');
+})->with('activatable models');
 
 it('records the signed-in user as the causer', function () {
     $admin = userWithPermissions(Permission::DepartmentsUpdate);

@@ -173,5 +173,10 @@ return [
         'current_password' => 'password saat ini',
         'from' => 'tanggal mulai',
         'to' => 'tanggal akhir',
+        'title' => 'judul',
+        'work_order_category_id' => 'kategori',
+        'target_date' => 'target selesai',
+        'status' => 'status',
+        'note' => 'catatan',
     ],
 ];

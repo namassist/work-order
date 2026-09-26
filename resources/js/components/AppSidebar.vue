@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import {
     Building2,
+    ClipboardList,
     History,
     LayoutGrid,
     ShieldCheck,
@@ -14,6 +15,7 @@ import DepartmentController from '@/actions/App/Http/Controllers/Admin/Departmen
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import WorkOrderCategoryController from '@/actions/App/Http/Controllers/Admin/WorkOrderCategoryController';
+import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -40,8 +42,17 @@ const navGroups: NavGroup[] = [
     {
         items: [{ title: 'Dashboard', href: dashboard(), icon: LayoutGrid }],
     },
-    // Work Order group goes here, above Master Data, once the WO module exists:
-    // { label: 'Work Order', items: [{ title: 'Daftar WO', href: ..., icon: ClipboardList, permission: 'work-orders.view' }] },
+    {
+        label: 'Work Order',
+        items: [
+            {
+                title: 'Daftar WO',
+                href: WorkOrderController.index(),
+                icon: ClipboardList,
+                permission: 'work-orders.view',
+            },
+        ],
+    },
     {
         label: 'Master Data',
         items: [

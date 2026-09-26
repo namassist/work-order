@@ -15,6 +15,7 @@ it('shares the permissions granted through roles with the frontend', function ()
         ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('auth.permissions', [
             Permission::DepartmentsView->value,
             Permission::WorkOrdersView->value,
+            Permission::WorkOrdersViewAll->value,
         ]));
 });
 
