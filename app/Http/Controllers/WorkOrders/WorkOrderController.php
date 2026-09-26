@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\WorkOrders;
 
 use App\Actions\Attachments\AddAttachment;
+use App\Actions\WorkOrders\CreateWorkOrder;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WorkOrders\StoreWorkOrderRequest;
 use App\Http\Requests\WorkOrders\UpdateWorkOrderRequest;
@@ -124,22 +125,13 @@ class WorkOrderController extends Controller
      * Store a new draft work order in the requester's department, with the
      * documents attached on the form.
      */
-    public function store(StoreWorkOrderRequest $request, AddAttachment $addAttachment): RedirectResponse
+    public function store(StoreWorkOrderRequest $request, CreateWorkOrder $createWorkOrder, AddAttachment $addAttachment): RedirectResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $workOrder = DB::transaction(function () use ($request, $user, $addAttachment): WorkOrder {
-            $workOrder = new WorkOrder($request->safe()->except('attachments'));
-            $workOrder->department_id = (int) $user->department_id;
-            $workOrder->created_by = $user->id;
-            $workOrder->save();
-
-            $workOrder->statusHistories()->create([
-                'from_status' => null,
-                'to_status' => $workOrder->status->getValue(),
-                'user_id' => $user->id,
-            ]);
+        $workOrder = DB::transaction(function () use ($request, $user, $createWorkOrder, $addAttachment): WorkOrder {
+            $workOrder = $createWorkOrder->handle($request->safe()->except('attachments'), $user);
 
             $documents = $workOrder->documentsCollection();
 
