@@ -87,3 +87,23 @@ export type WorkOrderCommentSettings = {
     /** The status no longer accepts comments (e.g. Dibatalkan). */
     read_only: boolean;
 };
+
+/** Dashboard "Ringkasan Pengajuan": work orders created per WITA day. */
+export type RequestOverview = {
+    /** The period in days, 7 or 30. */
+    days: number;
+    statuses: WorkOrderStatusOption[];
+    /** Oldest first; `date` is date-only (Y-m-d), counts keyed by status value. */
+    series: { date: string; counts: Record<string, number> }[];
+};
+
+/** Dashboard "WO Mendesak": a submitted work order with urgency mendesak. */
+export type UrgentWorkOrder = {
+    id: number;
+    number: string | null;
+    title: string;
+    category: string;
+    requester: { id: number; name: string };
+    /** ISO moment of the first submission. */
+    submitted_at: string | null;
+};

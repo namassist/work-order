@@ -58,6 +58,47 @@ export function formatCalendarDate(date: string): string {
     return formatDate(`${date}T00:00:00Z`, 'UTC');
 }
 
+/**
+ * A date-only value (Y-m-d) as "25 Sep", for chart axes where the year is
+ * implied. Like formatCalendarDate, never timezone-converted.
+ */
+export function formatShortCalendarDate(date: string): string {
+    return formatCalendarDate(date).split(' ').slice(0, 2).join(' ');
+}
+
+const relativeTime = new Intl.RelativeTimeFormat('id-ID', {
+    numeric: 'always',
+});
+
+/** Largest unit first; each with its length in seconds. */
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+    ['year', 365 * 24 * 60 * 60],
+    ['month', 30 * 24 * 60 * 60],
+    ['day', 24 * 60 * 60],
+    ['hour', 60 * 60],
+    ['minute', 60],
+];
+
+/**
+ * How long ago a moment was, e.g. "5 menit yang lalu", in the largest whole
+ * unit; "baru saja" under a minute. Show the full date next to it (e.g. on
+ * hover), since this drops the precision.
+ */
+export function formatRelative(iso: string, now: Date): string {
+    const seconds = Math.max(
+        0,
+        Math.floor((now.getTime() - new Date(iso).getTime()) / 1000),
+    );
+
+    for (const [unit, length] of RELATIVE_UNITS) {
+        if (seconds >= length) {
+            return relativeTime.format(-Math.floor(seconds / length), unit);
+        }
+    }
+
+    return 'baru saja';
+}
+
 const FILE_SIZE_UNITS = ['B', 'KB', 'MB', 'GB'];
 const fileSizeNumber = new Intl.NumberFormat('id-ID', {
     maximumFractionDigits: 1,

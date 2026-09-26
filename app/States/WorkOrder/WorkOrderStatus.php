@@ -68,6 +68,16 @@ abstract class WorkOrderStatus extends State
         return true;
     }
 
+    /**
+     * Whether a work order in this status is late once its target date has
+     * passed (the dashboard's "Terlambat"): submitted and not yet final.
+     * Every new status must decide this; draft and final statuses never are.
+     */
+    public function countsAsOverdueWhenLate(): bool
+    {
+        return false;
+    }
+
     public static function config(): StateConfig
     {
         return parent::config()
@@ -97,6 +107,24 @@ abstract class WorkOrderStatus extends State
     public static function labelFor(string $name): string
     {
         return self::fromName($name)?->label() ?? $name;
+    }
+
+    /**
+     * The stored names of every status that countsAsOverdueWhenLate().
+     *
+     * @return list<string>
+     */
+    public static function overdueWhenLateNames(): array
+    {
+        $names = [];
+
+        foreach (self::getStateMapping()->keys() as $name) {
+            if (self::fromName((string) $name)?->countsAsOverdueWhenLate()) {
+                $names[] = (string) $name;
+            }
+        }
+
+        return $names;
     }
 
     /**

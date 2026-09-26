@@ -36,6 +36,14 @@ Warna status konsisten di badge, tabel, timeline, dan grafik:
 
 Status tidak boleh hanya dibedakan lewat warna; selalu sertakan label teks.
 
+Di grafik, seri status memakai token badge-nya, asal kontrasnya minimal 3:1 terhadap `card`
+di mode terang dan gelap. Jika kurang, seri memakai token `--chart-*` khusus grafik dari keluarga
+warna yang sama; token badge tidak diubah. Saat ini: Draft `--chart-5` (abu netral, 4,96:1
+terang), Diajukan `--chart-submitted` (emas `--warning` yang digelapkan, 3,21:1 terang; di mode
+gelap sama dengan `--warning`). Dibatalkan tetap `--destructive` (6,46:1). Pemetaan ada di
+`lib/workOrderStatus.ts` (`statusToneChartColor`). Grafik selalu punya legenda berlabel, tooltip dengan angka, dan tabel
+alternatif untuk pembaca layar; angka tidak dicetak di dalam batang.
+
 ## Urgensi Work Order
 
 Urgensi (Rendah, Normal, Tinggi, Mendesak) tampil sebagai ikon lucide + teks, tidak pernah

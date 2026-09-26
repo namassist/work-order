@@ -11,6 +11,8 @@ import {
 import { computed } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
 import ActivityEventBadge from '@/components/admin/ActivityEventBadge.vue';
+import RequestOverviewChart from '@/components/dashboard/RequestOverviewChart.vue';
+import UrgentWorkOrders from '@/components/dashboard/UrgentWorkOrders.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PagePanel from '@/components/PagePanel.vue';
 import type { StatItem } from '@/components/StatStrip.vue';
@@ -20,12 +22,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useFormatDate } from '@/composables/useFormatDate';
 import { greeting } from '@/lib/greeting';
 import { dashboard } from '@/routes';
-import type { ActivityEntry } from '@/types';
+import type { ActivityEntry, RequestOverview, UrgentWorkOrder } from '@/types';
 
 const props = defineProps<{
     department: { code: string; name: string } | null;
     /** Undefined while the deferred prop loads; null when not allowed. */
-    workOrderCounts?: { total: number; pending: number } | null;
+    workOrderCounts?: {
+        total: number;
+        pending: number;
+        overdue: number;
+    } | null;
+    /** Undefined while the deferred prop loads; null when not allowed. */
+    requestOverview?: RequestOverview | null;
+    /** Undefined while the deferred prop loads; null when not allowed. */
+    urgentWorkOrders?: UrgentWorkOrder[] | null;
     /** Undefined while the deferred prop loads; null when not allowed. */
     recentActivities?: ActivityEntry[] | null;
 }>();
@@ -46,8 +56,9 @@ const title = computed(
 
 /**
  * Work order metrics over the WO the user may see. "Menunggu Persetujuan"
- * counts submitted WOs in the provisional flow; the execution metrics wait
- * for their WO stages.
+ * counts submitted WOs in the provisional flow; "Terlambat" counts WOs past
+ * their target date in a status that countsAsOverdueWhenLate(). "Dalam
+ * Pengerjaan" waits for the execution stages.
  */
 const metrics = computed<StatItem[]>(() => {
     const counts = props.workOrderCounts;
@@ -72,8 +83,7 @@ const metrics = computed<StatItem[]>(() => {
         {
             label: 'Terlambat',
             icon: AlarmClock,
-            value: null,
-            hint: 'Segera hadir',
+            value: counts === undefined ? undefined : (counts?.overdue ?? null),
         },
     ];
 });
@@ -92,6 +102,20 @@ const metrics = computed<StatItem[]>(() => {
         </template>
 
         <StatStrip :items="metrics" />
+
+        <div
+            v-if="requestOverview !== null && urgentWorkOrders !== null"
+            class="grid border-b lg:grid-cols-3"
+        >
+            <RequestOverviewChart
+                :overview="requestOverview"
+                class="lg:col-span-2"
+            />
+            <UrgentWorkOrders
+                :items="urgentWorkOrders"
+                class="border-t lg:border-t-0 lg:border-l"
+            />
+        </div>
 
         <section
             v-if="recentActivities !== null"

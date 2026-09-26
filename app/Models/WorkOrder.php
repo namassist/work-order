@@ -11,6 +11,7 @@ use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\Attachments\Attachable;
 use App\Support\Attachments\AttachmentCollection;
+use App\Support\DisplayDate;
 use Database\Factories\WorkOrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -182,6 +183,21 @@ class WorkOrder extends Model implements Attachable
     protected function search(Builder $query, ?string $term): void
     {
         $this->searchColumns($query, $term, ['number', 'title']);
+    }
+
+    /**
+     * Late work orders (the dashboard's "Terlambat"): in a status that
+     * countsAsOverdueWhenLate() with a target date before today in the display
+     * timezone. Work orders without a target date are never late.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function overdue(Builder $query): void
+    {
+        $query->whereIn('status', WorkOrderStatus::overdueWhenLateNames())
+            ->whereNotNull('target_date')
+            ->where('target_date', '<', DisplayDate::today());
     }
 
     /**
