@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Attachments\AttachmentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\WorkOrders\WorkOrderCommentController;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
 use App\Http\Controllers\WorkOrders\WorkOrderExportController;
 use App\Http\Controllers\WorkOrders\WorkOrderTransitionController;
@@ -24,6 +25,16 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         ->name('work-orders.restore');
     Route::post('work-orders/{workOrder}/transitions', [WorkOrderTransitionController::class, 'store'])
         ->name('work-orders.transitions.store');
+    // Named buckets: a bare throttle:N,1 counts per user across every route using one.
+    Route::post('work-orders/{workOrder}/comments', [WorkOrderCommentController::class, 'store'])
+        ->middleware('throttle:10,1,wo-comment-post')
+        ->name('work-orders.comments.store');
+    Route::scopeBindings()->middleware('throttle:10,1,wo-comment-change')->group(function (): void {
+        Route::patch('work-orders/{workOrder}/comments/{comment}', [WorkOrderCommentController::class, 'update'])
+            ->name('work-orders.comments.update');
+        Route::delete('work-orders/{workOrder}/comments/{comment}', [WorkOrderCommentController::class, 'destroy'])
+            ->name('work-orders.comments.destroy');
+    });
 
     Route::post('attachments/{attachableType}/{attachableId}/{collection}', [AttachmentController::class, 'store'])
         ->whereNumber('attachableId')

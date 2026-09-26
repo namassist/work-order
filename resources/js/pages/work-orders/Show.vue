@@ -9,24 +9,26 @@ import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import ListToolbar from '@/components/ListToolbar.vue';
 import PagePanel from '@/components/PagePanel.vue';
 import { Button } from '@/components/ui/button';
-import StatusTimeline from '@/components/work-orders/StatusTimeline.vue';
 import TransitionDialog from '@/components/work-orders/TransitionDialog.vue';
 import WorkOrderStatusBadge from '@/components/work-orders/WorkOrderStatusBadge.vue';
+import WorkOrderTimeline from '@/components/work-orders/WorkOrderTimeline.vue';
 import WorkOrderUrgency from '@/components/work-orders/WorkOrderUrgency.vue';
 import { useCan } from '@/composables/useCan';
 import { useFormatDate } from '@/composables/useFormatDate';
 import type {
     AttachmentPanelData,
-    StatusHistoryEntry,
+    TimelineEntry,
     WorkOrder,
+    WorkOrderCommentSettings,
     WorkOrderTransition,
 } from '@/types';
 
 const props = defineProps<{
     workOrder: WorkOrder;
-    timeline: StatusHistoryEntry[];
+    timeline: TimelineEntry[];
     transitions: WorkOrderTransition[];
-    can: { update: boolean; delete: boolean };
+    can: { update: boolean; delete: boolean; comment: boolean };
+    comments: WorkOrderCommentSettings;
     attachments: AttachmentPanelData;
 }>();
 
@@ -120,76 +122,63 @@ const destroy = () => {
             </template>
         </ListToolbar>
 
-        <div class="grid lg:grid-cols-3">
-            <section
-                class="px-4 py-6 sm:px-6 lg:col-span-2"
-                aria-labelledby="wo-detail-heading"
+        <section class="px-4 py-6 sm:px-6" aria-labelledby="wo-detail-heading">
+            <h2 id="wo-detail-heading" class="sr-only">Detail</h2>
+            <dl
+                class="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3"
             >
-                <h2 id="wo-detail-heading" class="sr-only">Detail</h2>
-                <dl class="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-                    <div>
-                        <dt class="text-muted-foreground">Departemen</dt>
-                        <dd>
-                            <span class="font-mono">{{
-                                workOrder.department.code
-                            }}</span>
-                            {{ workOrder.department.name }}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-muted-foreground">Kategori</dt>
-                        <dd>
-                            <span class="font-mono">{{
-                                workOrder.category.code
-                            }}</span>
-                            {{ workOrder.category.name }}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-muted-foreground">Pemohon</dt>
-                        <dd>{{ workOrder.requester.name }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-muted-foreground">Urgensi</dt>
-                        <dd>
-                            <WorkOrderUrgency :urgency="workOrder.urgency" />
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-muted-foreground">Target selesai</dt>
-                        <dd class="tabular-nums">
-                            {{
-                                workOrder.target_date
-                                    ? formatCalendarDate(workOrder.target_date)
-                                    : '—'
-                            }}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-muted-foreground">Dibuat</dt>
-                        <dd class="tabular-nums">
-                            {{ formatDateTime(workOrder.created_at) }}
-                        </dd>
-                    </div>
-                    <div class="sm:col-span-2">
-                        <dt class="text-muted-foreground">Deskripsi</dt>
-                        <dd class="whitespace-pre-line">
-                            {{ workOrder.description || '—' }}
-                        </dd>
-                    </div>
-                </dl>
-            </section>
-
-            <section
-                class="border-t px-4 py-6 sm:px-6 lg:border-t-0 lg:border-l"
-                aria-labelledby="wo-timeline-heading"
-            >
-                <h2 id="wo-timeline-heading" class="mb-4 font-medium">
-                    Status
-                </h2>
-                <StatusTimeline :entries="timeline" />
-            </section>
-        </div>
+                <div>
+                    <dt class="text-muted-foreground">Departemen</dt>
+                    <dd>
+                        <span class="font-mono">{{
+                            workOrder.department.code
+                        }}</span>
+                        {{ workOrder.department.name }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Kategori</dt>
+                    <dd>
+                        <span class="font-mono">{{
+                            workOrder.category.code
+                        }}</span>
+                        {{ workOrder.category.name }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Pemohon</dt>
+                    <dd>{{ workOrder.requester.name }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Urgensi</dt>
+                    <dd>
+                        <WorkOrderUrgency :urgency="workOrder.urgency" />
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Target selesai</dt>
+                    <dd class="tabular-nums">
+                        {{
+                            workOrder.target_date
+                                ? formatCalendarDate(workOrder.target_date)
+                                : '—'
+                        }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Dibuat</dt>
+                    <dd class="tabular-nums">
+                        {{ formatDateTime(workOrder.created_at) }}
+                    </dd>
+                </div>
+                <div class="sm:col-span-2 lg:col-span-3">
+                    <dt class="text-muted-foreground">Deskripsi</dt>
+                    <dd class="whitespace-pre-line">
+                        {{ workOrder.description || '—' }}
+                    </dd>
+                </div>
+            </dl>
+        </section>
 
         <section
             class="border-t px-4 py-6 sm:px-6"
@@ -203,6 +192,21 @@ const destroy = () => {
                 :can-upload="attachments.can.upload"
                 :can-delete="attachments.can.delete"
             />
+        </section>
+
+        <section
+            class="border-t px-4 py-6 sm:px-6"
+            aria-labelledby="wo-activity-heading"
+        >
+            <h2 id="wo-activity-heading" class="mb-4 font-medium">Aktivitas</h2>
+            <div class="max-w-3xl">
+                <WorkOrderTimeline
+                    :entries="timeline"
+                    :work-order-id="workOrder.id"
+                    :can-comment="can.comment"
+                    :comments="comments"
+                />
+            </div>
         </section>
     </PagePanel>
 

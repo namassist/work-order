@@ -14,6 +14,7 @@ use Database\Factories\WorkOrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -39,6 +40,7 @@ use Spatie\ModelStates\HasStates;
  * @property-read Department $department
  * @property-read WorkOrderCategory $category
  * @property-read User $requester
+ * @property-read Collection<int, WorkOrderComment> $comments
  */
 #[Fillable(['title', 'description', 'work_order_category_id', 'urgency', 'target_date'])]
 class WorkOrder extends Model implements Attachable
@@ -118,6 +120,17 @@ class WorkOrder extends Model implements Attachable
     public function statusHistories(): HasMany
     {
         return $this->hasMany(WorkOrderStatusHistory::class)->oldest('created_at')->oldest('id');
+    }
+
+    /**
+     * Comments, oldest first. Deleted ones are included only on request
+     * (withTrashed), for the timeline's "Komentar dihapus" placeholders.
+     *
+     * @return HasMany<WorkOrderComment, $this>
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(WorkOrderComment::class)->oldest('created_at')->oldest('id');
     }
 
     /**

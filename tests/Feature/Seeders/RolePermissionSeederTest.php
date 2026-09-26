@@ -43,3 +43,10 @@ it('lets only admin, approver, and keuangan export work orders at first', functi
     expect(Role::permission(Permission::WorkOrdersExport->value)->pluck('name')->sort()->values()->all())
         ->toBe(['admin', 'approver', 'keuangan']);
 });
+
+it('lets every initial role except viewer comment on work orders at first', function () {
+    $this->seed(RolePermissionSeeder::class);
+
+    expect(Role::permission(Permission::WorkOrdersComment->value)->pluck('name')->sort()->values()->all())
+        ->toBe(['admin', 'approver', 'keuangan', 'pemohon']);
+});

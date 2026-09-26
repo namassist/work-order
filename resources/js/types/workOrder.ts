@@ -58,10 +58,32 @@ export type WorkOrderTransition = {
 };
 
 export type StatusHistoryEntry = {
+    type: 'status';
     id: number;
     from: { value: string; label: string } | null;
     to: { value: string; label: string };
     user: { id: number; name: string };
     note: string | null;
     created_at: string;
+};
+
+export type CommentEntry = {
+    type: 'comment';
+    id: number;
+    user: { id: number; name: string };
+    /** Plain text; null once deleted. Never render as HTML. */
+    body: string | null;
+    deleted: boolean;
+    edited: boolean;
+    created_at: string;
+    can: { update: boolean; delete: boolean };
+};
+
+/** One event of a work order's timeline, oldest first. */
+export type TimelineEntry = StatusHistoryEntry | CommentEntry;
+
+export type WorkOrderCommentSettings = {
+    max_length: number;
+    /** The status no longer accepts comments (e.g. Dibatalkan). */
+    read_only: boolean;
 };

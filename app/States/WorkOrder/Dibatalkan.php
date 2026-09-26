@@ -25,4 +25,9 @@ class Dibatalkan extends WorkOrderStatus
     {
         return true;
     }
+
+    public function acceptsComments(): bool
+    {
+        return false;
+    }
 }

@@ -18,6 +18,9 @@ enum AuditEvent: string
     case AttachmentAdded = 'attachment_added';
     case AttachmentRemoved = 'attachment_removed';
     case Exported = 'exported';
+    case CommentAdded = 'comment_added';
+    case CommentEdited = 'comment_edited';
+    case CommentDeleted = 'comment_deleted';
 
     case Login = 'login';
     case Logout = 'logout';
@@ -43,6 +46,9 @@ enum AuditEvent: string
             self::AttachmentAdded => 'Lampiran ditambahkan',
             self::AttachmentRemoved => 'Lampiran dihapus',
             self::Exported => 'Diekspor',
+            self::CommentAdded => 'Komentar ditambahkan',
+            self::CommentEdited => 'Komentar diubah',
+            self::CommentDeleted => 'Komentar dihapus',
             self::Login => 'Login',
             self::Logout => 'Logout',
             self::LoginFailed => 'Login gagal',

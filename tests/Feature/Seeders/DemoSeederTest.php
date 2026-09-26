@@ -7,6 +7,7 @@ use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
+use App\Models\WorkOrderComment;
 use App\Models\WorkOrderStatusHistory;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\DisplayDate;
@@ -165,6 +166,30 @@ it('logs every status change with the user who made it', function () {
     });
 });
 
+it('adds comments from requesters and approvers while the work order still took them', function () {
+    $this->seed(DemoSeeder::class);
+
+    $comments = WorkOrderComment::withTrashed()->with(['workOrder.statusHistories', 'author.roles'])->get();
+
+    expect($comments->pluck('work_order_id')->unique()->count())->toBeGreaterThanOrEqual(8)
+        ->and($comments->pluck('author')->flatMap(fn (User $author) => $author->roles->pluck('name'))->unique()->sort()->values()->all())
+        ->toBe(['approver', 'pemohon'])
+        ->and($comments->whereNotNull('edited_at'))->not->toBeEmpty()
+        ->and($comments->whereNotNull('deleted_at'))->not->toBeEmpty();
+
+    $comments->each(function (WorkOrderComment $comment): void {
+        $cancelledAt = $comment->workOrder->statusHistories->firstWhere('to_status', 'dibatalkan')?->created_at;
+
+        expect($comment->author->department_id)->toBe($comment->workOrder->department_id)
+            ->and($comment->created_at->greaterThan($comment->workOrder->created_at))->toBeTrue()
+            ->and($comment->created_at->lessThanOrEqualTo(now()))->toBeTrue()
+            ->and($cancelledAt === null || $comment->created_at->lessThan($cancelledAt))->toBeTrue();
+    });
+
+    expect(Activity::query()->where('event', AuditEvent::CommentAdded->value)->pluck('causer_id')->sort()->values()->all())
+        ->toBe($comments->pluck('user_id')->sort()->values()->all());
+});
+
 it('attaches sample documents without touching the fixtures', function () {
     $this->seed(DemoSeeder::class);
 
@@ -204,7 +229,7 @@ it('does not duplicate data or remove files when run again', function () {
 
     $counts = fn (): array => [
         Department::count(), WorkOrderCategory::count(), User::count(),
-        WorkOrder::count(), WorkOrderStatusHistory::count(), Media::count(),
+        WorkOrder::count(), WorkOrderStatusHistory::count(), WorkOrderComment::withTrashed()->count(), Media::count(),
     ];
     $before = $counts();
 

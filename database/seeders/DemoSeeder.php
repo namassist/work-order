@@ -3,13 +3,17 @@
 namespace Database\Seeders;
 
 use App\Actions\Attachments\AddAttachment;
+use App\Actions\WorkOrders\AddWorkOrderComment;
 use App\Actions\WorkOrders\CreateWorkOrder;
+use App\Actions\WorkOrders\DeleteWorkOrderComment;
 use App\Actions\WorkOrders\TransitionWorkOrder;
+use App\Actions\WorkOrders\UpdateWorkOrderComment;
 use App\Models\Department;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
+use App\Models\WorkOrderComment;
 use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\Dibatalkan;
 use App\Support\DisplayDate;
@@ -30,9 +34,10 @@ use RuntimeException;
 /**
  * Demo data for local development and visual checks: departments, accounts
  * for every role, categories, and work orders spread over the last three
- * months. Work orders go through CreateWorkOrder, AddAttachment, and
- * TransitionWorkOrder at their historical moments, in chronological order,
- * so numbers, status history, and the activity log match real use.
+ * months. Work orders go through CreateWorkOrder, AddAttachment,
+ * TransitionWorkOrder, and the comment actions at their historical moments,
+ * in chronological order, so numbers, status history, the timeline, and the
+ * activity log match real use.
  *
  * Never runs in production. Safe to re-run: master data and accounts are
  * created only when missing (existing accounts are not touched), and work
@@ -185,6 +190,48 @@ class DemoSeeder extends Seeder
     ];
 
     /**
+     * Comment threads between the department's approver and the requester,
+     * in order. A work order gets the first one to three messages of one.
+     *
+     * @var list<list<array{0: 'approver'|'requester', 1: string}>>
+     */
+    private const array COMMENT_THREADS = [
+        [
+            ['approver', 'Mohon dilampirkan foto kondisi saat ini supaya bisa kami nilai.'],
+            ['requester', 'Baik, Pak. Foto sudah saya unggah di bagian Dokumen.'],
+            ['approver', 'Terima kasih, sudah jelas.'],
+        ],
+        [
+            ['requester', 'Mohon diprioritaskan, kondisi ini mengganggu pekerjaan tim kami setiap hari.'],
+            ['approver', 'Dipahami. Kami cek jadwal teknisi minggu ini.
+Nanti saya kabari lagi.'],
+        ],
+        [
+            ['approver', 'Apakah sudah ada perkiraan biaya dari vendor?'],
+            ['requester', 'Belum, Bu. Penawaran dari vendor baru masuk paling lambat hari Jumat.'],
+            ['approver', 'Oke, ditunggu. Sementara WO ini saya tahan dulu.'],
+        ],
+        [
+            ['requester', 'Tambahan info: lokasinya di sisi timur, dekat pintu darurat.'],
+            ['approver', 'Noted, terima kasih infonya.'],
+        ],
+        [
+            ['approver', 'Target selesai terlalu mepet. Bisa dimundurkan satu minggu?'],
+            ['requester', 'Bisa, Pak. Yang penting sebelum akhir bulan.'],
+        ],
+        [
+            ['requester', 'Apakah perlu persetujuan kepala departemen juga untuk pekerjaan ini?'],
+            ['approver', 'Tidak perlu, cukup lewat WO ini.'],
+        ],
+    ];
+
+    /**
+     * Posted by the requester on the first work order with comments, then
+     * deleted a minute later, so the timeline shows "Komentar dihapus".
+     */
+    private const string MISTAKEN_COMMENT = 'Maaf, komentar ini untuk WO lain.';
+
+    /**
      * How many work orders take each path through the current flow. Overdue
      * ones are submitted with a target date that has passed.
      *
@@ -227,6 +274,9 @@ class DemoSeeder extends Seeder
         private readonly CreateWorkOrder $createWorkOrder,
         private readonly TransitionWorkOrder $transitionWorkOrder,
         private readonly AddAttachment $addAttachment,
+        private readonly AddWorkOrderComment $addComment,
+        private readonly UpdateWorkOrderComment $updateComment,
+        private readonly DeleteWorkOrderComment $deleteComment,
     ) {}
 
     /**
@@ -350,8 +400,8 @@ class DemoSeeder extends Seeder
     }
 
     /**
-     * Every create, upload, and transition with its moment and actor, oldest
-     * first. Events at the same moment keep their planned order.
+     * Every create, upload, comment, and transition with its moment and
+     * actor, oldest first. Events at the same moment keep their planned order.
      *
      * @param  Collection<int, User>  $users
      * @param  Collection<string, WorkOrderCategory>  $categories
@@ -368,6 +418,7 @@ class DemoSeeder extends Seeder
         /** @var array<int, WorkOrder> $created */
         $created = [];
         $events = [];
+        $withComments = 0;
 
         foreach ($paths as $index => $path) {
             /** @var User $requester */
@@ -394,6 +445,17 @@ class DemoSeeder extends Seeder
             }
 
             $nextAt = $createdAt->addMinutes($this->faker->numberBetween(30, 3 * 24 * 60));
+            $cancelledAt = match ($path) {
+                'cancelled_draft' => $nextAt,
+                'cancelled_submitted' => $nextAt->addMinutes($this->faker->numberBetween(60, 4 * 24 * 60)),
+                default => null,
+            };
+
+            if ($index % 5 === 1 || $index % 5 === 3) {
+                // Comments end before a cancellation, which makes them read-only.
+                $until = $cancelledAt ?? CarbonImmutable::now()->subHour();
+                array_push($events, ...$this->planComments($created, $index, $createdAt, $until, $requester, $approver, $withComments++ === 0));
+            }
 
             if ($path === 'cancelled_draft') {
                 $note = $this->faker->randomElement(self::DRAFT_CANCEL_NOTES);
@@ -410,13 +472,75 @@ class DemoSeeder extends Seeder
 
             if ($path === 'cancelled_submitted') {
                 $note = $this->faker->randomElement(self::SUBMITTED_CANCEL_NOTES);
-                $events[] = ['at' => $nextAt->addMinutes($this->faker->numberBetween(60, 4 * 24 * 60)), 'actor' => $approver, 'run' => function () use (&$created, $index, $approver, $note): void {
+                $events[] = ['at' => $cancelledAt, 'actor' => $approver, 'run' => function () use (&$created, $index, $approver, $note): void {
                     $this->transitionWorkOrder->handle($created[$index], Dibatalkan::getMorphClass(), $approver, $note);
                 }];
             }
         }
 
         usort($events, fn (array $a, array $b): int => $a['at']->getTimestamp() <=> $b['at']->getTimestamp());
+
+        return $events;
+    }
+
+    /**
+     * One to three messages of a thread, from 20 minutes after creation until
+     * $until, each some minutes to hours after the last. Every third message
+     * is corrected right after posting, within the edit window. With
+     * $mistaken the requester first posts a comment and deletes it.
+     *
+     * @param  array<int, WorkOrder>  $created  filled while the timeline runs
+     * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
+     */
+    private function planComments(array &$created, int $index, CarbonImmutable $createdAt, CarbonImmutable $until, User $requester, User $approver, bool $mistaken): array
+    {
+        /** @var list<array{0: 'approver'|'requester', 1: string}> $thread */
+        $thread = $this->faker->randomElement(self::COMMENT_THREADS);
+        $messages = array_slice($thread, 0, $this->faker->numberBetween(1, count($thread)));
+        $latestAt = $until->subMinutes(10);
+        $at = $createdAt->addMinutes(20);
+        $events = [];
+
+        if ($mistaken && $at->lessThan($latestAt)) {
+            /** @var WorkOrderComment|null $comment */
+            $comment = null;
+            $events[] = ['at' => $at, 'actor' => $requester, 'run' => function () use (&$created, &$comment, $index, $requester): void {
+                $comment = $this->addComment->handle($created[$index], $requester, self::MISTAKEN_COMMENT);
+            }];
+            $events[] = ['at' => $at->addMinute(), 'actor' => $requester, 'run' => function () use (&$comment, $requester): void {
+                $this->deleteComment->handle($comment, $requester);
+            }];
+            $at = $at->addMinutes(5);
+            unset($comment);
+        }
+
+        foreach ($messages as $position => [$role, $body]) {
+            if ($position > 0) {
+                $at = $at->addMinutes($this->faker->numberBetween(15, 6 * 60));
+            }
+
+            if ($at->greaterThan($latestAt)) {
+                break;
+            }
+
+            $author = $role === 'approver' ? $approver : $requester;
+            $edited = ($index + $position) % 3 === 0;
+            $firstDraft = $edited ? Str::beforeLast($body, ' ') : $body;
+
+            /** @var WorkOrderComment|null $comment */
+            $comment = null;
+            $events[] = ['at' => $at, 'actor' => $author, 'run' => function () use (&$created, &$comment, $index, $author, $firstDraft): void {
+                $comment = $this->addComment->handle($created[$index], $author, $firstDraft);
+            }];
+
+            if ($edited) {
+                $events[] = ['at' => $at->addMinutes(3), 'actor' => $author, 'run' => function () use (&$comment, $author, $body): void {
+                    $this->updateComment->handle($comment, $author, $body);
+                }];
+            }
+
+            unset($comment);
+        }
 
         return $events;
     }
