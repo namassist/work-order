@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Attachments\AttachmentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
 use App\Http\Controllers\WorkOrders\WorkOrderTransitionController;
@@ -18,6 +19,17 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         ->name('work-orders.restore');
     Route::post('work-orders/{workOrder}/transitions', [WorkOrderTransitionController::class, 'store'])
         ->name('work-orders.transitions.store');
+
+    Route::post('attachments/{attachableType}/{attachableId}/{collection}', [AttachmentController::class, 'store'])
+        ->whereNumber('attachableId')
+        ->middleware('throttle:30,1')
+        ->name('attachments.store');
+    Route::get('attachments/{media:uuid}', [AttachmentController::class, 'show'])
+        ->whereUuid('media')
+        ->name('attachments.show');
+    Route::delete('attachments/{media:uuid}', [AttachmentController::class, 'destroy'])
+        ->whereUuid('media')
+        ->name('attachments.destroy');
 });
 
 require __DIR__.'/settings.php';

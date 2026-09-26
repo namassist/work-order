@@ -3,6 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { History, Pencil, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
+import AttachmentPanel from '@/components/attachments/AttachmentPanel.vue';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -13,6 +14,7 @@ import WorkOrderStatusBadge from '@/components/work-orders/WorkOrderStatusBadge.
 import { useCan } from '@/composables/useCan';
 import { useFormatDate } from '@/composables/useFormatDate';
 import type {
+    AttachmentPanelData,
     StatusHistoryEntry,
     WorkOrder,
     WorkOrderTransition,
@@ -23,6 +25,7 @@ const props = defineProps<{
     timeline: StatusHistoryEntry[];
     transitions: WorkOrderTransition[];
     can: { update: boolean; delete: boolean };
+    attachments: AttachmentPanelData;
 }>();
 
 defineOptions({
@@ -169,6 +172,22 @@ const destroy = () => {
                     Status
                 </h2>
                 <StatusTimeline :entries="timeline" />
+            </section>
+
+            <section
+                class="rounded-2xl border bg-card p-6 lg:col-span-2"
+                aria-labelledby="wo-documents-heading"
+            >
+                <h2 id="wo-documents-heading" class="mb-4 font-medium">
+                    Dokumen
+                </h2>
+                <AttachmentPanel
+                    :rules="attachments.rules"
+                    :target="attachments.target"
+                    :items="attachments.items"
+                    :can-upload="attachments.can.upload"
+                    :can-delete="attachments.can.delete"
+                />
             </section>
         </div>
     </div>

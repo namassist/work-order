@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { formatCalendarDate, formatDate, formatDateTime } from '@/lib/format';
+import {
+    formatCalendarDate,
+    formatDate,
+    formatDateTime,
+    formatFileSize,
+} from '@/lib/format';
 
 const WITA = 'Asia/Makassar';
 
@@ -33,5 +38,14 @@ describe('formatCalendarDate', () => {
     it('shows the calendar day without shifting it across timezones', () => {
         expect(formatCalendarDate('2026-08-31')).toBe('31 Agu 2026');
         expect(formatCalendarDate('2026-01-01')).toBe('1 Jan 2026');
+    });
+});
+
+describe('formatFileSize', () => {
+    it('writes sizes in binary units with an Indonesian decimal comma, like the server', () => {
+        expect(formatFileSize(812)).toBe('812 B');
+        expect(formatFileSize(1633)).toBe('1,6 KB');
+        expect(formatFileSize(10 * 1024 * 1024)).toBe('10 MB');
+        expect(formatFileSize(1258291)).toBe('1,2 MB');
     });
 });

@@ -57,3 +57,24 @@ export function formatDate(iso: string, timeZone: string): string {
 export function formatCalendarDate(date: string): string {
     return formatDate(`${date}T00:00:00Z`, 'UTC');
 }
+
+const FILE_SIZE_UNITS = ['B', 'KB', 'MB', 'GB'];
+const fileSizeNumber = new Intl.NumberFormat('id-ID', {
+    maximumFractionDigits: 1,
+});
+
+/**
+ * A byte count as "1,6 KB" (1024-based, at most one decimal). Matches the
+ * sizes the server writes in the activity log (Number::fileSize, locale id).
+ */
+export function formatFileSize(bytes: number): string {
+    let value = bytes;
+    let unit = 0;
+
+    while (value >= 1024 && unit < FILE_SIZE_UNITS.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+
+    return `${fileSizeNumber.format(value)} ${FILE_SIZE_UNITS[unit]}`;
+}

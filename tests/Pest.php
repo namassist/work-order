@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 /*
@@ -78,4 +79,21 @@ function userInDepartment(Department $department, Permission ...$permissions): U
     $user->update(['department_id' => $department->id]);
 
     return $user;
+}
+
+/**
+ * Path of a file in tests/Fixtures/attachments.
+ */
+function attachmentFixture(string $name): string
+{
+    return __DIR__.'/Fixtures/attachments/'.$name;
+}
+
+/**
+ * An upload with a fixture's content under any client filename, so a test
+ * can disguise one type as another.
+ */
+function attachmentUpload(string $fixture, ?string $clientName = null): UploadedFile
+{
+    return UploadedFile::fake()->createWithContent($clientName ?? $fixture, (string) file_get_contents(attachmentFixture($fixture)));
 }

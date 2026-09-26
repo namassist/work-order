@@ -38,6 +38,17 @@ return [
             'report' => false,
         ],
 
+        // Attachments: private, never served directly. Files are only read
+        // through AttachmentController, which authorizes every request.
+        'attachments' => [
+            'driver' => 'local',
+            'root' => storage_path('app/attachments'),
+            'visibility' => 'private',
+            'serve' => false,
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

@@ -2,6 +2,7 @@
 
 use App\Enums\Permission;
 use App\Models\Department;
+use App\Models\Media;
 use App\Models\WorkOrder;
 use Illuminate\Support\Facades\Gate;
 
@@ -54,6 +55,32 @@ it('allows editing only while the work order is a draft', function () {
         ->and($user->can('update', WorkOrder::factory()->submitted()->create(['department_id' => $department->id])))->toBeFalse()
         ->and($user->can('update', WorkOrder::factory()->cancelled()->create(['department_id' => $department->id])))->toBeFalse();
 });
+
+it('allows changing attachments only on drafts, with work-orders.update', function () {
+    $department = Department::factory()->create();
+    $draft = WorkOrder::factory()->create(['department_id' => $department->id]);
+    $submitted = WorkOrder::factory()->submitted()->create(['department_id' => $department->id]);
+    $updater = userInDepartment($department, Permission::WorkOrdersUpdate);
+    $others = array_filter(Permission::cases(), fn (Permission $case): bool => $case !== Permission::WorkOrdersUpdate);
+    $viewer = userInDepartment($department, ...$others);
+
+    foreach (['addAttachment' => 'dokumen', 'deleteAttachment' => new Media] as $ability => $argument) {
+        expect($updater->can($ability, [$draft, $argument]))->toBeTrue()
+            ->and($updater->can($ability, [$submitted, $argument]))->toBeFalse()
+            ->and($viewer->can($ability, [$draft, $argument]))->toBeFalse();
+    }
+});
+
+it('answers 404 for attachment changes on another department\'s work order', function (string $ability, Closure $argument) {
+    $user = userInDepartment(Department::factory()->create(), Permission::WorkOrdersUpdate);
+
+    $response = Gate::forUser($user)->inspect($ability, [WorkOrder::factory()->create(), $argument()]);
+
+    expect($response->status())->toBe(404);
+})->with([
+    'addAttachment' => ['addAttachment', fn (): string => 'dokumen'],
+    'deleteAttachment' => ['deleteAttachment', fn (): Media => new Media],
+]);
 
 it('requires a department to create work orders', function () {
     expect(userWithPermissions(Permission::WorkOrdersCreate)->can('create', WorkOrder::class))->toBeFalse()

@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Concerns\HasAttachments;
 use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
 use App\Enums\Permission;
 use App\States\WorkOrder\WorkOrderStatus;
+use App\Support\Attachments\Attachable;
+use App\Support\Attachments\AttachmentCollection;
 use Database\Factories\WorkOrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -36,10 +39,37 @@ use Spatie\ModelStates\HasStates;
  * @property-read User $requester
  */
 #[Fillable(['title', 'description', 'work_order_category_id', 'target_date'])]
-class WorkOrder extends Model
+class WorkOrder extends Model implements Attachable
 {
     /** @use HasFactory<WorkOrderFactory> */
-    use HasFactory, HasStates, LogsModelActivity, SearchesColumns, SoftDeletes;
+    use HasAttachments, HasFactory, HasStates, LogsModelActivity, SearchesColumns, SoftDeletes;
+
+    /**
+     * Supporting documents. Later stages (BAST, invoice) add their own collections.
+     */
+    public const string DOCUMENTS = 'dokumen';
+
+    /**
+     * @return array<string, AttachmentCollection>
+     */
+    public function attachmentCollections(): array
+    {
+        return [
+            self::DOCUMENTS => new AttachmentCollection(
+                self::DOCUMENTS,
+                maxFiles: (int) config('work_order.attachments.dokumen.max_files'),
+                maxSizeKb: (int) config('work_order.attachments.dokumen.max_size_kb'),
+            ),
+        ];
+    }
+
+    /**
+     * The rules of the 'dokumen' collection.
+     */
+    public function documentsCollection(): AttachmentCollection
+    {
+        return $this->attachmentCollections()[self::DOCUMENTS];
+    }
 
     /**
      * The requester's department at creation, even if it was deleted later.

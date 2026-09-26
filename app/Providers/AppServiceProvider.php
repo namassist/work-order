@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Department;
+use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
@@ -55,6 +56,7 @@ class AppServiceProvider extends ServiceProvider
             'work-order' => WorkOrder::class,
             'role' => Role::class,
             'permission' => Permission::class,
+            'media' => Media::class,
         ]);
     }
 
