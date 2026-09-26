@@ -4,6 +4,8 @@ import {
     formatDate,
     formatDateTime,
     formatFileSize,
+    formatRelative,
+    formatShortCalendarDate,
 } from '@/lib/format';
 
 const WITA = 'Asia/Makassar';
@@ -47,5 +49,35 @@ describe('formatFileSize', () => {
         expect(formatFileSize(1633)).toBe('1,6 KB');
         expect(formatFileSize(10 * 1024 * 1024)).toBe('10 MB');
         expect(formatFileSize(1258291)).toBe('1,2 MB');
+    });
+});
+
+describe('formatShortCalendarDate', () => {
+    it('shows the calendar day and month without shifting it', () => {
+        expect(formatShortCalendarDate('2026-08-31')).toBe('31 Agu');
+        expect(formatShortCalendarDate('2026-01-01')).toBe('1 Jan');
+    });
+});
+
+describe('formatRelative', () => {
+    const now = new Date('2026-09-25T12:00:00Z');
+
+    it('says "baru saja" under a minute', () => {
+        expect(formatRelative('2026-09-25T11:59:30Z', now)).toBe('baru saja');
+    });
+
+    it('uses the largest whole unit in Indonesian', () => {
+        expect(formatRelative('2026-09-25T11:55:00Z', now)).toBe(
+            '5 menit yang lalu',
+        );
+        expect(formatRelative('2026-09-25T09:00:00Z', now)).toBe(
+            '3 jam yang lalu',
+        );
+        expect(formatRelative('2026-09-24T11:00:00Z', now)).toBe(
+            '1 hari yang lalu',
+        );
+        expect(formatRelative('2026-07-20T12:00:00Z', now)).toBe(
+            '2 bulan yang lalu',
+        );
     });
 });

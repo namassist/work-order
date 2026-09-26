@@ -6,8 +6,6 @@ use App\Enums\AuditEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WorkOrders\ExportWorkOrdersRequest;
 use App\Models\User;
-use App\Models\WorkOrderStatusHistory;
-use App\States\WorkOrder\Diajukan;
 use App\Support\DisplayDate;
 use App\Support\WorkOrderSpreadsheet;
 use Illuminate\Http\RedirectResponse;
@@ -49,14 +47,7 @@ class WorkOrderExportController extends Controller
 
         $workOrders = $request->workOrders()
             ->with(['department', 'category', 'requester'])
-            ->addSelect(['submitted_at' => WorkOrderStatusHistory::query()
-                ->select('created_at')
-                ->whereColumn('work_order_id', 'work_orders.id')
-                ->where('to_status', Diajukan::$name)
-                ->orderBy('created_at')
-                ->orderBy('id')
-                ->limit(1)])
-            ->withCasts(['submitted_at' => 'datetime']);
+            ->withSubmittedAt();
 
         return response()->streamDownload(
             fn () => $spreadsheet->write($workOrders->lazy(500), 'php://output'),

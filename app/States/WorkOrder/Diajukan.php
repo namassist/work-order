@@ -25,4 +25,9 @@ class Diajukan extends WorkOrderStatus
     {
         return true;
     }
+
+    public function countsAsOverdueWhenLate(): bool
+    {
+        return true;
+    }
 }

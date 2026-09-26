@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WorkOrderUrgency;
 use App\Http\Resources\ActivityResource;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\States\WorkOrder\Diajukan;
+use App\Support\WorkOrderRequestOverview;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -19,6 +22,11 @@ class DashboardController extends Controller
     private const int RECENT_ACTIVITY_LIMIT = 8;
 
     /**
+     * Entries in the "WO Mendesak" panel; "Lihat semua" opens the filtered list.
+     */
+    private const int URGENT_LIMIT = 5;
+
+    /**
      * The dashboard: greeting, work order counts for users who may list work
      * orders, and recent activity for users who may read the activity log.
      */
@@ -27,10 +35,19 @@ class DashboardController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        $canListWorkOrders = $user->can('viewAny', WorkOrder::class);
+        $period = WorkOrderRequestOverview::period($request->query('period'));
+
         return Inertia::render('Dashboard', [
             'department' => $user->department?->only(['code', 'name']),
-            'workOrderCounts' => $user->can('viewAny', WorkOrder::class)
+            'workOrderCounts' => $canListWorkOrders
                 ? Inertia::defer(fn (): array => $this->workOrderCounts($user))
+                : null,
+            'requestOverview' => $canListWorkOrders
+                ? Inertia::defer(fn (): array => WorkOrderRequestOverview::for($user, $period))
+                : null,
+            'urgentWorkOrders' => $canListWorkOrders
+                ? Inertia::defer(fn (): array => $this->urgentWorkOrders($user))
                 : null,
             'recentActivities' => $user->can('viewAny', Activity::class)
                 ? Inertia::defer(fn (): array => $this->recentActivities($request))
@@ -40,9 +57,10 @@ class DashboardController extends Controller
 
     /**
      * Counts over the work orders the user may see. "Pending" means awaiting
-     * approval, which in the provisional flow is the Diajukan status.
+     * approval, which in the provisional flow is the Diajukan status;
+     * "overdue" is WorkOrder::overdue() ("Terlambat").
      *
-     * @return array{total: int, pending: int}
+     * @return array{total: int, pending: int, overdue: int}
      */
     private function workOrderCounts(User $user): array
     {
@@ -53,7 +71,44 @@ class DashboardController extends Controller
             ->selectRaw('coalesce(sum(case when status = ? then 1 else 0 end), 0) as pending', [Diajukan::getMorphClass()])
             ->first();
 
-        return ['total' => (int) $counts?->total, 'pending' => (int) $counts?->pending];
+        return [
+            'total' => (int) $counts?->total,
+            'pending' => (int) $counts?->pending,
+            'overdue' => WorkOrder::query()->visibleTo($user)->overdue()->count(),
+        ];
+    }
+
+    /**
+     * Submitted "mendesak" work orders the user may see, waiting longest first.
+     *
+     * @return list<array{id: int, number: string|null, title: string, category: string, requester: array{id: int, name: string}, submitted_at: string|null}>
+     */
+    private function urgentWorkOrders(User $user): array
+    {
+        $workOrders = WorkOrder::query()
+            ->visibleTo($user)
+            ->where('status', Diajukan::getMorphClass())
+            ->where('urgency', WorkOrderUrgency::Mendesak)
+            ->withSubmittedAt()
+            ->with(['category', 'requester'])
+            ->orderBy('submitted_at')
+            ->orderBy('id')
+            ->limit(self::URGENT_LIMIT)
+            ->get();
+
+        return array_values($workOrders->map(fn (WorkOrder $workOrder): array => [
+            'id' => $workOrder->id,
+            'number' => $workOrder->number,
+            'title' => $workOrder->title,
+            'category' => $workOrder->category->name,
+            'requester' => ['id' => $workOrder->requester->id, 'name' => $workOrder->requester->name],
+            'submitted_at' => $this->isoMoment($workOrder->getAttribute('submitted_at')),
+        ])->all());
+    }
+
+    private function isoMoment(mixed $moment): ?string
+    {
+        return $moment instanceof CarbonInterface ? $moment->toIso8601String() : null;
     }
 
     /**
