@@ -148,3 +148,8 @@ Files on any model, through spatie/laravel-medialibrary. Work orders are the fir
 - The database is **PostgreSQL** in every environment. Locally it's the shared `postgres-dev` container from `~/Workspaces/databases/docker-compose.yml` (`docker compose up -d postgres` there), with the databases `work_order` (dev) and `work_order_test` (tests; set in `phpunit.xml`). CI runs a `postgres:16` service, and production uses its own server. Postgres `LIKE` is case-sensitive, so search through `App\Concerns\SearchesColumns` (ILIKE with escaped wildcards) instead of a raw `where(..., 'like', ...)`.
 - Feature tests use `RefreshDatabase` through `tests/Pest.php`, so Postgres must be running before `composer test`.
 - `.npmrc` sets `ignore-scripts=true`, so npm packages' install scripts don't run.
+
+## Visual checks (local only)
+- App: http://127.0.0.1:8000 (run `composer run dev` first)
+- Dev login: admin@worder.test / value of DEFAULT_USER_PASSWORD in .env (local only)
+- Check every page in light and dark mode, at 390px (mobile) and 1440px (desktop) widths

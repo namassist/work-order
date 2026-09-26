@@ -60,3 +60,54 @@ Status tidak boleh hanya dibedakan lewat warna; selalu sertakan label teks.
 
 Hanya transisi yang menjawab aksi user (buka dialog, expand baris, toast konfirmasi),
 150–200ms ease-out. Tanpa animasi masuk per section. Hormati `prefers-reduced-motion`.
+
+## Anti-pola (jangan dilakukan)
+- Tanpa gradient, glow, glassmorphism, atau bayangan tebal. Pemisah cukup border 1px.
+- Ikon hanya lucide, monokrom, satu ukuran per konteks. Tanpa emoji.
+- Satu panel per halaman. Isi panel (header, statistik, toolbar, tabel, form) dipisah garis,
+  bukan dibungkus kotak baru.
+- Ikon di kartu metrik boleh, asal monokrom, kecil, maknanya sesuai metrik, dan angka tetap
+  elemen paling menonjol. Tanpa lingkaran berwarna atau gradient di belakang ikon.
+- Tanpa teks pemanis. Label singkat dan fungsional.
+- Satu aksen per layar. Warna lain hanya untuk status.
+- Dropdown/select tidak boleh terlihat seperti tombol aksi utama.
+- Aksi destruktif (hapus) tidak boleh jadi satu-satunya aksi yang terlihat di baris tabel.
+- Empty state: satu kalimat penjelas + satu aksi, tanpa ilustrasi besar.
+- Tanpa elemen template yang tidak relevan: upsell paket, keranjang, bendera bahasa,
+  footer promosi.
+
+## Layout (warna tetap dari token di atas)
+
+### App shell
+- Sidebar kiri lebar tetap, bisa diciutkan lewat tombol di topbar. Menu dikelompokkan
+  dengan label grup kecil huruf kapital (Dashboard, Work Order, Master Data, Administrasi).
+- Topbar: tombol toggle sidebar, pencarian global di kiri; di kanan hanya toggle tema,
+  notifikasi, dan menu avatar.
+- Footer tidak ada, atau cukup satu baris versi aplikasi.
+
+### Struktur halaman
+- Satu panel per halaman. Header panel: judul di kiri, breadcrumb di kanan, lalu garis pemisah.
+- Halaman daftar, urutan dari atas:
+  1. Strip statistik: 4 kolom dipisah garis vertikal, angka besar di atas label,
+     ikon kecil monokrom di pojok kanan atas.
+  2. Toolbar: aksi utama di kiri, pencarian dan filter di kanan.
+  3. Tabel.
+- Halaman form: field langsung di dalam panel, tanpa kotak tambahan. Grid 2 kolom di desktop,
+  1 kolom di mobile. Textarea deskripsi selebar penuh. Tombol Simpan dan Batal di kanan bawah.
+  Form create tidak menampilkan nomor WO (nomor dibuat saat diajukan).
+
+### Tabel
+- Sel utama dua baris: baris 1 nomor WO (font-mono) + judul tebal, baris 2 deskripsi singkat
+  terpotong satu baris dengan warna muted. Draft menampilkan "Draft" di posisi nomor.
+- Kolom orang: avatar kecil + nama.
+- Status sebagai badge, tanggal via lib/format.ts.
+- Seluruh baris bisa diklik untuk membuka detail. Aksi lain (Edit, Riwayat, Hapus)
+  di menu titik tiga di kolom terakhir.
+
+### Responsif
+- Di bawah 1024px sidebar menjadi drawer.
+- Strip statistik: 4 kolom → 2×2 → 1 kolom.
+- Tabel: kolom sekunder (orang, tanggal) disembunyikan di mobile, sisanya tetap terbaca
+  tanpa scroll horizontal jika memungkinkan.
+
+Referensi visual: docs/design/refs/ (struktur saja, lihat README di folder itu).
