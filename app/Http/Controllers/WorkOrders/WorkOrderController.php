@@ -90,6 +90,7 @@ class WorkOrderController extends Controller
                 'trashed' => $showTrashed,
             ],
             'statuses' => WorkOrderStatus::options(),
+            'stats' => $this->statusCounts($user),
             // Only users who see other departments can filter by department.
             'departments' => $user->can('viewAllDepartments', WorkOrder::class)
                 ? Department::orderBy('code')->get(['id', 'code', 'name'])
@@ -269,6 +270,31 @@ class WorkOrderController extends Controller
                 ->when($workOrder?->work_order_category_id, fn (Builder $query, int $id) => $query->orWhere('id', $id)))
             ->orderBy('code')
             ->get(['id', 'code', 'name']);
+    }
+
+    /**
+     * Work orders the user may see, per status, for the list's statistics
+     * strip. Ignores the list filters and deleted work orders; every status
+     * is present, with 0 when it has none.
+     *
+     * @return array{total: int, statuses: array<string, int>}
+     */
+    private function statusCounts(User $user): array
+    {
+        $counts = WorkOrder::query()
+            ->visibleTo($user)
+            ->toBase()
+            ->selectRaw('status, count(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
+        $statuses = [];
+
+        foreach (array_column(WorkOrderStatus::options(), 'value') as $status) {
+            $statuses[$status] = (int) ($counts[$status] ?? 0);
+        }
+
+        return ['total' => array_sum($statuses), 'statuses' => $statuses];
     }
 
     /**

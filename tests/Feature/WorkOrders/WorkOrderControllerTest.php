@@ -138,6 +138,46 @@ describe('index', function () {
                 ->has('workOrders.data', 1)
                 ->where('workOrders.total', 16));
     });
+
+    it('counts the visible work orders per status, ignoring list filters and deleted ones', function () {
+        ownWorkOrder();
+        ownWorkOrder();
+        ownWorkOrder()->delete();
+        WorkOrder::factory()->submitted()->create(['department_id' => $this->department->id]);
+        WorkOrder::factory()->cancelled()->create(['department_id' => $this->department->id]);
+        WorkOrder::factory()->submitted()->create();
+
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+            ->get(route('work-orders.index', ['status' => 'draft', 'search' => 'tidak ada']))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('stats', [
+                    'total' => 4,
+                    'statuses' => ['draft' => 2, 'diajukan' => 1, 'dibatalkan' => 1],
+                ]));
+    });
+
+    it('counts nothing for a user without a department', function () {
+        ownWorkOrder();
+        $user = userWithPermissions(Permission::WorkOrdersView);
+        $user->update(['department_id' => null]);
+
+        $this->actingAs($user)
+            ->get(route('work-orders.index'))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('stats.total', 0)
+                ->where('stats.statuses.draft', 0));
+    });
+
+    it('counts every department\'s work orders with work-orders.view-all', function () {
+        ownWorkOrder();
+        WorkOrder::factory()->submitted()->create();
+
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
+            ->get(route('work-orders.index'))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('stats.total', 2)
+                ->where('stats.statuses.diajukan', 1));
+    });
 });
 
 describe('create and store', function () {
