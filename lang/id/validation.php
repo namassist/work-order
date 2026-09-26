@@ -178,5 +178,8 @@ return [
         'target_date' => 'target selesai',
         'status' => 'status',
         'note' => 'catatan',
+        'file' => 'berkas',
+        'attachments' => 'lampiran',
+        'attachments.*' => 'lampiran',
     ],
 ];

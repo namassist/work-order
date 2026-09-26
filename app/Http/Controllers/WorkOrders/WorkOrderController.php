@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\WorkOrders;
 
+use App\Actions\Attachments\AddAttachment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WorkOrders\StoreWorkOrderRequest;
 use App\Http\Requests\WorkOrders\UpdateWorkOrderRequest;
@@ -12,11 +13,13 @@ use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderStatusHistory;
 use App\States\WorkOrder\WorkOrderStatus;
+use App\Support\Attachments\AttachmentPanel;
 use App\Support\DisplayDate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -112,19 +115,21 @@ class WorkOrderController extends Controller
         return Inertia::render('work-orders/Create', [
             'department' => $user->department?->only(['id', 'code', 'name']),
             'categories' => $this->selectableCategories(),
+            'attachmentRules' => (new WorkOrder)->documentsCollection()->toFrontend(),
         ]);
     }
 
     /**
-     * Store a new draft work order in the requester's department.
+     * Store a new draft work order in the requester's department, with the
+     * documents attached on the form.
      */
-    public function store(StoreWorkOrderRequest $request): RedirectResponse
+    public function store(StoreWorkOrderRequest $request, AddAttachment $addAttachment): RedirectResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $workOrder = DB::transaction(function () use ($request, $user): WorkOrder {
-            $workOrder = new WorkOrder($request->validated());
+        $workOrder = DB::transaction(function () use ($request, $user, $addAttachment): WorkOrder {
+            $workOrder = new WorkOrder($request->safe()->except('attachments'));
             $workOrder->department_id = (int) $user->department_id;
             $workOrder->created_by = $user->id;
             $workOrder->save();
@@ -134,6 +139,15 @@ class WorkOrderController extends Controller
                 'to_status' => $workOrder->status->getValue(),
                 'user_id' => $user->id,
             ]);
+
+            $documents = $workOrder->documentsCollection();
+
+            /** @var list<UploadedFile> $files */
+            $files = $request->file('attachments', []);
+
+            foreach ($files as $file) {
+                $addAttachment->handle($workOrder, $documents, $file, $user, 'attachments');
+            }
 
             return $workOrder;
         });
@@ -169,6 +183,7 @@ class WorkOrderController extends Controller
                 'update' => $user->can('update', $workOrder),
                 'delete' => $user->can('delete', $workOrder) && $workOrder->status->isEditable(),
             ],
+            'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
         ]);
     }
 
@@ -179,11 +194,15 @@ class WorkOrderController extends Controller
     {
         Gate::authorize('update', $workOrder);
 
+        /** @var User $user */
+        $user = $request->user();
+
         $workOrder->load(['department', 'category', 'requester']);
 
         return Inertia::render('work-orders/Edit', [
             'workOrder' => (new WorkOrderResource($workOrder))->resolve($request),
             'categories' => $this->selectableCategories($workOrder),
+            'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
         ]);
     }
 

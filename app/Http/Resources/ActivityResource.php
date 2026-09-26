@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Number;
 use Spatie\Activitylog\Models\Activity;
 
 /**
@@ -46,6 +47,8 @@ class ActivityResource extends JsonResource
         'work_order_category_id' => 'Kategori',
         'target_date' => 'Target selesai',
         'status' => 'Status',
+        'lampiran' => 'Lampiran',
+        'ukuran' => 'Ukuran',
     ];
 
     /**
@@ -196,6 +199,7 @@ class ActivityResource extends JsonResource
             $field === 'is_active' => $value ? 'Aktif' : 'Nonaktif',
             isset(self::REFERENCE_FIELDS[$field]) => $this->referenceCodes[$field][$value] ?? '#'.$value,
             $field === 'status' && is_string($value) => WorkOrderStatus::labelFor($value),
+            $field === 'ukuran' && is_int($value) => Number::withLocale('id', fn (): string => Number::fileSize($value, maxPrecision: 1)),
             is_bool($value) => $value ? 'Ya' : 'Tidak',
             default => $value,
         };

@@ -15,6 +15,8 @@ enum AuditEvent: string
     case Deactivated = 'deactivated';
     case RolesUpdated = 'roles_updated';
     case StatusChanged = 'status_changed';
+    case AttachmentAdded = 'attachment_added';
+    case AttachmentRemoved = 'attachment_removed';
 
     case Login = 'login';
     case Logout = 'logout';
@@ -37,6 +39,8 @@ enum AuditEvent: string
             self::Deactivated => 'Dinonaktifkan',
             self::RolesUpdated => 'Role diubah',
             self::StatusChanged => 'Status diubah',
+            self::AttachmentAdded => 'Lampiran ditambahkan',
+            self::AttachmentRemoved => 'Lampiran dihapus',
             self::Login => 'Login',
             self::Logout => 'Logout',
             self::LoginFailed => 'Login gagal',

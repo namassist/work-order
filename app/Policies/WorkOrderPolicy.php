@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\Permission;
+use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
 use Illuminate\Auth\Access\Response;
@@ -78,6 +79,24 @@ class WorkOrderPolicy
     }
 
     /**
+     * Determine whether the user can attach a file to the work order.
+     * PROVISIONAL: drafts only, by anyone who may update work orders.
+     */
+    public function addAttachment(User $user, WorkOrder $workOrder, string $collection): Response
+    {
+        return $this->ifVisible($user, $workOrder, $this->mayChangeAttachments($user, $workOrder));
+    }
+
+    /**
+     * Determine whether the user can remove an attachment from the work
+     * order. PROVISIONAL: same rule as adding.
+     */
+    public function deleteAttachment(User $user, WorkOrder $workOrder, Media $media): Response
+    {
+        return $this->ifVisible($user, $workOrder, $this->mayChangeAttachments($user, $workOrder));
+    }
+
+    /**
      * Determine whether the user can soft-delete the work order. Only drafts
      * are deleted; the controller refuses others with a message.
      */
@@ -100,6 +119,11 @@ class WorkOrderPolicy
     public function forceDelete(User $user, WorkOrder $workOrder): bool
     {
         return false;
+    }
+
+    private function mayChangeAttachments(User $user, WorkOrder $workOrder): bool
+    {
+        return $user->checkPermissionTo(Permission::WorkOrdersUpdate->value) && $workOrder->status->isEditable();
     }
 
     private function ifVisible(User $user, WorkOrder $workOrder, bool $allowed): Response

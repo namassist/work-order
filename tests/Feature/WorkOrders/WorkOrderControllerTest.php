@@ -1,10 +1,14 @@
 <?php
 
+use App\Actions\Attachments\AddAttachment;
 use App\Enums\Permission;
 use App\Models\Department;
+use App\Models\Media;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -211,6 +215,41 @@ describe('create and store', function () {
             ->post(route('work-orders.store'), ['title' => 'X', 'work_order_category_id' => $this->category->id])
             ->assertForbidden();
     });
+
+    it('attaches the documents chosen on the form', function () {
+        $disk = Storage::fake('attachments');
+        $user = userInDepartment($this->department, Permission::WorkOrdersCreate);
+
+        $this->actingAs($user)->post(route('work-orders.store'), [
+            'title' => 'Lampu kantor mati',
+            'work_order_category_id' => $this->category->id,
+            'attachments' => [attachmentUpload('dokumen.pdf', 'Surat.pdf'), attachmentUpload('foto.jpg', 'Foto lampu.jpg')],
+        ])->assertRedirect();
+
+        expect(WorkOrder::sole()->attachmentsIn(WorkOrder::DOCUMENTS)->pluck('name')->all())->toBe(['Surat.pdf', 'Foto lampu.jpg'])
+            ->and(Media::query()->pluck('uploaded_by')->unique()->all())->toBe([$user->id])
+            ->and($disk->allFiles())->toHaveCount(2);
+    });
+
+    it('creates nothing when a document is refused', function (array $attachments, string $errorKey, string $message) {
+        $disk = Storage::fake('attachments');
+        config(['work_order.attachments.dokumen.max_files' => 1]);
+
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+            ->post(route('work-orders.store'), [
+                'title' => 'Lampu kantor mati',
+                'work_order_category_id' => $this->category->id,
+                'attachments' => array_map(fn (array $upload): UploadedFile => attachmentUpload(...$upload), $attachments),
+            ])
+            ->assertSessionHasErrors([$errorKey => $message]);
+
+        expect(WorkOrder::query()->count())->toBe(0)
+            ->and(Media::query()->count())->toBe(0)
+            ->and($disk->allFiles())->toBe([]);
+    })->with([
+        'disguised executable' => [[['program.exe', 'invoice.pdf']], 'attachments.0', 'Jenis berkas lampiran tidak diizinkan. Gunakan PDF, JPG, JPEG, PNG, WEBP, DOCX, XLSX.'],
+        'more than the limit' => [[['dokumen.pdf'], ['foto.png']], 'attachments', 'Lampiran maksimal terdiri dari 1 anggota.'],
+    ]);
 });
 
 describe('show', function () {
@@ -233,6 +272,27 @@ describe('show', function () {
                 ])
                 ->where('can.update', true));
     });
+
+    it('lists the documents and allows changing them only on drafts', function (Closure $workOrder, bool $changeable) {
+        Storage::fake('attachments');
+        $user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate);
+        $workOrder = $workOrder();
+        app(AddAttachment::class)->handle($workOrder, $workOrder->documentsCollection(), attachmentUpload('dokumen.pdf', 'Surat.pdf'), $user);
+
+        $this->actingAs($user)
+            ->get(route('work-orders.show', $workOrder))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('attachments.target', ['type' => 'work-order', 'id' => $workOrder->id, 'collection' => 'dokumen'])
+                ->where('attachments.rules.max_files', 10)
+                ->has('attachments.items', 1)
+                ->where('attachments.items.0.name', 'Surat.pdf')
+                ->where('attachments.items.0.previewable', true)
+                ->where('attachments.items.0.uploader.name', $user->name)
+                ->where('attachments.can', ['upload' => $changeable, 'delete' => $changeable]));
+    })->with([
+        'draft' => [fn (): WorkOrder => ownWorkOrder(), true],
+        'submitted' => [fn () => WorkOrder::factory()->submitted()->create(['department_id' => test()->department->id]), false],
+    ]);
 
     it('offers no transitions without the update permission', function () {
         $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))

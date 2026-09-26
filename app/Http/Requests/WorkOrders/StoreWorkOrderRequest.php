@@ -26,6 +26,12 @@ class StoreWorkOrderRequest extends FormRequest
      */
     public function rules(): array
     {
-        return $this->workOrderRules();
+        $documents = (new WorkOrder)->documentsCollection();
+
+        return [
+            ...$this->workOrderRules(),
+            'attachments' => ['nullable', 'array', 'max:'.$documents->maxFiles],
+            'attachments.*' => $documents->fileRules(),
+        ];
     }
 }

@@ -3,11 +3,16 @@ import { Head } from '@inertiajs/vue3';
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
 import PageHeader from '@/components/PageHeader.vue';
 import WorkOrderForm from '@/components/work-orders/WorkOrderForm.vue';
-import type { CategoryOption, DepartmentOption } from '@/types';
+import type {
+    AttachmentRules,
+    CategoryOption,
+    DepartmentOption,
+} from '@/types';
 
 defineProps<{
     department: DepartmentOption;
     categories: CategoryOption[];
+    attachmentRules: AttachmentRules;
 }>();
 
 defineOptions({
@@ -35,6 +40,7 @@ defineOptions({
                 :work-order="null"
                 :department="department"
                 :categories="categories"
+                :attachment-rules="attachmentRules"
             />
         </div>
     </div>

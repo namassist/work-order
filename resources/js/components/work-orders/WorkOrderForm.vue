@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
+import AttachmentPanel from '@/components/attachments/AttachmentPanel.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,13 +15,20 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { CategoryOption, DepartmentOption, WorkOrder } from '@/types';
+import type {
+    AttachmentRules,
+    CategoryOption,
+    DepartmentOption,
+    WorkOrder,
+} from '@/types';
 
 const props = defineProps<{
     workOrder: WorkOrder | null;
     /** The requester's department, which the work order belongs to. */
     department: DepartmentOption;
     categories: CategoryOption[];
+    /** On create only: documents are sent with the form. Edit uploads them separately. */
+    attachmentRules?: AttachmentRules;
 }>();
 
 const form = useForm({
@@ -27,12 +36,23 @@ const form = useForm({
     description: props.workOrder?.description ?? '',
     work_order_category_id: props.workOrder?.category.id ?? null,
     target_date: props.workOrder?.target_date ?? '',
+    attachments: [] as File[],
 });
 
+/** Errors on the list ("attachments") or on one file ("attachments.0"). */
+const attachmentsError = computed(
+    () =>
+        Object.entries(form.errors as Record<string, string | undefined>)
+            .filter(([key]) => key.startsWith('attachments'))
+            .map(([, message]) => message)
+            .join(' ') || undefined,
+);
+
 const submit = () => {
-    form.transform((data) => ({
+    form.transform(({ attachments, ...data }) => ({
         ...data,
         target_date: data.target_date || null,
+        ...(props.workOrder ? {} : { attachments }),
     })).submit(
         props.workOrder
             ? WorkOrderController.update(props.workOrder.id)
@@ -109,6 +129,22 @@ const submit = () => {
                 />
                 <InputError :message="form.errors.target_date" />
             </div>
+        </div>
+
+        <div v-if="!workOrder && attachmentRules" class="grid gap-2">
+            <Label>
+                Dokumen
+                <span class="font-normal text-muted-foreground">
+                    (opsional)
+                </span>
+            </Label>
+            <AttachmentPanel
+                v-model:pending="form.attachments"
+                :rules="attachmentRules"
+                :can-upload="!form.processing"
+                :progress="form.progress?.percentage ?? null"
+                :error="attachmentsError"
+            />
         </div>
 
         <p v-if="!workOrder" class="text-sm text-muted-foreground">
