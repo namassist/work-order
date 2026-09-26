@@ -21,9 +21,16 @@ class ListWorkOrdersRequest extends FormRequest
 {
     /**
      * The `sort` value that lists the most urgent work orders first. Without
-     * it the list is newest first.
+     * a sort the list is newest first.
      */
     public const string SORT_URGENCY = 'urgensi';
+
+    /**
+     * The `sort` value that lists the most recently active work orders first
+     * ("Terakhir diperbarui"): last activity is updated_at, which comments,
+     * status changes, and attachments also bump.
+     */
+    public const string SORT_LAST_ACTIVITY = 'diperbarui';
 
     /**
      * Determine if the user is authorized to make this request.
@@ -52,7 +59,7 @@ class ListWorkOrdersRequest extends FormRequest
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
             'trashed' => ['nullable', 'boolean'],
-            'sort' => ['nullable', Rule::in([self::SORT_URGENCY])],
+            'sort' => ['nullable', Rule::in([self::SORT_URGENCY, self::SORT_LAST_ACTIVITY])],
         ];
     }
 
@@ -78,7 +85,8 @@ class ListWorkOrdersRequest extends FormRequest
 
     /**
      * The work orders the list shows, in list order: those the user may see,
-     * narrowed by the filters, newest first unless sorted by urgency.
+     * narrowed by the filters, newest first unless sorted by urgency or
+     * last activity.
      *
      * @return Builder<WorkOrder>
      */
@@ -99,6 +107,7 @@ class ListWorkOrdersRequest extends FormRequest
                 ->where('created_at', '<=', DisplayDate::endOfDayUtc($to)))
             ->when($filters['trashed'], fn (Builder $query) => $query->onlyTrashed())
             ->when($filters['sort'] === self::SORT_URGENCY, fn (Builder $query): Builder => WorkOrderUrgency::orderMostUrgentFirst($query))
+            ->when($filters['sort'] === self::SORT_LAST_ACTIVITY, fn (Builder $query): Builder => $query->latest('updated_at'))
             ->latest()
             ->latest('id');
     }

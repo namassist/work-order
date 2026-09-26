@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Attachments\AddAttachment;
+use App\Actions\WorkOrders\AddWorkOrderComment;
 use App\Enums\Permission;
 use App\Models\Department;
 use App\Models\Media;
@@ -100,6 +101,24 @@ describe('index', function () {
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->has('workOrders.data', 1)
                 ->where('workOrders.data.0.id', $inside->id));
+    });
+
+    it('sorts by last activity, most recent first, when asked', function () {
+        $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
+        $user = userInDepartment($this->department, Permission::WorkOrdersView);
+        $oldest = ownWorkOrder(['created_at' => now()->subDays(3), 'updated_at' => now()->subDays(3)]);
+        $middle = ownWorkOrder(['created_at' => now()->subDays(2), 'updated_at' => now()->subDays(2)]);
+        $newest = ownWorkOrder(['created_at' => now()->subDay(), 'updated_at' => now()->subDay()]);
+        app(AddWorkOrderComment::class)->handle($oldest, $user, 'Masih ditunggu.');
+
+        $this->actingAs($user)
+            ->get(route('work-orders.index', ['sort' => 'diperbarui']))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->all() === [
+                    $oldest->id, $newest->id, $middle->id,
+                ])
+                ->where('workOrders.data.0.updated_at', '2026-09-25T02:00:00+00:00')
+                ->where('filters.sort', 'diperbarui'));
     });
 
     it('rejects an unknown status and an inverted date range', function () {

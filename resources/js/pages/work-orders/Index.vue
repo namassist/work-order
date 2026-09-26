@@ -87,7 +87,10 @@ type Filters = {
     from: string;
     to: string;
     trashed: boolean;
-    /** '' for newest first, or 'urgensi' for most urgent first. */
+    /**
+     * '' for newest first, 'urgensi' for most urgent first, or 'diperbarui'
+     * for most recently active first.
+     */
     sort: string;
 };
 
@@ -354,6 +357,9 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                 <SelectContent>
                     <SelectItem :value="ALL">Terbaru</SelectItem>
                     <SelectItem value="urgensi">Paling mendesak</SelectItem>
+                    <SelectItem value="diperbarui">
+                        Terakhir diperbarui
+                    </SelectItem>
                 </SelectContent>
             </Select>
             <div v-if="can.restore" class="flex h-9 items-center gap-2">
