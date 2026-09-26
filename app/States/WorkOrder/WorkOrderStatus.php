@@ -59,6 +59,15 @@ abstract class WorkOrderStatus extends State
         return false;
     }
 
+    /**
+     * Whether comments may be added, edited, or deleted. PROVISIONAL:
+     * cancelled work orders keep their comments read-only.
+     */
+    public function acceptsComments(): bool
+    {
+        return true;
+    }
+
     public static function config(): StateConfig
     {
         return parent::config()

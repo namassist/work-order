@@ -14,9 +14,10 @@ use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
-use App\Models\WorkOrderStatusHistory;
+use App\Models\WorkOrderComment;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\Attachments\AttachmentPanel;
+use App\Support\WorkOrderTimeline;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -117,7 +118,7 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * Show the work order with its status timeline.
+     * Show the work order with its timeline of status changes and comments.
      */
     public function show(Request $request, WorkOrder $workOrder): Response
     {
@@ -126,21 +127,24 @@ class WorkOrderController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $workOrder->load(['department', 'category', 'requester', 'statusHistories.user']);
+        $workOrder->load(['department', 'category', 'requester']);
 
         $canTransition = $user->can('transition', $workOrder);
 
         return Inertia::render('work-orders/Show', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
-            'timeline' => $workOrder->statusHistories
-                ->map(fn (WorkOrderStatusHistory $history): array => $history->toTimelineEntry())
-                ->all(),
+            'timeline' => WorkOrderTimeline::for($workOrder, $user),
             'transitions' => $canTransition
                 ? array_map($this->transitionOption(...), $workOrder->status->transitionableStates())
                 : [],
             'can' => [
                 'update' => $user->can('update', $workOrder),
                 'delete' => $user->can('delete', $workOrder) && $workOrder->status->isEditable(),
+                'comment' => $user->can('addComment', $workOrder) && $workOrder->status->acceptsComments(),
+            ],
+            'comments' => [
+                'max_length' => WorkOrderComment::MAX_BODY_LENGTH,
+                'read_only' => ! $workOrder->status->acceptsComments(),
             ],
             'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
         ]);

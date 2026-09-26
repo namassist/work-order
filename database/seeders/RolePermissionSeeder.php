@@ -19,9 +19,9 @@ use Spatie\Permission\PermissionRegistrar;
 class RolePermissionSeeder extends Seeder
 {
     /**
-     * Initial permissions per non-admin role. The work-orders.view-all and
-     * work-orders.export grants are provisional until the real WO flow
-     * defines who oversees whom.
+     * Initial permissions per non-admin role. The work-orders.view-all,
+     * work-orders.export, and work-orders.comment grants are provisional
+     * until the real WO flow defines who oversees whom.
      *
      * @var array<string, list<Permission>>
      */
@@ -31,6 +31,7 @@ class RolePermissionSeeder extends Seeder
             Permission::WorkOrdersView,
             Permission::WorkOrdersCreate,
             Permission::WorkOrdersUpdate,
+            Permission::WorkOrdersComment,
         ],
         'approver' => [
             Permission::DepartmentsView,
@@ -39,12 +40,14 @@ class RolePermissionSeeder extends Seeder
             Permission::WorkOrdersViewAll,
             Permission::WorkOrdersUpdate,
             Permission::WorkOrdersExport,
+            Permission::WorkOrdersComment,
         ],
         'keuangan' => [
             Permission::DepartmentsView,
             Permission::WorkOrdersView,
             Permission::WorkOrdersViewAll,
             Permission::WorkOrdersExport,
+            Permission::WorkOrdersComment,
         ],
         'viewer' => [
             Permission::DepartmentsView,

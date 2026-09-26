@@ -6,6 +6,7 @@ use App\Enums\Permission;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Models\WorkOrderComment;
 use Illuminate\Auth\Access\Response;
 
 /**
@@ -106,6 +107,34 @@ class WorkOrderPolicy
     }
 
     /**
+     * Determine whether the user can comment on the work order. Anyone who
+     * can view it reads its comments; writing needs work-orders.comment.
+     * Whether the status still accepts comments is checked by the comment
+     * actions, which refuse with a message.
+     */
+    public function addComment(User $user, WorkOrder $workOrder): Response
+    {
+        return $this->ifViewable($user, $workOrder, $user->checkPermissionTo(Permission::WorkOrdersComment->value));
+    }
+
+    /**
+     * Determine whether the user can edit the comment: only its author. The
+     * edit window and status are checked by the action.
+     */
+    public function updateComment(User $user, WorkOrder $workOrder, WorkOrderComment $comment): Response
+    {
+        return $this->ifViewable($user, $workOrder, $this->isCommentAuthor($user, $workOrder, $comment));
+    }
+
+    /**
+     * Determine whether the user can delete the comment: same rule as editing.
+     */
+    public function deleteComment(User $user, WorkOrder $workOrder, WorkOrderComment $comment): Response
+    {
+        return $this->ifViewable($user, $workOrder, $this->isCommentAuthor($user, $workOrder, $comment));
+    }
+
+    /**
      * Determine whether the user can soft-delete the work order. Only drafts
      * are deleted; the controller refuses others with a message.
      */
@@ -133,6 +162,28 @@ class WorkOrderPolicy
     private function mayChangeAttachments(User $user, WorkOrder $workOrder): bool
     {
         return $user->checkPermissionTo(Permission::WorkOrdersUpdate->value) && $workOrder->status->isEditable();
+    }
+
+    private function isCommentAuthor(User $user, WorkOrder $workOrder, WorkOrderComment $comment): bool
+    {
+        return $comment->work_order_id === $workOrder->id
+            && $comment->user_id === $user->id
+            && $user->checkPermissionTo(Permission::WorkOrdersComment->value);
+    }
+
+    /**
+     * Builds on view(), so whoever may view the work order (visibility plus
+     * work-orders.view) is who may also be granted $allowed.
+     */
+    private function ifViewable(User $user, WorkOrder $workOrder, bool $allowed): Response
+    {
+        $view = $this->view($user, $workOrder);
+
+        if ($view->denied()) {
+            return $view;
+        }
+
+        return $allowed ? Response::allow() : Response::deny();
     }
 
     private function ifVisible(User $user, WorkOrder $workOrder, bool $allowed): Response

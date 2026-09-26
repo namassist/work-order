@@ -51,4 +51,18 @@ return [
         'max_rows' => (int) env('WO_EXPORT_MAX_ROWS', 5000),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Comments
+    |--------------------------------------------------------------------------
+    |
+    | PROVISIONAL: how long after posting the author may still edit or
+    | delete a comment, in minutes.
+    |
+    */
+
+    'comments' => [
+        'edit_window_minutes' => (int) env('WO_COMMENT_EDIT_MINUTES', 15),
+    ],
+
 ];
