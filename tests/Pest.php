@@ -7,6 +7,7 @@ use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /*
@@ -96,4 +97,31 @@ function attachmentFixture(string $name): string
 function attachmentUpload(string $fixture, ?string $clientName = null): UploadedFile
 {
     return UploadedFile::fake()->createWithContent($clientName ?? $fixture, (string) file_get_contents(attachmentFixture($fixture)));
+}
+
+/**
+ * Environment for a child process that shares this test's database, so
+ * several processes can write at once (see the `concurrency` group). Skips
+ * the test on a database that cannot run concurrent writers.
+ *
+ * @return array<string, string>
+ */
+function concurrentProcessEnv(): array
+{
+    $connection = DB::connection();
+
+    if (! in_array($connection->getDriverName(), ['pgsql', 'mysql', 'mariadb'], true)) {
+        test()->markTestSkipped('Needs a shared PostgreSQL or MySQL database; '.$connection->getDriverName().' cannot run concurrent writers.');
+    }
+
+    return [
+        'APP_ENV' => 'testing',
+        'DB_CONNECTION' => $connection->getName(),
+        'DB_URL' => '',
+        'DB_HOST' => (string) $connection->getConfig('host'),
+        'DB_PORT' => (string) $connection->getConfig('port'),
+        'DB_DATABASE' => $connection->getDatabaseName(),
+        'DB_USERNAME' => (string) $connection->getConfig('username'),
+        'DB_PASSWORD' => (string) $connection->getConfig('password'),
+    ];
 }

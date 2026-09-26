@@ -10,7 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Deletes an attachment and its file, logged on the parent.
+ * Deletes an attachment and its file, logged on the parent. The removal
+ * counts as activity on the parent, so its updated_at is bumped.
  */
 class RemoveAttachment
 {
@@ -22,6 +23,9 @@ class RemoveAttachment
             $this->logAuditChange($parent, AuditEvent::AttachmentRemoved, ['lampiran' => $media->name, 'ukuran' => $media->size], []);
 
             $media->delete();
+
+            // A query, not $parent->touch(): that would also save any unsaved change on $parent.
+            $parent->newQuery()->whereKey($parent->getKey())->touch();
         });
     }
 }

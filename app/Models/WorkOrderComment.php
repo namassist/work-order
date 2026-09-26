@@ -5,6 +5,7 @@ namespace App\Models;
 use Carbon\CarbonImmutable;
 use Database\Factories\WorkOrderCommentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Touches;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +15,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * A plain-text comment on a work order, shown in its timeline. Written only
  * through the WorkOrders comment actions, which log to the work order's audit
  * trail without the text. A deleted comment stays in the timeline as
- * "Komentar dihapus".
+ * "Komentar dihapus". Posting, editing, or deleting a comment bumps the
+ * work order's updated_at, its last activity.
  *
  * @property int $id
  * @property int $work_order_id
@@ -28,6 +30,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property-read User $author
  */
 #[Fillable(['body'])]
+#[Touches(['workOrder'])]
 class WorkOrderComment extends Model
 {
     /** @use HasFactory<WorkOrderCommentFactory> */

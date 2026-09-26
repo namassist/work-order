@@ -21,7 +21,8 @@ use Illuminate\Validation\ValidationException;
  * Stores a validated upload in a collection of its parent: under a random
  * name, with the type detected from its content, and logged on the parent.
  * The collection's file limit is checked with the parent locked, so two
- * uploads at once cannot exceed it; a refused upload stores nothing.
+ * uploads at once cannot exceed it; a refused upload stores nothing. The
+ * upload counts as activity on the parent, so its updated_at is bumped.
  */
 class AddAttachment
 {
@@ -61,6 +62,9 @@ class AddAttachment
             $disk = $media->disk;
             $directory = dirname($media->getPathRelativeToRoot());
             DB::afterRollBack(fn () => Storage::disk($disk)->deleteDirectory($directory));
+
+            // A query, not $parent->touch(): that would also save any unsaved change on $parent.
+            $parent->newQuery()->whereKey($parent->getKey())->touch();
 
             $this->logAuditChange($parent, AuditEvent::AttachmentAdded, [], ['lampiran' => $media->name, 'ukuran' => $media->size]);
 
