@@ -7,6 +7,7 @@ use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
 use App\Enums\Permission;
 use App\Enums\WorkOrderUrgency;
+use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\Attachments\Attachable;
 use App\Support\Attachments\AttachmentCollection;
@@ -181,6 +182,25 @@ class WorkOrder extends Model implements Attachable
     protected function search(Builder $query, ?string $term): void
     {
         $this->searchColumns($query, $term, ['number', 'title']);
+    }
+
+    /**
+     * Adds `submitted_at`: the moment of the first submission (the first
+     * Diajukan status history row), or null for a work order never submitted.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function withSubmittedAt(Builder $query): void
+    {
+        $query->addSelect(['submitted_at' => WorkOrderStatusHistory::query()
+            ->select('created_at')
+            ->whereColumn('work_order_id', 'work_orders.id')
+            ->where('to_status', Diajukan::$name)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->limit(1)])
+            ->withCasts(['submitted_at' => 'datetime']);
     }
 
     /**
