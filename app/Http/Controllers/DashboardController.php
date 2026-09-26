@@ -65,7 +65,7 @@ class DashboardController extends Controller
         $referenceCodes = ActivityResource::referenceCodes($activities);
 
         return $activities
-            ->map(fn (Activity $activity): array => (new ActivityResource($activity, $referenceCodes))->resolve($request))
+            ->map(fn (Activity $activity): array => new ActivityResource($activity, $referenceCodes)->resolve($request))
             ->all();
     }
 }
