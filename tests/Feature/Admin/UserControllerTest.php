@@ -86,6 +86,24 @@ describe('index', function () {
                 ->has('departments', 1)
                 ->where('departments.0.code', 'FIN'));
     });
+
+    it('counts users by status, ignoring list filters and deleted users', function () {
+        $viewer = userWithPermissions(Permission::UsersView);
+        User::factory()->create(['name' => 'Budi']);
+        User::factory()->inactive()->create();
+        User::factory()->mustChangePassword()->create();
+        User::factory()->create()->delete();
+
+        $this->actingAs($viewer)
+            ->get(route('admin.users.index', ['search' => 'budi', 'status' => 'inactive']))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('stats', [
+                    'total' => 4,
+                    'active' => 3,
+                    'inactive' => 1,
+                    'must_change_password' => 1,
+                ]));
+    });
 });
 
 describe('store', function () {

@@ -3,7 +3,8 @@ import { Head, Link, setLayoutProps, useForm } from '@inertiajs/vue3';
 import { computed, watchEffect } from 'vue';
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
 import InputError from '@/components/InputError.vue';
-import PageHeader from '@/components/PageHeader.vue';
+import FormFooter from '@/components/FormFooter.vue';
+import PagePanel from '@/components/PagePanel.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -61,81 +62,74 @@ const submit = () => {
 <template>
     <Head :title="pageTitle" />
 
-    <div class="flex flex-1 flex-col gap-4 p-4">
-        <PageHeader
-            :title="pageTitle"
-            description="Centang hak akses yang dimiliki role ini."
-        />
-
-        <form
-            class="max-w-3xl space-y-6 rounded-2xl border bg-card p-6"
-            @submit.prevent="submit"
-        >
-            <p
-                v-if="locked"
-                class="rounded-lg bg-muted p-3 text-sm text-muted-foreground"
-            >
-                Role admin adalah role sistem: namanya tetap dan selalu memiliki
-                semua permission.
-            </p>
-
-            <div class="grid max-w-sm gap-2">
-                <Label for="role-name">Nama role</Label>
-                <Input
-                    id="role-name"
-                    v-model="form.name"
-                    class="font-mono"
-                    required
-                    :readonly="locked"
-                    placeholder="teknisi"
-                />
-                <p class="text-xs text-muted-foreground">
-                    Huruf kecil, angka, dan tanda hubung.
-                </p>
-                <InputError :message="form.errors.name" />
-            </div>
-
-            <fieldset class="space-y-4">
-                <legend class="text-sm font-medium">Hak akses</legend>
-                <div
-                    v-for="(permissions, resource) in permissionGroups"
-                    :key="resource"
-                    class="grid gap-2 sm:grid-cols-[10rem_1fr]"
+    <PagePanel :title="pageTitle">
+        <form @submit.prevent="submit">
+            <div class="space-y-6 px-4 py-6 sm:px-6">
+                <p
+                    v-if="locked"
+                    class="rounded-lg bg-muted p-3 text-sm text-muted-foreground"
                 >
-                    <span class="font-mono text-sm">{{ resource }}</span>
-                    <div class="flex flex-wrap gap-x-5 gap-y-2">
-                        <div
-                            v-for="permission in permissions"
-                            :key="permission"
-                            class="flex items-center gap-2"
-                        >
-                            <Checkbox
-                                :id="`permission-${permission}`"
-                                :model-value="
-                                    form.permissions.includes(permission)
-                                "
-                                :disabled="locked"
-                                @update:model-value="
-                                    togglePermission(permission, $event)
-                                "
-                            />
-                            <Label :for="`permission-${permission}`">
-                                {{ actionLabel(permission) }}
-                            </Label>
+                    Role admin adalah role sistem: namanya tetap dan selalu
+                    memiliki semua permission.
+                </p>
+
+                <div class="grid max-w-sm gap-2">
+                    <Label for="role-name">Nama role</Label>
+                    <Input
+                        id="role-name"
+                        v-model="form.name"
+                        class="font-mono"
+                        required
+                        :readonly="locked"
+                        placeholder="teknisi"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Huruf kecil, angka, dan tanda hubung.
+                    </p>
+                    <InputError :message="form.errors.name" />
+                </div>
+
+                <fieldset class="space-y-4">
+                    <legend class="text-sm font-medium">Hak akses</legend>
+                    <div
+                        v-for="(permissions, resource) in permissionGroups"
+                        :key="resource"
+                        class="grid gap-2 sm:grid-cols-[10rem_1fr]"
+                    >
+                        <span class="font-mono text-sm">{{ resource }}</span>
+                        <div class="flex flex-wrap gap-x-5 gap-y-2">
+                            <div
+                                v-for="permission in permissions"
+                                :key="permission"
+                                class="flex items-center gap-2"
+                            >
+                                <Checkbox
+                                    :id="`permission-${permission}`"
+                                    :model-value="
+                                        form.permissions.includes(permission)
+                                    "
+                                    :disabled="locked"
+                                    @update:model-value="
+                                        togglePermission(permission, $event)
+                                    "
+                                />
+                                <Label :for="`permission-${permission}`">
+                                    {{ actionLabel(permission) }}
+                                </Label>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <InputError :message="form.errors.permissions" />
-            </fieldset>
-
-            <div class="flex items-center gap-2">
+                    <InputError :message="form.errors.permissions" />
+                </fieldset>
+            </div>
+            <FormFooter>
                 <Button type="submit" :disabled="form.processing || locked">
                     Simpan
                 </Button>
                 <Button variant="outline" as-child>
                     <Link :href="RoleController.index()">Batal</Link>
                 </Button>
-            </div>
+            </FormFooter>
         </form>
-    </div>
+    </PagePanel>
 </template>

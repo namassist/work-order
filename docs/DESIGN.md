@@ -62,6 +62,7 @@ Hanya transisi yang menjawab aksi user (buka dialog, expand baris, toast konfirm
 150–200ms ease-out. Tanpa animasi masuk per section. Hormati `prefers-reduced-motion`.
 
 ## Anti-pola (jangan dilakukan)
+
 - Tanpa gradient, glow, glassmorphism, atau bayangan tebal. Pemisah cukup border 1px.
 - Ikon hanya lucide, monokrom, satu ukuran per konteks. Tanpa emoji.
 - Satu panel per halaman. Isi panel (header, statistik, toolbar, tabel, form) dipisah garis,
@@ -79,24 +80,28 @@ Hanya transisi yang menjawab aksi user (buka dialog, expand baris, toast konfirm
 ## Layout (warna tetap dari token di atas)
 
 ### App shell
+
 - Sidebar kiri lebar tetap, bisa diciutkan lewat tombol di topbar. Menu dikelompokkan
   dengan label grup kecil huruf kapital (Dashboard, Work Order, Master Data, Administrasi).
-- Topbar: tombol toggle sidebar, pencarian global di kiri; di kanan hanya toggle tema,
-  notifikasi, dan menu avatar.
+- Topbar: tombol toggle sidebar di kiri; di kanan hanya toggle tema dan menu avatar.
+  Pencarian global (kiri) dan notifikasi (kanan) baru ditambahkan saat fiturnya
+  diimplementasikan; jangan pasang UI yang belum berfungsi.
 - Footer tidak ada, atau cukup satu baris versi aplikasi.
 
 ### Struktur halaman
+
 - Satu panel per halaman. Header panel: judul di kiri, breadcrumb di kanan, lalu garis pemisah.
 - Halaman daftar, urutan dari atas:
-  1. Strip statistik: 4 kolom dipisah garis vertikal, angka besar di atas label,
-     ikon kecil monokrom di pojok kanan atas.
-  2. Toolbar: aksi utama di kiri, pencarian dan filter di kanan.
-  3. Tabel.
+    1. Strip statistik: 4 kolom dipisah garis vertikal, angka besar di atas label,
+       ikon kecil monokrom di pojok kanan atas.
+    2. Toolbar: aksi utama di kiri, pencarian dan filter di kanan.
+    3. Tabel.
 - Halaman form: field langsung di dalam panel, tanpa kotak tambahan. Grid 2 kolom di desktop,
   1 kolom di mobile. Textarea deskripsi selebar penuh. Tombol Simpan dan Batal di kanan bawah.
   Form create tidak menampilkan nomor WO (nomor dibuat saat diajukan).
 
 ### Tabel
+
 - Sel utama dua baris: baris 1 nomor WO (font-mono) + judul tebal, baris 2 deskripsi singkat
   terpotong satu baris dengan warna muted. Draft menampilkan "Draft" di posisi nomor.
 - Kolom orang: avatar kecil + nama.
@@ -105,9 +110,10 @@ Hanya transisi yang menjawab aksi user (buka dialog, expand baris, toast konfirm
   di menu titik tiga di kolom terakhir.
 
 ### Responsif
+
 - Di bawah 1024px sidebar menjadi drawer.
 - Strip statistik: 4 kolom → 2×2 → 1 kolom.
 - Tabel: kolom sekunder (orang, tanggal) disembunyikan di mobile, sisanya tetap terbaca
   tanpa scroll horizontal jika memungkinkan.
 
-Referensi visual: docs/design/refs/ (struktur saja, lihat README di folder itu).
+Referensi visual: docs/refs/ (struktur saja, lihat README di folder itu).

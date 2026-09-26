@@ -75,6 +75,7 @@ class UserController extends Controller
                 'status' => $filters['status'] ?? '',
                 'trashed' => $showTrashed,
             ],
+            'stats' => $this->statusCounts(),
             'departments' => Department::orderBy('code')->get(['id', 'code', 'name']),
             'roles' => $this->roleNames(),
             'can' => [
@@ -243,6 +244,32 @@ class UserController extends Controller
             ->orderBy('code')
             ->get(['id', 'code', 'name'])
             ->toBase();
+    }
+
+    /**
+     * User counts for the list's statistics strip. Ignores the list filters
+     * and deleted users.
+     *
+     * @return array{total: int, active: int, inactive: int, must_change_password: int}
+     */
+    private function statusCounts(): array
+    {
+        $counts = User::query()
+            ->toBase()
+            ->selectRaw('count(*) as total')
+            ->selectRaw('coalesce(sum(case when is_active then 1 else 0 end), 0) as active')
+            ->selectRaw('coalesce(sum(case when must_change_password then 1 else 0 end), 0) as must_change_password')
+            ->first();
+
+        $total = (int) $counts?->total;
+        $active = (int) $counts?->active;
+
+        return [
+            'total' => $total,
+            'active' => $active,
+            'inactive' => $total - $active,
+            'must_change_password' => (int) $counts?->must_change_password,
+        ];
     }
 
     /**

@@ -55,7 +55,7 @@ Put new pages in the directory that gives them the right layout.
 
 `/` only redirects: to the dashboard when signed in, otherwise to login.
 
-**App shell.** The sidebar (`components/AppSidebar.vue`) is a list of `navGroups` (Dashboard, Work Order, Master Data, Administrasi). Each item names the `permission` that shows it, and `visibleNavGroups()` drops groups left empty. Every page starts with `components/PageHeader.vue` (serif h1, description, one primary action in the `actions` slot) and sets `breadcrumbs` in its layout props; a group label crumb such as `{ title: 'Master Data' }` has no `href`. Empty tables use `components/EmptyState.vue` inside `TableEmpty`: "Belum ada …" plus the create action when `isFiltering(props.filters)` is false, otherwise "Tidak ada … yang cocok" plus a "Hapus filter" link to the bare index URL. `DashboardController` serves the dashboard: "Total WO" and "Menunggu Persetujuan" are deferred counts over the WOs the user may see; "Dalam Pengerjaan" and "Terlambat" stay "Segera hadir" until those WO stages exist.
+**App shell.** The sidebar (`components/AppSidebar.vue`) is a list of `navGroups` (Dashboard, Work Order, Master Data, Administrasi). Each item names the `permission` that shows it, and `visibleNavGroups()` drops groups left empty. The topbar (`AppSidebarHeader.vue`) holds only the sidebar toggle, `ThemeToggle`, and the avatar `UserMenu`. Every page is one `components/PagePanel.vue`: serif h1 left, the page's breadcrumbs right (the layout `provide`s its `breadcrumbs` layout prop through `composables/usePageBreadcrumbs.ts`), an optional `meta` slot under the title, then the content as parts split by `border-b`, never boxes of their own. A group label crumb such as `{ title: 'Master Data' }` has no `href`. List pages stack `StatStrip.vue` (only where the numbers are useful: work orders, users, dashboard), `ListToolbar.vue` (primary action left, filters right), then a `Table` with `panelTableClass` (`lib/panel.ts`). Rows are `ClickableRow.vue`: a click anywhere but a link, button, control, or menu item opens the record, and the main cell's link or button is the keyboard route to the same place. Row actions go in `RowActionsMenu.vue` (three dots); people show as `PersonName.vue`; forms end with `FormFooter.vue` (Simpan, Batal, right-aligned). Empty tables use `components/EmptyState.vue` inside `TableEmpty`: "Belum ada …" plus the create action when `isFiltering(props.filters)` is false, otherwise "Tidak ada … yang cocok" plus a "Hapus filter" link to the bare index URL. `DashboardController` serves the dashboard: "Total WO" and "Menunggu Persetujuan" are deferred counts over the WOs the user may see; "Dalam Pengerjaan" and "Terlambat" stay "Segera hadir" until those WO stages exist.
 
 **Error pages.** Outside debug mode, `Inertia::handleExceptionsUsing()` in `bootstrap/app.php` renders `pages/ErrorPage.vue` for 403, 404, 419, 500, and 503 (JSON requests still get JSON). With `APP_DEBUG=true` you see Laravel's stack trace page instead, so set it to `false` locally to view them.
 
@@ -126,7 +126,7 @@ Files on any model, through spatie/laravel-medialibrary. Work orders are the fir
     - `app/Http/Controllers/Admin/<Resource>Controller.php`: `index` validates the filters, requires `viewTrashed` for `trashed=1`, returns `paginate(15)->withQueryString()` plus a `can` map; the other actions flash a toast.
     - Routes in `routes/admin.php`.
 - **Frontend.**
-    - Page: `resources/js/pages/admin/<resources>/Index.vue`, with `PageHeader`, a group crumb plus its own crumb, and `EmptyState` for both empty cases. Small forms use a dialog in `components/admin/` (`DepartmentFormDialog.vue`); large forms use `Create`/`Edit` pages sharing a form component (`UserForm.vue`).
+    - Page: `resources/js/pages/admin/<resources>/Index.vue`, with `PagePanel`, `ListToolbar`, `ClickableRow` + `RowActionsMenu`, a group crumb plus its own crumb, and `EmptyState` for both empty cases (no `StatStrip` unless its numbers are useful). Small forms use a dialog in `components/admin/` (`DepartmentFormDialog.vue`); large forms use `Create`/`Edit` pages sharing a form component (`UserForm.vue`).
     - Filters: `composables/useListFilters.ts` (debounced search, `ALL` sentinel for selects, booleans sent as `1`).
     - Table: `components/ui/table`, `components/admin/TablePagination.vue`, `StatusBadge.vue`, and `ConfirmDialog.vue` for deletes.
     - Types go in `types/admin.ts`, and the sidebar entry in the right `navGroups` group of `AppSidebar.vue` with a `permission`.
@@ -150,6 +150,7 @@ Files on any model, through spatie/laravel-medialibrary. Work orders are the fir
 - `.npmrc` sets `ignore-scripts=true`, so npm packages' install scripts don't run.
 
 ## Visual checks (local only)
+
 - App: http://127.0.0.1:8000 (run `composer run dev` first)
 - Dev login: admin@worder.test / value of DEFAULT_USER_PASSWORD in .env (local only)
 - Check every page in light and dark mode, at 390px (mobile) and 1440px (desktop) widths

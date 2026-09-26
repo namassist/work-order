@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     History,
+    KeyRound,
     Pencil,
     Plus,
     RotateCcw,
     Search,
     SearchX,
     Trash2,
+    UserCheck,
+    UserX,
     Users,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
@@ -16,9 +19,21 @@ import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import StatusBadge from '@/components/admin/StatusBadge.vue';
 import TablePagination from '@/components/admin/TablePagination.vue';
+import ClickableRow from '@/components/ClickableRow.vue';
+import EmptyState from '@/components/EmptyState.vue';
+import ListToolbar from '@/components/ListToolbar.vue';
+import PagePanel from '@/components/PagePanel.vue';
+import PersonName from '@/components/PersonName.vue';
+import RowActionsMenu from '@/components/RowActionsMenu.vue';
+import type { StatItem } from '@/components/StatStrip.vue';
+import StatStrip from '@/components/StatStrip.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -39,8 +54,7 @@ import {
 } from '@/components/ui/table';
 import { useCan } from '@/composables/useCan';
 import { ALL, isFiltering, useListFilters } from '@/composables/useListFilters';
-import EmptyState from '@/components/EmptyState.vue';
-import PageHeader from '@/components/PageHeader.vue';
+import { panelTableClass } from '@/lib/panel';
 import type {
     DepartmentOption,
     ListAbilities,
@@ -57,6 +71,13 @@ const props = defineProps<{
         status: string;
         trashed: boolean;
     };
+    /** Non-deleted users by status, ignoring the filters. */
+    stats: {
+        total: number;
+        active: number;
+        inactive: number;
+        must_change_password: number;
+    };
     departments: DepartmentOption[];
     roles: string[];
     can: ListAbilities;
@@ -72,6 +93,17 @@ defineOptions({
 });
 
 const filtered = computed(() => isFiltering(props.filters));
+
+const statItems = computed<StatItem[]>(() => [
+    { label: 'Total pengguna', value: props.stats.total, icon: Users },
+    { label: 'Aktif', value: props.stats.active, icon: UserCheck },
+    { label: 'Nonaktif', value: props.stats.inactive, icon: UserX },
+    {
+        label: 'Wajib ganti password',
+        value: props.stats.must_change_password,
+        icon: KeyRound,
+    },
+]);
 
 const filters = useListFilters(
     {
@@ -112,6 +144,16 @@ const restore = (user: ManagedUser) => {
 };
 
 const hasPermission = useCan();
+const page = usePage();
+
+const canDelete = (user: ManagedUser) =>
+    props.can.delete && user.id !== page.props.auth.user.id;
+
+const canEdit = (user: ManagedUser) => props.can.update && !user.deleted_at;
+
+const hasActions = (user: ManagedUser) =>
+    hasPermission('activity-log.view') ||
+    (user.deleted_at ? props.can.restore : canEdit(user) || canDelete(user));
 const historyOpen = ref(false);
 const historyOf = ref<ManagedUser | null>(null);
 
@@ -124,208 +166,211 @@ const openHistory = (user: ManagedUser) => {
 <template>
     <Head title="Pengguna" />
 
-    <div class="flex flex-1 flex-col gap-4 p-4">
-        <PageHeader
-            title="Pengguna"
-            description="Kelola akun, departemen, dan role pengguna."
-        >
-            <template #actions>
-                <Button v-if="can.create" as-child>
+    <PagePanel title="Pengguna">
+        <StatStrip :items="statItems" />
+
+        <ListToolbar>
+            <template v-if="can.create" #actions>
+                <Button as-child>
                     <Link :href="UserController.create()">
                         <Plus /> Tambah pengguna
                     </Link>
                 </Button>
             </template>
-        </PageHeader>
 
-        <div class="rounded-2xl border bg-card">
-            <div class="flex flex-wrap items-center gap-3 border-b p-4">
-                <div class="relative w-full sm:w-72">
-                    <Search
-                        class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <Input
-                        v-model="filters.search"
-                        type="search"
-                        class="pl-9"
-                        placeholder="Cari nama atau email"
-                        aria-label="Cari pengguna"
-                    />
-                </div>
-                <Select v-model="filters.department">
-                    <SelectTrigger class="w-52" aria-label="Filter departemen">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem :value="ALL">Semua departemen</SelectItem>
-                        <SelectItem
-                            v-for="department in departments"
-                            :key="department.id"
-                            :value="String(department.id)"
-                        >
-                            <span class="font-mono">{{ department.code }}</span>
-                            {{ department.name }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select v-model="filters.role">
-                    <SelectTrigger class="w-40" aria-label="Filter role">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem :value="ALL">Semua role</SelectItem>
-                        <SelectItem
-                            v-for="role in roles"
-                            :key="role"
-                            :value="role"
-                        >
-                            {{ role }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select v-model="filters.status">
-                    <SelectTrigger class="w-40" aria-label="Filter status">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem :value="ALL">Semua status</SelectItem>
-                        <SelectItem value="active">Aktif</SelectItem>
-                        <SelectItem value="inactive">Nonaktif</SelectItem>
-                    </SelectContent>
-                </Select>
-                <div v-if="can.restore" class="flex items-center gap-2">
-                    <Checkbox id="show-trashed" v-model="filters.trashed" />
-                    <Label for="show-trashed">Tampilkan terhapus</Label>
-                </div>
+            <div class="relative w-full sm:w-64">
+                <Search
+                    class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                    v-model="filters.search"
+                    type="search"
+                    class="pl-9"
+                    placeholder="Cari nama atau email"
+                    aria-label="Cari pengguna"
+                />
             </div>
+            <Select v-model="filters.department">
+                <SelectTrigger
+                    class="w-full sm:w-52"
+                    aria-label="Filter departemen"
+                >
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem :value="ALL">Semua departemen</SelectItem>
+                    <SelectItem
+                        v-for="department in departments"
+                        :key="department.id"
+                        :value="String(department.id)"
+                    >
+                        <span class="font-mono">{{ department.code }}</span>
+                        {{ department.name }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <Select v-model="filters.role">
+                <SelectTrigger class="w-full sm:w-40" aria-label="Filter role">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem :value="ALL">Semua role</SelectItem>
+                    <SelectItem v-for="role in roles" :key="role" :value="role">
+                        {{ role }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <Select v-model="filters.status">
+                <SelectTrigger
+                    class="w-full sm:w-40"
+                    aria-label="Filter status"
+                >
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem :value="ALL">Semua status</SelectItem>
+                    <SelectItem value="active">Aktif</SelectItem>
+                    <SelectItem value="inactive">Nonaktif</SelectItem>
+                </SelectContent>
+            </Select>
+            <div v-if="can.restore" class="flex items-center gap-2">
+                <Checkbox id="show-trashed" v-model="filters.trashed" />
+                <Label for="show-trashed">Tampilkan terhapus</Label>
+            </div>
+        </ListToolbar>
 
-            <Table>
-                <TableHeader class="sticky top-0 bg-card">
-                    <TableRow>
-                        <TableHead>Nama</TableHead>
-                        <TableHead>Departemen</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead class="w-0"
-                            ><span class="sr-only">Aksi</span></TableHead
+        <Table :class="panelTableClass">
+            <TableHeader class="sticky top-0 bg-card">
+                <TableRow>
+                    <TableHead>Nama</TableHead>
+                    <TableHead class="hidden md:table-cell">
+                        Departemen
+                    </TableHead>
+                    <TableHead class="hidden lg:table-cell">Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead class="w-0">
+                        <span class="sr-only">Aksi</span>
+                    </TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                <ClickableRow
+                    v-for="user in users.data"
+                    :key="user.id"
+                    :disabled="!canEdit(user)"
+                    @activate="router.visit(UserController.edit(user.id))"
+                >
+                    <TableCell class="w-full max-w-0 min-w-48 py-3">
+                        <PersonName
+                            :name="user.name"
+                            :href="
+                                canEdit(user)
+                                    ? UserController.edit(user.id)
+                                    : undefined
+                            "
                         >
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <TableRow v-for="user in users.data" :key="user.id">
-                        <TableCell>
-                            <div class="font-medium">{{ user.name }}</div>
-                            <div class="text-xs text-muted-foreground">
+                            <p class="truncate text-muted-foreground">
                                 {{ user.email }}
-                            </div>
-                        </TableCell>
-                        <TableCell>
-                            <template v-if="user.department">
-                                <span class="font-mono">{{
-                                    user.department.code
-                                }}</span>
-                                {{ user.department.name }}
-                            </template>
-                            <span v-else class="text-muted-foreground">—</span>
-                        </TableCell>
-                        <TableCell>
-                            <div class="flex flex-wrap gap-1">
-                                <Badge
-                                    v-for="role in user.roles"
-                                    :key="role"
-                                    variant="outline"
-                                >
-                                    {{ role }}
-                                </Badge>
-                            </div>
-                        </TableCell>
-                        <TableCell>
-                            <StatusBadge
-                                :is-active="user.is_active"
-                                :deleted="user.deleted_at !== null"
-                            />
-                        </TableCell>
-                        <TableCell class="text-right whitespace-nowrap">
-                            <Button
-                                v-if="hasPermission('activity-log.view')"
-                                variant="ghost"
-                                size="icon"
-                                :aria-label="`Riwayat ${user.name}`"
-                                @click="openHistory(user)"
+                            </p>
+                        </PersonName>
+                    </TableCell>
+                    <TableCell class="hidden md:table-cell">
+                        <template v-if="user.department">
+                            <span class="font-mono">{{
+                                user.department.code
+                            }}</span>
+                            {{ user.department.name }}
+                        </template>
+                        <span v-else class="text-muted-foreground">—</span>
+                    </TableCell>
+                    <TableCell
+                        class="hidden min-w-56 whitespace-normal lg:table-cell"
+                    >
+                        <div class="flex flex-wrap gap-1">
+                            <Badge
+                                v-for="role in user.roles"
+                                :key="role"
+                                variant="outline"
                             >
-                                <History />
-                            </Button>
+                                {{ role }}
+                            </Badge>
+                        </div>
+                    </TableCell>
+                    <TableCell>
+                        <StatusBadge
+                            :is-active="user.is_active"
+                            :deleted="user.deleted_at !== null"
+                        />
+                    </TableCell>
+                    <TableCell class="text-right">
+                        <RowActionsMenu
+                            v-if="hasActions(user)"
+                            :label="`Aksi ${user.name}`"
+                        >
                             <template v-if="user.deleted_at">
-                                <Button
+                                <DropdownMenuItem
                                     v-if="can.restore"
-                                    variant="ghost"
-                                    size="sm"
-                                    @click="restore(user)"
+                                    @select="restore(user)"
                                 >
                                     <RotateCcw /> Pulihkan
-                                </Button>
+                                </DropdownMenuItem>
                             </template>
-                            <template v-else>
-                                <Button
-                                    v-if="can.update"
-                                    variant="ghost"
-                                    size="icon"
-                                    as-child
+                            <DropdownMenuItem v-else-if="can.update" as-child>
+                                <Link :href="UserController.edit(user.id)">
+                                    <Pencil /> Ubah
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="hasPermission('activity-log.view')"
+                                @select="openHistory(user)"
+                            >
+                                <History /> Riwayat
+                            </DropdownMenuItem>
+                            <template
+                                v-if="!user.deleted_at && canDelete(user)"
+                            >
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    variant="destructive"
+                                    @select="confirmDelete(user)"
                                 >
-                                    <Link
-                                        :href="UserController.edit(user.id)"
-                                        :aria-label="`Ubah ${user.name}`"
-                                    >
-                                        <Pencil />
-                                    </Link>
-                                </Button>
-                                <Button
-                                    v-if="
-                                        can.delete &&
-                                        user.id !== $page.props.auth.user.id
-                                    "
-                                    variant="ghost"
-                                    size="icon"
-                                    :aria-label="`Hapus ${user.name}`"
-                                    @click="confirmDelete(user)"
-                                >
-                                    <Trash2 />
-                                </Button>
+                                    <Trash2 /> Hapus
+                                </DropdownMenuItem>
                             </template>
-                        </TableCell>
-                    </TableRow>
-                    <TableEmpty v-if="users.data.length === 0" :colspan="5">
-                        <EmptyState
-                            v-if="filtered"
-                            :icon="SearchX"
-                            title="Tidak ada pengguna yang cocok"
-                            description="Ubah kata kunci atau filter pencarian."
-                        >
-                            <Button variant="outline" size="sm" as-child>
-                                <Link :href="UserController.index()">
-                                    Hapus filter
-                                </Link>
-                            </Button>
-                        </EmptyState>
-                        <EmptyState
-                            v-else
-                            :icon="Users"
-                            title="Belum ada pengguna"
-                            description="Pengguna dibuat oleh admin dengan password default."
-                        >
-                            <Button v-if="can.create" size="sm" as-child>
-                                <Link :href="UserController.create()">
-                                    <Plus /> Tambah pengguna
-                                </Link>
-                            </Button>
-                        </EmptyState>
-                    </TableEmpty>
-                </TableBody>
-            </Table>
+                        </RowActionsMenu>
+                    </TableCell>
+                </ClickableRow>
+                <TableEmpty v-if="users.data.length === 0" :colspan="5">
+                    <EmptyState
+                        v-if="filtered"
+                        :icon="SearchX"
+                        title="Tidak ada pengguna yang cocok"
+                        description="Ubah kata kunci atau filter pencarian."
+                    >
+                        <Button variant="outline" size="sm" as-child>
+                            <Link :href="UserController.index()">
+                                Hapus filter
+                            </Link>
+                        </Button>
+                    </EmptyState>
+                    <EmptyState
+                        v-else
+                        :icon="Users"
+                        title="Belum ada pengguna"
+                        description="Pengguna dibuat oleh admin dengan password default."
+                    >
+                        <Button v-if="can.create" size="sm" as-child>
+                            <Link :href="UserController.create()">
+                                <Plus /> Tambah pengguna
+                            </Link>
+                        </Button>
+                    </EmptyState>
+                </TableEmpty>
+            </TableBody>
+        </Table>
 
-            <TablePagination :paginator="users" />
-        </div>
-    </div>
+        <TablePagination :paginator="users" />
+    </PagePanel>
 
     <ActivityHistorySheet
         v-if="hasPermission('activity-log.view')"

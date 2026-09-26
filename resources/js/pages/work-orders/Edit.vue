@@ -2,7 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
 import AttachmentPanel from '@/components/attachments/AttachmentPanel.vue';
-import PageHeader from '@/components/PageHeader.vue';
+import PagePanel from '@/components/PagePanel.vue';
 import WorkOrderForm from '@/components/work-orders/WorkOrderForm.vue';
 import type { AttachmentPanelData, CategoryOption, WorkOrder } from '@/types';
 
@@ -26,21 +26,15 @@ defineOptions({
 <template>
     <Head :title="`Ubah ${workOrder.title}`" />
 
-    <div class="flex flex-1 flex-col gap-4 p-4">
-        <PageHeader
-            class="max-w-3xl"
-            title="Ubah work order"
-            :description="workOrder.title"
+    <PagePanel title="Ubah work order">
+        <template #meta>{{ workOrder.title }}</template>
+        <WorkOrderForm
+            :work-order="workOrder"
+            :department="workOrder.department"
+            :categories="categories"
         />
-        <div class="max-w-3xl rounded-2xl border bg-card p-6">
-            <WorkOrderForm
-                :work-order="workOrder"
-                :department="workOrder.department"
-                :categories="categories"
-            />
-        </div>
         <section
-            class="max-w-3xl rounded-2xl border bg-card p-6"
+            class="border-t px-4 py-6 sm:px-6"
             aria-labelledby="wo-documents-heading"
         >
             <h2 id="wo-documents-heading" class="mb-1 font-medium">Dokumen</h2>
@@ -55,5 +49,5 @@ defineOptions({
                 :can-delete="attachments.can.delete"
             />
         </section>
-    </div>
+    </PagePanel>
 </template>
