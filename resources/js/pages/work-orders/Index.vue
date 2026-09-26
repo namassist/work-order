@@ -2,7 +2,6 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import type { LucideIcon } from '@lucide/vue';
 import {
-    ArrowDownUp,
     Ban,
     CircleDot,
     ClipboardList,
@@ -12,7 +11,6 @@ import {
     Pencil,
     Plus,
     RotateCcw,
-    Search,
     SearchX,
     Send,
     Trash2,
@@ -26,7 +24,6 @@ import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import TablePagination from '@/components/admin/TablePagination.vue';
 import ClickableRow from '@/components/ClickableRow.vue';
 import EmptyState from '@/components/EmptyState.vue';
-import ListToolbar from '@/components/ListToolbar.vue';
 import PagePanel from '@/components/PagePanel.vue';
 import PersonName from '@/components/PersonName.vue';
 import RowActionsMenu from '@/components/RowActionsMenu.vue';
@@ -34,20 +31,10 @@ import type { StatItem } from '@/components/StatStrip.vue';
 import StatStrip from '@/components/StatStrip.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -57,18 +44,15 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import WorkOrderListFilters from '@/components/work-orders/WorkOrderListFilters.vue';
 import WorkOrderStatusBadge from '@/components/work-orders/WorkOrderStatusBadge.vue';
 import WorkOrderTitleCell from '@/components/work-orders/WorkOrderTitleCell.vue';
 import WorkOrderUrgency from '@/components/work-orders/WorkOrderUrgency.vue';
 import { useCan } from '@/composables/useCan';
 import { useFormatDate } from '@/composables/useFormatDate';
-import {
-    ALL,
-    isFiltering,
-    toFilterQuery,
-    useListFilters,
-} from '@/composables/useListFilters';
+import { isFiltering, toFilterQuery } from '@/composables/useListFilters';
 import { panelTableClass } from '@/lib/panel';
+import type { WorkOrderFilters } from '@/lib/workOrderFilters';
 import type {
     CategoryOption,
     DepartmentOption,
@@ -78,25 +62,9 @@ import type {
     WorkOrderUrgencyOption,
 } from '@/types';
 
-type Filters = {
-    search: string;
-    status: string;
-    urgency: string;
-    department: string;
-    category: string;
-    from: string;
-    to: string;
-    trashed: boolean;
-    /**
-     * '' for newest first, 'urgensi' for most urgent first, or 'diperbarui'
-     * for most recently active first.
-     */
-    sort: string;
-};
-
 const props = defineProps<{
     workOrders: Paginated<WorkOrderListItem>;
-    filters: Filters;
+    filters: WorkOrderFilters;
     statuses: WorkOrderStatusOption[];
     urgencies: WorkOrderUrgencyOption[];
     /** Visible, non-deleted work orders per status, ignoring the filters. */
@@ -133,18 +101,6 @@ const statItems = computed<StatItem[]>(() => [
         icon: statusIcons[status.value] ?? CircleDot,
     })),
 ]);
-
-const filters = useListFilters(
-    {
-        ...props.filters,
-        status: props.filters.status || ALL,
-        urgency: props.filters.urgency || ALL,
-        sort: props.filters.sort || ALL,
-        department: props.filters.department || ALL,
-        category: props.filters.category || ALL,
-    },
-    () => WorkOrderController.index(),
-);
 
 /** The sort changes the order, not which work orders match. */
 const filtered = computed(() => isFiltering({ ...props.filters, sort: '' }));
@@ -222,7 +178,14 @@ const openHistory = (workOrder: WorkOrderListItem) => {
     <PagePanel title="Work Order">
         <StatStrip :items="statItems" />
 
-        <ListToolbar>
+        <WorkOrderListFilters
+            :filters="filters"
+            :statuses="statuses"
+            :urgencies="urgencies"
+            :departments="departments"
+            :categories="categories"
+            :can-restore="can.restore"
+        >
             <template v-if="can.create || can.export" #actions>
                 <Button v-if="can.create" as-child>
                     <Link :href="WorkOrderController.create()">
@@ -235,138 +198,7 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                     </a>
                 </Button>
             </template>
-
-            <div class="relative w-full sm:w-64">
-                <Search
-                    class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                    v-model="filters.search"
-                    type="search"
-                    class="pl-9"
-                    placeholder="Cari nomor atau judul"
-                    aria-label="Cari work order"
-                />
-            </div>
-            <Select v-model="filters.status">
-                <SelectTrigger
-                    class="w-full sm:w-40 sm:shrink-0"
-                    aria-label="Filter status"
-                >
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem :value="ALL">Semua status</SelectItem>
-                    <SelectItem
-                        v-for="status in statuses"
-                        :key="status.value"
-                        :value="status.value"
-                    >
-                        {{ status.label }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-            <Select v-model="filters.urgency">
-                <SelectTrigger
-                    class="w-full sm:w-40 sm:shrink-0"
-                    aria-label="Filter urgensi"
-                >
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem :value="ALL">Semua urgensi</SelectItem>
-                    <SelectItem
-                        v-for="urgency in urgencies"
-                        :key="urgency.value"
-                        :value="urgency.value"
-                    >
-                        {{ urgency.label }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-            <Select v-if="departments" v-model="filters.department">
-                <SelectTrigger
-                    class="w-full sm:w-48 sm:shrink-0"
-                    aria-label="Filter departemen"
-                >
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem :value="ALL">Semua departemen</SelectItem>
-                    <SelectItem
-                        v-for="department in departments"
-                        :key="department.id"
-                        :value="String(department.id)"
-                    >
-                        <span class="font-mono">{{ department.code }}</span>
-                        {{ department.name }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-            <Select v-model="filters.category">
-                <SelectTrigger
-                    class="w-full sm:w-44 sm:shrink-0"
-                    aria-label="Filter kategori"
-                >
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem :value="ALL">Semua kategori</SelectItem>
-                    <SelectItem
-                        v-for="category in categories"
-                        :key="category.id"
-                        :value="String(category.id)"
-                    >
-                        <span class="font-mono">{{ category.code }}</span>
-                        {{ category.name }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-            <fieldset class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-                <legend class="sr-only">Tanggal dibuat</legend>
-                <Label for="filter-from" class="text-muted-foreground">
-                    Dibuat
-                </Label>
-                <Input
-                    id="filter-from"
-                    v-model="filters.from"
-                    type="date"
-                    class="min-w-0 flex-1 sm:w-36 sm:flex-none"
-                    aria-label="Dibuat dari"
-                />
-                <span class="text-muted-foreground" aria-hidden="true">–</span>
-                <Input
-                    id="filter-to"
-                    v-model="filters.to"
-                    type="date"
-                    class="min-w-0 flex-1 sm:w-36 sm:flex-none"
-                    aria-label="Dibuat sampai"
-                    :min="filters.from || undefined"
-                />
-            </fieldset>
-            <Select v-model="filters.sort">
-                <SelectTrigger
-                    class="w-full sm:w-48 sm:shrink-0"
-                    aria-label="Urutkan"
-                >
-                    <span class="flex items-center gap-2">
-                        <ArrowDownUp class="text-muted-foreground" />
-                        <SelectValue />
-                    </span>
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem :value="ALL">Terbaru</SelectItem>
-                    <SelectItem value="urgensi">Paling mendesak</SelectItem>
-                    <SelectItem value="diperbarui">
-                        Terakhir diperbarui
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-            <div v-if="can.restore" class="flex h-9 items-center gap-2">
-                <Checkbox id="show-trashed" v-model="filters.trashed" />
-                <Label for="show-trashed">Tampilkan terhapus</Label>
-            </div>
-        </ListToolbar>
+        </WorkOrderListFilters>
 
         <Table :class="panelTableClass">
             <TableHeader class="sticky top-0 bg-card">
