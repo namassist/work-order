@@ -11,6 +11,7 @@ import {
 import { computed } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
 import ActivityEventBadge from '@/components/admin/ActivityEventBadge.vue';
+import RecentWorkOrders from '@/components/dashboard/RecentWorkOrders.vue';
 import RequestOverviewChart from '@/components/dashboard/RequestOverviewChart.vue';
 import UrgentWorkOrders from '@/components/dashboard/UrgentWorkOrders.vue';
 import EmptyState from '@/components/EmptyState.vue';
@@ -22,7 +23,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useFormatDate } from '@/composables/useFormatDate';
 import { greeting } from '@/lib/greeting';
 import { dashboard } from '@/routes';
-import type { ActivityEntry, RequestOverview, UrgentWorkOrder } from '@/types';
+import type {
+    ActivityEntry,
+    RequestOverview,
+    UrgentWorkOrder,
+    WorkOrder,
+} from '@/types';
 
 const props = defineProps<{
     department: { code: string; name: string } | null;
@@ -36,6 +42,8 @@ const props = defineProps<{
     requestOverview?: RequestOverview | null;
     /** Undefined while the deferred prop loads; null when not allowed. */
     urgentWorkOrders?: UrgentWorkOrder[] | null;
+    /** Undefined while the deferred prop loads; null when not allowed. */
+    recentWorkOrders?: WorkOrder[] | null;
     /** Undefined while the deferred prop loads; null when not allowed. */
     recentActivities?: ActivityEntry[] | null;
 }>();
@@ -116,6 +124,11 @@ const metrics = computed<StatItem[]>(() => {
                 class="border-t lg:border-t-0 lg:border-l"
             />
         </div>
+
+        <RecentWorkOrders
+            v-if="recentWorkOrders !== null"
+            :items="recentWorkOrders"
+        />
 
         <section
             v-if="recentActivities !== null"
