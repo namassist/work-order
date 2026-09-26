@@ -137,4 +137,4 @@ Hanya transisi yang menjawab aksi user (buka dialog, expand baris, toast konfirm
 - Tabel: kolom sekunder (orang, tanggal) disembunyikan di mobile, sisanya tetap terbaca
   tanpa scroll horizontal jika memungkinkan.
 
-Referensi visual: docs/refs/ (struktur saja, lihat README di folder itu).
+Referensi visual: docs/design/refs/ (struktur saja, lihat README di folder itu).
