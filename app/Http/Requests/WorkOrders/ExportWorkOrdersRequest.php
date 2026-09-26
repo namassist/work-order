@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\WorkOrders;
 
+use App\Enums\WorkOrderUrgency;
 use App\Models\Department;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
@@ -23,6 +24,7 @@ class ExportWorkOrdersRequest extends ListWorkOrdersRequest
 
     /**
      * The filters in use, for the activity log, e.g. "Cari: pompa; Status: Draft".
+     * The sort is left out: it changes the order, not which rows are exported.
      */
     public function filterDescription(): string
     {
@@ -31,6 +33,7 @@ class ExportWorkOrdersRequest extends ListWorkOrdersRequest
         $parts = array_filter([
             'Cari' => $filters['search'],
             'Status' => $filters['status'] === '' ? '' : WorkOrderStatus::labelFor($filters['status']),
+            'Urgensi' => WorkOrderUrgency::tryFrom($filters['urgency'])?->label() ?? '',
             'Departemen' => $filters['department'] === '' ? '' : $this->codeOf(Department::withTrashed(), $filters['department']),
             'Kategori' => $filters['category'] === '' ? '' : $this->codeOf(WorkOrderCategory::withTrashed(), $filters['category']),
             'Dari' => $filters['from'],

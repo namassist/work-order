@@ -2,6 +2,7 @@
 
 namespace App\Concerns;
 
+use App\Enums\WorkOrderUrgency;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Support\DisplayDate;
@@ -32,6 +33,7 @@ trait WorkOrderValidationRules
                     ->where(fn ($query) => $query->where('is_active', true)->whereNull('deleted_at'))
                     ->when($currentCategoryId, fn ($query, int $id) => $query->orWhere('id', $id))),
             ],
+            'urgency' => ['required', Rule::enum(WorkOrderUrgency::class)],
             'target_date' => [
                 'nullable',
                 'date_format:Y-m-d',

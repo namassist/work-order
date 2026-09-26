@@ -4,11 +4,17 @@ import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkO
 import AttachmentPanel from '@/components/attachments/AttachmentPanel.vue';
 import PagePanel from '@/components/PagePanel.vue';
 import WorkOrderForm from '@/components/work-orders/WorkOrderForm.vue';
-import type { AttachmentPanelData, CategoryOption, WorkOrder } from '@/types';
+import type {
+    AttachmentPanelData,
+    CategoryOption,
+    WorkOrder,
+    WorkOrderUrgencyOption,
+} from '@/types';
 
 defineProps<{
     workOrder: WorkOrder;
     categories: CategoryOption[];
+    urgencies: WorkOrderUrgencyOption[];
     attachments: AttachmentPanelData;
 }>();
 
@@ -32,6 +38,7 @@ defineOptions({
             :work-order="workOrder"
             :department="workOrder.department"
             :categories="categories"
+            :urgencies="urgencies"
         />
         <section
             class="border-t px-4 py-6 sm:px-6"

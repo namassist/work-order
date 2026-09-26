@@ -14,6 +14,12 @@ export type WorkOrderStatusOption = {
     tone: string;
 };
 
+/** docs/DESIGN.md › Urgensi Work Order; never shown with status colours. */
+export type WorkOrderUrgencyOption = {
+    value: string;
+    label: string;
+};
+
 export type CategoryOption = {
     id: number;
     code: string;
@@ -28,6 +34,7 @@ export type WorkOrder = {
     title: string;
     description: string | null;
     status: WorkOrderStatusOption;
+    urgency: WorkOrderUrgencyOption;
     /** Date-only (Y-m-d); format with formatCalendarDate. */
     target_date: string | null;
     department: DepartmentOption;

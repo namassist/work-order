@@ -2,6 +2,7 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import type { LucideIcon } from '@lucide/vue';
 import {
+    ArrowDownUp,
     Ban,
     CircleDot,
     ClipboardList,
@@ -57,6 +58,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import WorkOrderStatusBadge from '@/components/work-orders/WorkOrderStatusBadge.vue';
+import WorkOrderUrgency from '@/components/work-orders/WorkOrderUrgency.vue';
 import { useCan } from '@/composables/useCan';
 import { useFormatDate } from '@/composables/useFormatDate';
 import {
@@ -66,28 +68,34 @@ import {
     useListFilters,
 } from '@/composables/useListFilters';
 import { panelTableClass } from '@/lib/panel';
+import { isUrgent } from '@/lib/workOrderUrgency';
 import type {
     CategoryOption,
     DepartmentOption,
     Paginated,
     WorkOrderListItem,
     WorkOrderStatusOption,
+    WorkOrderUrgencyOption,
 } from '@/types';
 
 type Filters = {
     search: string;
     status: string;
+    urgency: string;
     department: string;
     category: string;
     from: string;
     to: string;
     trashed: boolean;
+    /** '' for newest first, or 'urgensi' for most urgent first. */
+    sort: string;
 };
 
 const props = defineProps<{
     workOrders: Paginated<WorkOrderListItem>;
     filters: Filters;
     statuses: WorkOrderStatusOption[];
+    urgencies: WorkOrderUrgencyOption[];
     /** Visible, non-deleted work orders per status, ignoring the filters. */
     stats: { total: number; statuses: Record<string, number> };
     /** Null unless the user sees every department's work orders. */
@@ -127,13 +135,16 @@ const filters = useListFilters(
     {
         ...props.filters,
         status: props.filters.status || ALL,
+        urgency: props.filters.urgency || ALL,
+        sort: props.filters.sort || ALL,
         department: props.filters.department || ALL,
         category: props.filters.category || ALL,
     },
     () => WorkOrderController.index(),
 );
 
-const filtered = computed(() => isFiltering(props.filters));
+/** The sort changes the order, not which work orders match. */
+const filtered = computed(() => isFiltering({ ...props.filters, sort: '' }));
 
 /** The export holds exactly the list as the server last filtered it. */
 const exportUrl = computed(() =>
@@ -236,7 +247,7 @@ const openHistory = (workOrder: WorkOrderListItem) => {
             </div>
             <Select v-model="filters.status">
                 <SelectTrigger
-                    class="w-full sm:w-40"
+                    class="w-full sm:w-40 sm:shrink-0"
                     aria-label="Filter status"
                 >
                     <SelectValue />
@@ -252,9 +263,27 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                     </SelectItem>
                 </SelectContent>
             </Select>
+            <Select v-model="filters.urgency">
+                <SelectTrigger
+                    class="w-full sm:w-40 sm:shrink-0"
+                    aria-label="Filter urgensi"
+                >
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem :value="ALL">Semua urgensi</SelectItem>
+                    <SelectItem
+                        v-for="urgency in urgencies"
+                        :key="urgency.value"
+                        :value="urgency.value"
+                    >
+                        {{ urgency.label }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
             <Select v-if="departments" v-model="filters.department">
                 <SelectTrigger
-                    class="w-full sm:w-44"
+                    class="w-full sm:w-48 sm:shrink-0"
                     aria-label="Filter departemen"
                 >
                     <SelectValue />
@@ -273,7 +302,7 @@ const openHistory = (workOrder: WorkOrderListItem) => {
             </Select>
             <Select v-model="filters.category">
                 <SelectTrigger
-                    class="w-full sm:w-44"
+                    class="w-full sm:w-44 sm:shrink-0"
                     aria-label="Filter kategori"
                 >
                     <SelectValue />
@@ -312,6 +341,21 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                     :min="filters.from || undefined"
                 />
             </fieldset>
+            <Select v-model="filters.sort">
+                <SelectTrigger
+                    class="w-full sm:w-48 sm:shrink-0"
+                    aria-label="Urutkan"
+                >
+                    <span class="flex items-center gap-2">
+                        <ArrowDownUp class="text-muted-foreground" />
+                        <SelectValue />
+                    </span>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem :value="ALL">Terbaru</SelectItem>
+                    <SelectItem value="urgensi">Paling mendesak</SelectItem>
+                </SelectContent>
+            </Select>
             <div v-if="can.restore" class="flex h-9 items-center gap-2">
                 <Checkbox id="show-trashed" v-model="filters.trashed" />
                 <Label for="show-trashed">Tampilkan terhapus</Label>
@@ -328,6 +372,7 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                     </TableHead>
                     <TableHead class="hidden xl:table-cell">Kategori</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead class="hidden lg:table-cell">Urgensi</TableHead>
                     <TableHead class="hidden lg:table-cell">Target</TableHead>
                     <TableHead class="hidden lg:table-cell">Dibuat</TableHead>
                     <TableHead class="w-0">
@@ -365,12 +410,29 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                                 {{ workOrder.title }}
                             </span>
                         </component>
-                        <p
-                            v-if="workOrder.description"
-                            class="mt-0.5 truncate text-muted-foreground"
+                        <div
+                            v-if="
+                                workOrder.description ||
+                                isUrgent(workOrder.urgency.value)
+                            "
+                            :class="[
+                                'mt-0.5 flex min-w-0 items-center gap-2',
+                                { 'lg:hidden': !workOrder.description },
+                            ]"
                         >
-                            {{ workOrder.description }}
-                        </p>
+                            <!-- The Urgensi column is hidden below lg; keep urgent WOs visible. -->
+                            <WorkOrderUrgency
+                                v-if="isUrgent(workOrder.urgency.value)"
+                                :urgency="workOrder.urgency"
+                                class="shrink-0 text-xs lg:hidden"
+                            />
+                            <p
+                                v-if="workOrder.description"
+                                class="truncate text-muted-foreground"
+                            >
+                                {{ workOrder.description }}
+                            </p>
+                        </div>
                     </TableCell>
                     <TableCell class="hidden md:table-cell">
                         <PersonName :name="workOrder.requester.name" />
@@ -392,6 +454,9 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                             v-else
                             :status="workOrder.status"
                         />
+                    </TableCell>
+                    <TableCell class="hidden lg:table-cell">
+                        <WorkOrderUrgency :urgency="workOrder.urgency" />
                     </TableCell>
                     <TableCell class="hidden tabular-nums lg:table-cell">
                         {{

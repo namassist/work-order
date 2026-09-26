@@ -30,6 +30,7 @@ class WorkOrderResource extends JsonResource
             'title' => $workOrder->title,
             'description' => $workOrder->description,
             'status' => $workOrder->status->toOption(),
+            'urgency' => $workOrder->urgency->toOption(),
             'target_date' => $workOrder->target_date?->toDateString(),
             'department' => $workOrder->department->only(['id', 'code', 'name']),
             'category' => $workOrder->category->only(['id', 'code', 'name']),

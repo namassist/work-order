@@ -16,11 +16,13 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import WorkOrderUrgency from '@/components/work-orders/WorkOrderUrgency.vue';
 import type {
     AttachmentRules,
     CategoryOption,
     DepartmentOption,
     WorkOrder,
+    WorkOrderUrgencyOption,
 } from '@/types';
 
 const props = defineProps<{
@@ -28,6 +30,7 @@ const props = defineProps<{
     /** The requester's department, which the work order belongs to. */
     department: DepartmentOption;
     categories: CategoryOption[];
+    urgencies: WorkOrderUrgencyOption[];
     /** On create only: documents are sent with the form. Edit uploads them separately. */
     attachmentRules?: AttachmentRules;
 }>();
@@ -36,9 +39,14 @@ const form = useForm({
     title: props.workOrder?.title ?? '',
     description: props.workOrder?.description ?? '',
     work_order_category_id: props.workOrder?.category.id ?? null,
+    urgency: props.workOrder?.urgency.value ?? 'normal',
     target_date: props.workOrder?.target_date ?? '',
     attachments: [] as File[],
 });
+
+const selectedUrgency = computed(() =>
+    props.urgencies.find((urgency) => urgency.value === form.urgency),
+);
 
 /** Errors on the list ("attachments") or on one file ("attachments.0"). */
 const attachmentsError = computed(
@@ -118,6 +126,29 @@ const submit = () => {
                     type="date"
                 />
                 <InputError :message="form.errors.target_date" />
+            </div>
+
+            <div class="grid content-start gap-2">
+                <Label for="wo-urgency">Urgensi</Label>
+                <Select v-model="form.urgency">
+                    <SelectTrigger id="wo-urgency" class="w-full">
+                        <!-- SelectValue shows only the label; urgency always shows its icon too. -->
+                        <WorkOrderUrgency
+                            v-if="selectedUrgency"
+                            :urgency="selectedUrgency"
+                        />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem
+                            v-for="urgency in urgencies"
+                            :key="urgency.value"
+                            :value="urgency.value"
+                        >
+                            <WorkOrderUrgency :urgency="urgency" />
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+                <InputError :message="form.errors.urgency" />
             </div>
 
             <div class="grid gap-2 md:col-span-2">

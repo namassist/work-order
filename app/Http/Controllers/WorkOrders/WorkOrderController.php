@@ -4,6 +4,7 @@ namespace App\Http\Controllers\WorkOrders;
 
 use App\Actions\Attachments\AddAttachment;
 use App\Actions\WorkOrders\CreateWorkOrder;
+use App\Enums\WorkOrderUrgency;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WorkOrders\ListWorkOrdersRequest;
 use App\Http\Requests\WorkOrders\StoreWorkOrderRequest;
@@ -52,6 +53,7 @@ class WorkOrderController extends Controller
             ]),
             'filters' => $request->filters(),
             'statuses' => WorkOrderStatus::options(),
+            'urgencies' => WorkOrderUrgency::options(),
             'stats' => $this->statusCounts($user),
             // Only users who see other departments can filter by department.
             'departments' => $user->can('viewAllDepartments', WorkOrder::class)
@@ -80,6 +82,7 @@ class WorkOrderController extends Controller
         return Inertia::render('work-orders/Create', [
             'department' => $user->department?->only(['id', 'code', 'name']),
             'categories' => $this->selectableCategories(),
+            'urgencies' => WorkOrderUrgency::options(),
             'attachmentRules' => (new WorkOrder)->documentsCollection()->toFrontend(),
         ]);
     }
@@ -158,6 +161,7 @@ class WorkOrderController extends Controller
         return Inertia::render('work-orders/Edit', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
             'categories' => $this->selectableCategories($workOrder),
+            'urgencies' => WorkOrderUrgency::options(),
             'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
         ]);
     }
