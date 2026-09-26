@@ -9,6 +9,7 @@ import {
     Wrench,
 } from '@lucide/vue';
 import { computed } from 'vue';
+import type { Component } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
 import ActivityEventBadge from '@/components/admin/ActivityEventBadge.vue';
 import EmptyState from '@/components/EmptyState.vue';
@@ -21,8 +22,10 @@ import { greeting } from '@/lib/greeting';
 import { dashboard } from '@/routes';
 import type { ActivityEntry } from '@/types';
 
-defineProps<{
+const props = defineProps<{
     department: { code: string; name: string } | null;
+    /** Undefined while the deferred prop loads; null when not allowed. */
+    workOrderCounts?: { total: number; pending: number } | null;
     /** Undefined while the deferred prop loads; null when not allowed. */
     recentActivities?: ActivityEntry[] | null;
 }>();
@@ -41,32 +44,55 @@ const title = computed(
         `${greeting(new Date(), page.props.displayTimezone)}, ${page.props.auth.user.name}`,
 );
 
+type Metric = {
+    label: string;
+    icon: Component;
+    tone: string;
+    /** Undefined while loading, null when unavailable or not built yet. */
+    value: number | null | undefined;
+    /** Set for metrics whose WO stage does not exist yet. */
+    comingSoon?: boolean;
+};
+
 /**
- * Work order metrics arrive with the WO module; until then each card says
- * so. Tones follow the status colours in docs/DESIGN.md.
+ * Work order metrics over the WO the user may see. "Menunggu Persetujuan"
+ * counts submitted WOs in the provisional flow; the execution metrics wait
+ * for their WO stages. Tones follow the status colours in docs/DESIGN.md.
  */
-const metrics = [
+const metrics = computed<Metric[]>(() => [
     {
         label: 'Total WO',
         icon: ClipboardList,
         tone: 'bg-secondary text-secondary-foreground',
+        value:
+            props.workOrderCounts === undefined
+                ? undefined
+                : (props.workOrderCounts?.total ?? null),
     },
     {
         label: 'Menunggu Persetujuan',
         icon: Hourglass,
         tone: 'bg-warning text-warning-foreground',
+        value:
+            props.workOrderCounts === undefined
+                ? undefined
+                : (props.workOrderCounts?.pending ?? null),
     },
     {
         label: 'Dalam Pengerjaan',
         icon: Wrench,
         tone: 'bg-info text-info-foreground',
+        value: null,
+        comingSoon: true,
     },
     {
         label: 'Terlambat',
         icon: AlarmClock,
         tone: 'bg-destructive/10 text-destructive',
+        value: null,
+        comingSoon: true,
     },
-];
+]);
 </script>
 
 <template>
@@ -106,13 +132,23 @@ const metrics = [
                     </span>
                 </div>
                 <div class="flex items-end justify-between gap-2">
+                    <Skeleton
+                        v-if="metric.value === undefined"
+                        class="h-9 w-16"
+                    />
                     <p
+                        v-else-if="metric.value === null"
                         class="text-3xl font-semibold text-muted-foreground tabular-nums"
                         aria-hidden="true"
                     >
                         —
                     </p>
-                    <Badge variant="outline">Segera hadir</Badge>
+                    <p v-else class="text-3xl font-semibold tabular-nums">
+                        {{ metric.value }}
+                    </p>
+                    <Badge v-if="metric.comingSoon" variant="outline">
+                        Segera hadir
+                    </Badge>
                 </div>
             </div>
         </div>

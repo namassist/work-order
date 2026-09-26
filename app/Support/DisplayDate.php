@@ -51,13 +51,24 @@ class DisplayDate
         return CarbonImmutable::createFromFormat('!Y-m-d', $date, self::timezone())->endOfDay()->utc();
     }
 
+    /**
+     * Today's date (Y-m-d) in the display timezone.
+     */
+    public static function today(): string
+    {
+        return CarbonImmutable::now(self::timezone())->toDateString();
+    }
+
+    /**
+     * The moment in the display timezone.
+     */
+    public static function local(CarbonInterface $moment): CarbonImmutable
+    {
+        return CarbonImmutable::instance($moment)->setTimezone(self::timezone());
+    }
+
     public static function timezone(): string
     {
         return config()->string('app.display_timezone');
-    }
-
-    private static function local(CarbonInterface $moment): CarbonImmutable
-    {
-        return CarbonImmutable::instance($moment)->setTimezone(self::timezone());
     }
 }

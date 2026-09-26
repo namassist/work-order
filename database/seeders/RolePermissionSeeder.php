@@ -19,7 +19,8 @@ use Spatie\Permission\PermissionRegistrar;
 class RolePermissionSeeder extends Seeder
 {
     /**
-     * Initial permissions per non-admin role.
+     * Initial permissions per non-admin role. The work-orders.view-all grants
+     * are provisional until the real WO flow defines who oversees whom.
      *
      * @var array<string, list<Permission>>
      */
@@ -34,11 +35,13 @@ class RolePermissionSeeder extends Seeder
             Permission::DepartmentsView,
             Permission::UsersView,
             Permission::WorkOrdersView,
+            Permission::WorkOrdersViewAll,
             Permission::WorkOrdersUpdate,
         ],
         'keuangan' => [
             Permission::DepartmentsView,
             Permission::WorkOrdersView,
+            Permission::WorkOrdersViewAll,
         ],
         'viewer' => [
             Permission::DepartmentsView,

@@ -49,3 +49,11 @@ export function formatDate(iso: string, timeZone: string): string {
 
     return `${day} ${month} ${year}`;
 }
+
+/**
+ * A date-only value (Y-m-d, e.g. a WO target date) as "25 Sep 2026". It names
+ * a calendar day, not a moment, so it is never timezone-converted.
+ */
+export function formatCalendarDate(date: string): string {
+    return formatDate(`${date}T00:00:00Z`, 'UTC');
+}

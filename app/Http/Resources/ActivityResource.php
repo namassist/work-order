@@ -6,6 +6,9 @@ use App\Enums\AuditEvent;
 use App\Enums\AuditSubject;
 use App\Models\Department;
 use App\Models\User;
+use App\Models\WorkOrder;
+use App\Models\WorkOrderCategory;
+use App\States\WorkOrder\WorkOrderStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -38,12 +41,27 @@ class ActivityResource extends JsonResource
         'must_change_password' => 'Wajib ganti password',
         'roles' => 'Role',
         'permissions' => 'Izin',
+        'number' => 'Nomor',
+        'title' => 'Judul',
+        'work_order_category_id' => 'Kategori',
+        'target_date' => 'Target selesai',
+        'status' => 'Status',
     ];
 
     /**
-     * @param  array<int, string>  $departmentCodes  department id => code, see departmentCodes()
+     * Logged foreign keys shown as the referenced record's code.
+     *
+     * @var array<string, class-string<Department|WorkOrderCategory>>
      */
-    public function __construct(Activity $resource, private readonly array $departmentCodes = [])
+    private const array REFERENCE_FIELDS = [
+        'department_id' => Department::class,
+        'work_order_category_id' => WorkOrderCategory::class,
+    ];
+
+    /**
+     * @param  array<string, array<int, string>>  $referenceCodes  field => (id => code), see referenceCodes()
+     */
+    public function __construct(Activity $resource, private readonly array $referenceCodes = [])
     {
         parent::__construct($resource);
     }
@@ -66,27 +84,30 @@ class ActivityResource extends JsonResource
     }
 
     /**
-     * Load the codes of every department referenced by the entries at once.
+     * Load the codes of every department and category referenced by the
+     * entries at once.
      *
      * @param  Collection<int, Activity>  $activities
-     * @return array<int, string>
+     * @return array<string, array<int, string>>
      */
-    public static function departmentCodes(Collection $activities): array
+    public static function referenceCodes(Collection $activities): array
     {
-        $ids = $activities
-            ->flatMap(fn (Activity $activity): array => [
-                data_get($activity->attribute_changes, 'attributes.department_id'),
-                data_get($activity->attribute_changes, 'old.department_id'),
-            ])
-            ->filter()
-            ->unique()
-            ->values();
+        $codes = [];
 
-        if ($ids->isEmpty()) {
-            return [];
+        foreach (self::REFERENCE_FIELDS as $field => $model) {
+            $ids = $activities
+                ->flatMap(fn (Activity $activity): array => [
+                    data_get($activity->attribute_changes, "attributes.{$field}"),
+                    data_get($activity->attribute_changes, "old.{$field}"),
+                ])
+                ->filter()
+                ->unique()
+                ->values();
+
+            $codes[$field] = $ids->isEmpty() ? [] : $model::withTrashed()->whereKey($ids)->pluck('code', 'id')->all();
         }
 
-        return Department::withTrashed()->whereKey($ids)->pluck('code', 'id')->all();
+        return $codes;
     }
 
     /**
@@ -136,10 +157,15 @@ class ActivityResource extends JsonResource
     }
 
     /**
-     * The code for master data, otherwise the name.
+     * The number for work orders ("Draft" before submission), the code for
+     * master data, otherwise the name.
      */
     private function subjectLabel(?Model $subject): ?string
     {
+        if ($subject instanceof WorkOrder) {
+            return $subject->displayNumber();
+        }
+
         $label = $subject?->getAttribute('code') ?? $subject?->getAttribute('name');
 
         return is_string($label) ? $label : null;
@@ -168,7 +194,8 @@ class ActivityResource extends JsonResource
         return match (true) {
             $value === null => null,
             $field === 'is_active' => $value ? 'Aktif' : 'Nonaktif',
-            $field === 'department_id' => $this->departmentCodes[$value] ?? '#'.$value,
+            isset(self::REFERENCE_FIELDS[$field]) => $this->referenceCodes[$field][$value] ?? '#'.$value,
+            $field === 'status' && is_string($value) => WorkOrderStatus::labelFor($value),
             is_bool($value) => $value ? 'Ya' : 'Tidak',
             default => $value,
         };

@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\ActivityResource;
 use App\Models\User;
+use App\Models\WorkOrder;
+use App\States\WorkOrder\Diajukan;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,8 +19,8 @@ class DashboardController extends Controller
     private const int RECENT_ACTIVITY_LIMIT = 8;
 
     /**
-     * The dashboard: greeting, metric placeholders, and recent activity for
-     * users who may read the activity log.
+     * The dashboard: greeting, work order counts for users who may list work
+     * orders, and recent activity for users who may read the activity log.
      */
     public function __invoke(Request $request): Response
     {
@@ -27,10 +29,31 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard', [
             'department' => $user->department?->only(['code', 'name']),
+            'workOrderCounts' => $user->can('viewAny', WorkOrder::class)
+                ? Inertia::defer(fn (): array => $this->workOrderCounts($user))
+                : null,
             'recentActivities' => $user->can('viewAny', Activity::class)
                 ? Inertia::defer(fn (): array => $this->recentActivities($request))
                 : null,
         ]);
+    }
+
+    /**
+     * Counts over the work orders the user may see. "Pending" means awaiting
+     * approval, which in the provisional flow is the Diajukan status.
+     *
+     * @return array{total: int, pending: int}
+     */
+    private function workOrderCounts(User $user): array
+    {
+        $counts = WorkOrder::query()
+            ->visibleTo($user)
+            ->toBase()
+            ->selectRaw('count(*) as total')
+            ->selectRaw('coalesce(sum(case when status = ? then 1 else 0 end), 0) as pending', [Diajukan::getMorphClass()])
+            ->first();
+
+        return ['total' => (int) $counts?->total, 'pending' => (int) $counts?->pending];
     }
 
     /**
@@ -39,10 +62,10 @@ class DashboardController extends Controller
     private function recentActivities(Request $request): array
     {
         $activities = ActivityResource::query()->limit(self::RECENT_ACTIVITY_LIMIT)->get();
-        $departmentCodes = ActivityResource::departmentCodes($activities);
+        $referenceCodes = ActivityResource::referenceCodes($activities);
 
         return $activities
-            ->map(fn (Activity $activity): array => (new ActivityResource($activity, $departmentCodes))->resolve($request))
+            ->map(fn (Activity $activity): array => (new ActivityResource($activity, $referenceCodes))->resolve($request))
             ->all();
     }
 }

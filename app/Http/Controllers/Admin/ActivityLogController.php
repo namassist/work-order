@@ -57,11 +57,11 @@ class ActivityLogController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $departmentCodes = ActivityResource::departmentCodes($activities->getCollection());
+        $referenceCodes = ActivityResource::referenceCodes($activities->getCollection());
 
         return Inertia::render('admin/activity-log/Index', [
             'activities' => $activities->through(
-                fn (Activity $activity): array => (new ActivityResource($activity, $departmentCodes))->resolve($request),
+                fn (Activity $activity): array => (new ActivityResource($activity, $referenceCodes))->resolve($request),
             ),
             'filters' => [
                 'subject_type' => $filters['subject_type'] ?? '',
@@ -94,11 +94,11 @@ class ActivityLogController extends Controller
             ->limit(self::HISTORY_LIMIT)
             ->get();
 
-        $departmentCodes = ActivityResource::departmentCodes($activities);
+        $referenceCodes = ActivityResource::referenceCodes($activities);
 
         return response()->json([
             'data' => $activities
-                ->map(fn (Activity $activity): array => (new ActivityResource($activity, $departmentCodes))->resolve($request))
+                ->map(fn (Activity $activity): array => (new ActivityResource($activity, $referenceCodes))->resolve($request))
                 ->all(),
         ]);
     }

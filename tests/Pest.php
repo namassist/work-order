@@ -2,6 +2,7 @@
 
 use App\Enums\Permission;
 use App\Enums\SystemRole;
+use App\Models\Department;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,4 +67,15 @@ function adminUser(): User
     test()->seed(RolePermissionSeeder::class);
 
     return User::factory()->create()->assignRole(SystemRole::Admin->value);
+}
+
+/**
+ * Create a user in the given department holding exactly the given permissions.
+ */
+function userInDepartment(Department $department, Permission ...$permissions): User
+{
+    $user = userWithPermissions(...$permissions);
+    $user->update(['department_id' => $department->id]);
+
+    return $user;
 }

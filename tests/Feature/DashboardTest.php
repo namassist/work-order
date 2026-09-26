@@ -3,6 +3,7 @@
 use App\Enums\Permission;
 use App\Models\Department;
 use App\Models\User;
+use App\Models\WorkOrder;
 use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -60,4 +61,36 @@ test('users who cannot view the activity log get no activity', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('recentActivities', null));
+});
+
+test('work order counts cover only the work orders the user may see', function () {
+    $department = Department::factory()->create();
+    WorkOrder::factory()->create(['department_id' => $department->id]);
+    WorkOrder::factory()->submitted()->create(['department_id' => $department->id]);
+    WorkOrder::factory()->cancelled()->create(['department_id' => $department->id]);
+    WorkOrder::factory()->submitted()->create();
+    WorkOrder::factory()->create(['department_id' => $department->id])->delete();
+
+    $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page
+            ->missing('workOrderCounts')
+            ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
+                ->where('workOrderCounts', ['total' => 3, 'pending' => 1])));
+});
+
+test('work order counts span every department with work-orders.view-all', function () {
+    WorkOrder::factory()->submitted()->count(2)->create();
+
+    $this->actingAs(userWithPermissions(Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
+                ->where('workOrderCounts', ['total' => 2, 'pending' => 2])));
+});
+
+test('users who cannot list work orders get no counts', function () {
+    $this->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('workOrderCounts', null));
 });
