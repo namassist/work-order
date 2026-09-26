@@ -96,3 +96,14 @@ test('correct password must be provided to update password', function () {
         ->assertSessionHasErrors('current_password')
         ->assertRedirect(route('security.edit'));
 });
+
+test('password changes are limited to 6 a minute per user', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user)->from(route('security.edit'));
+
+    foreach (range(1, 6) as $attempt) {
+        $this->put(route('user-password.update'), ['current_password' => 'wrong-password'])->assertRedirect();
+    }
+
+    $this->put(route('user-password.update'), ['current_password' => 'wrong-password'])->assertTooManyRequests();
+});
