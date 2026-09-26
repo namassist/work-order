@@ -32,6 +32,15 @@ class WorkOrderPolicy
     }
 
     /**
+     * Determine whether the user can download the work order list as a
+     * spreadsheet. What it holds is limited like the list itself.
+     */
+    public function export(User $user): bool
+    {
+        return $this->viewAny($user) && $user->checkPermissionTo(Permission::WorkOrdersExport->value);
+    }
+
+    /**
      * Determine whether the user can view the work order.
      */
     public function view(User $user, WorkOrder $workOrder): Response

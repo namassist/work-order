@@ -36,3 +36,10 @@ it('lets only admin, approver, and keuangan see work orders of every department 
     expect(Role::permission(Permission::WorkOrdersViewAll->value)->pluck('name')->sort()->values()->all())
         ->toBe(['admin', 'approver', 'keuangan']);
 });
+
+it('lets only admin, approver, and keuangan export work orders at first', function () {
+    $this->seed(RolePermissionSeeder::class);
+
+    expect(Role::permission(Permission::WorkOrdersExport->value)->pluck('name')->sort()->values()->all())
+        ->toBe(['admin', 'approver', 'keuangan']);
+});

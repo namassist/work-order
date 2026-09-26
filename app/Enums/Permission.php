@@ -30,6 +30,7 @@ enum Permission: string
     case WorkOrdersDelete = 'work-orders.delete';
     case WorkOrdersRestore = 'work-orders.restore';
     case WorkOrdersViewAll = 'work-orders.view-all';
+    case WorkOrdersExport = 'work-orders.export';
 
     case WorkOrderCategoriesView = 'work-order-categories.view';
     case WorkOrderCategoriesCreate = 'work-order-categories.create';

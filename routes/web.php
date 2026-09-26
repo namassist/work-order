@@ -3,6 +3,7 @@
 use App\Http\Controllers\Attachments\AttachmentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
+use App\Http\Controllers\WorkOrders\WorkOrderExportController;
 use App\Http\Controllers\WorkOrders\WorkOrderTransitionController;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,10 @@ Route::get('/', fn (Request $request): RedirectResponse => to_route($request->us
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
+    // Before the resource, so work-orders/{workOrder} does not catch it.
+    Route::get('work-orders/export', WorkOrderExportController::class)
+        ->middleware('throttle:10,1')
+        ->name('work-orders.export');
     Route::resource('work-orders', WorkOrderController::class)->parameters(['work-orders' => 'workOrder']);
     Route::patch('work-orders/{workOrder}/restore', [WorkOrderController::class, 'restore'])
         ->withTrashed()
