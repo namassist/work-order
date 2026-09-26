@@ -176,6 +176,7 @@ return [
         'title' => 'judul',
         'work_order_category_id' => 'kategori',
         'target_date' => 'target selesai',
+        'urgency' => 'urgensi',
         'status' => 'status',
         'note' => 'catatan',
         'file' => 'berkas',

@@ -6,6 +6,7 @@ use App\Concerns\HasAttachments;
 use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
 use App\Enums\Permission;
+use App\Enums\WorkOrderUrgency;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\Attachments\Attachable;
 use App\Support\Attachments\AttachmentCollection;
@@ -30,6 +31,7 @@ use Spatie\ModelStates\HasStates;
  * @property int $work_order_category_id
  * @property int $created_by
  * @property WorkOrderStatus $status
+ * @property WorkOrderUrgency $urgency
  * @property Carbon|null $target_date
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -38,7 +40,7 @@ use Spatie\ModelStates\HasStates;
  * @property-read WorkOrderCategory $category
  * @property-read User $requester
  */
-#[Fillable(['title', 'description', 'work_order_category_id', 'target_date'])]
+#[Fillable(['title', 'description', 'work_order_category_id', 'urgency', 'target_date'])]
 class WorkOrder extends Model implements Attachable
 {
     /** @use HasFactory<WorkOrderFactory> */
@@ -48,6 +50,15 @@ class WorkOrder extends Model implements Attachable
      * Supporting documents. Later stages (BAST, invoice) add their own collections.
      */
     public const string DOCUMENTS = 'dokumen';
+
+    /**
+     * The model's default values for attributes, matching the columns' defaults.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'urgency' => 'normal',
+    ];
 
     /**
      * @return array<string, AttachmentCollection>
@@ -168,6 +179,7 @@ class WorkOrder extends Model implements Attachable
     {
         return [
             'status' => WorkOrderStatus::class,
+            'urgency' => WorkOrderUrgency::class,
             'target_date' => 'date:Y-m-d',
         ];
     }

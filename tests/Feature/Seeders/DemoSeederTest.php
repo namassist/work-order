@@ -92,6 +92,18 @@ it('creates work orders in every status over the last three months', function ()
     expect($overdue->count())->toBe(5);
 });
 
+it('mixes urgencies realistically: about 10% rendah, 60% normal, 20% tinggi, 10% mendesak', function () {
+    $this->seed(DemoSeeder::class);
+
+    $counts = WorkOrder::query()->toBase()->selectRaw('urgency, count(*) as aggregate')->groupBy('urgency')->pluck('aggregate', 'urgency');
+    $total = WorkOrder::query()->count();
+
+    expect(collect(['rendah' => 0.1, 'normal' => 0.6, 'tinggi' => 0.2, 'mendesak' => 0.1])
+        ->map(fn (float $share, string $urgency): bool => abs(((int) ($counts[$urgency] ?? 0)) / $total - $share) <= 0.05)
+        ->all())
+        ->toBe(['rendah' => true, 'normal' => true, 'tinggi' => true, 'mendesak' => true]);
+});
+
 it('gives every work order a consistent status history', function () {
     $this->seed(DemoSeeder::class);
 

@@ -36,6 +36,19 @@ Warna status konsisten di badge, tabel, timeline, dan grafik:
 
 Status tidak boleh hanya dibedakan lewat warna; selalu sertakan label teks.
 
+## Urgensi Work Order
+
+Urgensi (Rendah, Normal, Tinggi, Mendesak) tampil sebagai ikon lucide + teks, tidak pernah
+sebagai badge dan tidak pernah memakai warna status, supaya tidak tertukar dengan status:
+
+- Rendah `ChevronDown`, Normal `Minus`, Tinggi `ChevronUp`, Mendesak `ChevronsUp`.
+- Hanya Mendesak yang ditonjolkan: teks `font-semibold` dengan warna teks utama. Level lain
+  `text-muted-foreground`. Tanpa warna aksen atau warna status.
+- Satu komponen untuk semua tempat: `components/work-orders/WorkOrderUrgency.vue`.
+- Tabel: kolom Urgensi sendiri, disembunyikan di bawah `lg`. Di bawah `lg`, WO Mendesak
+  menampilkan penanda Mendesak (ikon + teks kecil) di sel utama, di baris kedua sebelum
+  deskripsi, supaya judul tetap terbaca di layar sempit; level lain tidak ditampilkan di sana.
+
 ## Tipografi
 
 - Inter (`font-sans`): semua UI, body, tabel, form. Angka nominal pakai `tabular-nums`.

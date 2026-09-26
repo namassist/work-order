@@ -199,6 +199,19 @@ class DemoSeeder extends Seeder
     ];
 
     /**
+     * How many work orders get each urgency: 10% rendah, 60% normal, 20%
+     * tinggi, 10% mendesak. Adds up to the total of PATHS.
+     *
+     * @var array<string, int>
+     */
+    private const array URGENCIES = [
+        'rendah' => 5,
+        'normal' => 30,
+        'tinggi' => 10,
+        'mendesak' => 5,
+    ];
+
+    /**
      * Sample documents as [fixture in tests/Fixtures/attachments, name shown].
      *
      * @var list<array{0: string, 1: string}>
@@ -349,13 +362,14 @@ class DemoSeeder extends Seeder
         $requesters = $users->filter(fn (User $user): bool => $user->hasRole('pemohon'))->values()->all();
         $approvers = $users->filter(fn (User $user): bool => $user->hasRole('approver'))->keyBy('department_id');
 
-        $paths = collect(self::PATHS)->flatMap(fn (int $count, string $path): array => array_fill(0, $count, $path))->all();
+        $paths = $this->faker->shuffleArray(collect(self::PATHS)->flatMap(fn (int $count, string $path): array => array_fill(0, $count, $path))->all());
+        $urgencies = $this->faker->shuffleArray(collect(self::URGENCIES)->flatMap(fn (int $count, string $urgency): array => array_fill(0, $count, $urgency))->all());
 
         /** @var array<int, WorkOrder> $created */
         $created = [];
         $events = [];
 
-        foreach ($this->faker->shuffleArray($paths) as $index => $path) {
+        foreach ($paths as $index => $path) {
             /** @var User $requester */
             $requester = $this->faker->randomElement($requesters);
             /** @var User $approver */
@@ -365,7 +379,7 @@ class DemoSeeder extends Seeder
 
             $createdAt = $this->creationMoment($path);
             $attributes = $this->workOrderAttributes($path, $categoryCode, $requester, $createdAt)
-                + ['work_order_category_id' => $categories[$categoryCode]->id];
+                + ['work_order_category_id' => $categories[$categoryCode]->id, 'urgency' => $urgencies[$index]];
 
             $events[] = ['at' => $createdAt, 'actor' => $requester, 'run' => function () use (&$created, $index, $attributes, $requester): void {
                 $created[$index] = $this->createWorkOrder->handle($attributes, $requester);

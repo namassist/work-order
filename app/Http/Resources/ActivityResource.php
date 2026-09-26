@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Enums\AuditEvent;
 use App\Enums\AuditSubject;
+use App\Enums\WorkOrderUrgency;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
@@ -46,6 +47,7 @@ class ActivityResource extends JsonResource
         'title' => 'Judul',
         'work_order_category_id' => 'Kategori',
         'target_date' => 'Target selesai',
+        'urgency' => 'Urgensi',
         'status' => 'Status',
         'lampiran' => 'Lampiran',
         'ukuran' => 'Ukuran',
@@ -199,6 +201,7 @@ class ActivityResource extends JsonResource
             $field === 'is_active' => $value ? 'Aktif' : 'Nonaktif',
             isset(self::REFERENCE_FIELDS[$field]) => $this->referenceCodes[$field][$value] ?? '#'.$value,
             $field === 'status' && is_string($value) => WorkOrderStatus::labelFor($value),
+            $field === 'urgency' && is_string($value) => WorkOrderUrgency::tryFrom($value)?->label() ?? $value,
             $field === 'ukuran' && is_int($value) => Number::withLocale('id', fn (): string => Number::fileSize($value, maxPrecision: 1)),
             is_bool($value) => $value ? 'Ya' : 'Tidak',
             default => $value,

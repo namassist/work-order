@@ -103,7 +103,7 @@ it('downloads the list as an xlsx named after the WITA time', function () {
         ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     expect(array_map(fn (Cell $cell): mixed => $cell->getValue(), exportedRows($response)[0]))
-        ->toBe(['Nomor', 'Judul', 'Deskripsi', 'Departemen', 'Kategori', 'Pemohon', 'Status', 'Target', 'Dibuat', 'Diajukan'])
+        ->toBe(['Nomor', 'Judul', 'Deskripsi', 'Departemen', 'Kategori', 'Pemohon', 'Status', 'Urgensi', 'Target', 'Dibuat', 'Diajukan'])
         ->and(exportedSheetXml($response))->toContain('<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>');
 });
 
@@ -114,13 +114,14 @@ it('writes one row per work order in list order, with Draft as a draft\'s number
         'title' => 'AC bocor',
         'description' => 'Ruang rapat lantai 2',
         'created_by' => $requester->id,
+        'urgency' => 'mendesak',
     ]);
 
     $rows = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
 
     expect($rows)->toHaveCount(3)
-        ->and(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($rows[1], 0, 7)))
-        ->toBe(['Draft', 'AC bocor', 'Ruang rapat lantai 2', 'IT - Teknologi Informasi', 'PRB - Perbaikan', 'Dewi Lestari', 'Draft'])
+        ->and(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($rows[1], 0, 8)))
+        ->toBe(['Draft', 'AC bocor', 'Ruang rapat lantai 2', 'IT - Teknologi Informasi', 'PRB - Perbaikan', 'Dewi Lestari', 'Draft', 'Mendesak'])
         ->and($rows[2][1]->getValue())->toBe('Lama');
 });
 
@@ -142,6 +143,22 @@ it('applies the list\'s search and filters', function () {
     ]));
 
     expect(exportedTitles($response))->toBe(['Pompa air rusak']);
+});
+
+it('applies the list\'s urgency filter and sort, and logs the urgency filter', function () {
+    exportableWorkOrder(['title' => 'Tinggi lama', 'urgency' => 'tinggi', 'created_at' => now()->subDay()]);
+    exportableWorkOrder(['title' => 'Mendesak', 'urgency' => 'mendesak', 'created_at' => now()->subDays(2)]);
+    exportableWorkOrder(['title' => 'Tinggi baru', 'urgency' => 'tinggi']);
+    exportableWorkOrder(['title' => 'Rendah', 'urgency' => 'rendah']);
+
+    $this->actingAs($this->exporter);
+
+    expect(exportedTitles($this->get(route('work-orders.export', ['sort' => 'urgensi']))))
+        ->toBe(['Mendesak', 'Tinggi baru', 'Tinggi lama', 'Rendah'])
+        ->and(exportedTitles($this->get(route('work-orders.export', ['urgency' => 'tinggi']))))
+        ->toBe(['Tinggi baru', 'Tinggi lama'])
+        ->and(Activity::query()->where('event', 'exported')->latest('id')->first()->properties['filter'])
+        ->toBe('Urgensi: Tinggi');
 });
 
 it('filters the created date by WITA day', function () {
@@ -198,7 +215,7 @@ it('writes dates as Excel date cells in WITA', function () {
     app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $this->exporter);
 
     [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
-    [$target, $created, $submitted] = array_slice($row, 7);
+    [$target, $created, $submitted] = array_slice($row, 8);
 
     expect($target)->toBeInstanceOf(DateTimeCell::class)
         ->and($target->getValue()->format('Y-m-d'))->toBe('2026-10-01')
@@ -214,8 +231,8 @@ it('leaves Target and Diajukan empty when a work order has neither', function ()
 
     [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
 
-    expect($row[7])->toBeInstanceOf(EmptyCell::class)
-        ->and($row[9])->toBeInstanceOf(EmptyCell::class);
+    expect($row[8])->toBeInstanceOf(EmptyCell::class)
+        ->and($row[10])->toBeInstanceOf(EmptyCell::class);
 });
 
 it('writes user-entered text as plain strings, never formulas', function () {

@@ -7,11 +7,13 @@ import type {
     AttachmentRules,
     CategoryOption,
     DepartmentOption,
+    WorkOrderUrgencyOption,
 } from '@/types';
 
 defineProps<{
     department: DepartmentOption;
     categories: CategoryOption[];
+    urgencies: WorkOrderUrgencyOption[];
     attachmentRules: AttachmentRules;
 }>();
 
@@ -34,6 +36,7 @@ defineOptions({
             :work-order="null"
             :department="department"
             :categories="categories"
+            :urgencies="urgencies"
             :attachment-rules="attachmentRules"
         />
     </PagePanel>

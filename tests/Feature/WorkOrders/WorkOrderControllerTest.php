@@ -202,6 +202,7 @@ describe('create and store', function () {
             'title' => 'Lampu kantor mati',
             'description' => 'Lantai 2',
             'work_order_category_id' => $this->category->id,
+            'urgency' => 'tinggi',
             'target_date' => '2026-09-25',
             'department_id' => Department::factory()->create()->id,
         ]);
@@ -263,6 +264,7 @@ describe('create and store', function () {
         $this->actingAs($user)->post(route('work-orders.store'), [
             'title' => 'Lampu kantor mati',
             'work_order_category_id' => $this->category->id,
+            'urgency' => 'normal',
             'attachments' => [attachmentUpload('dokumen.pdf', 'Surat.pdf'), attachmentUpload('foto.jpg', 'Foto lampu.jpg')],
         ])->assertRedirect();
 
@@ -279,6 +281,7 @@ describe('create and store', function () {
             ->post(route('work-orders.store'), [
                 'title' => 'Lampu kantor mati',
                 'work_order_category_id' => $this->category->id,
+                'urgency' => 'normal',
                 'attachments' => array_map(fn (array $upload): UploadedFile => attachmentUpload(...$upload), $attachments),
             ])
             ->assertSessionHasErrors([$errorKey => $message]);
@@ -358,7 +361,7 @@ describe('edit and update', function () {
                 ->component('work-orders/Edit')
                 ->has('categories', 2));
 
-        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $retired->id])
+        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $retired->id, 'urgency' => 'normal'])
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('work-orders.show', $workOrder));
 
@@ -370,9 +373,9 @@ describe('edit and update', function () {
         $workOrder = ownWorkOrder(['target_date' => '2026-09-01', 'work_order_category_id' => $this->category->id]);
         $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersUpdate));
 
-        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $this->category->id, 'target_date' => '2026-09-01'])
+        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $this->category->id, 'urgency' => 'normal', 'target_date' => '2026-09-01'])
             ->assertSessionHasNoErrors();
-        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $this->category->id, 'target_date' => '2026-09-02'])
+        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $this->category->id, 'urgency' => 'normal', 'target_date' => '2026-09-02'])
             ->assertSessionHasErrors('target_date');
 
         expect($workOrder->refresh()->target_date->toDateString())->toBe('2026-09-01');

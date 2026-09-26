@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import StatusTimeline from '@/components/work-orders/StatusTimeline.vue';
 import TransitionDialog from '@/components/work-orders/TransitionDialog.vue';
 import WorkOrderStatusBadge from '@/components/work-orders/WorkOrderStatusBadge.vue';
+import WorkOrderUrgency from '@/components/work-orders/WorkOrderUrgency.vue';
 import { useCan } from '@/composables/useCan';
 import { useFormatDate } from '@/composables/useFormatDate';
 import type {
@@ -147,6 +148,12 @@ const destroy = () => {
                     <div>
                         <dt class="text-muted-foreground">Pemohon</dt>
                         <dd>{{ workOrder.requester.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-muted-foreground">Urgensi</dt>
+                        <dd>
+                            <WorkOrderUrgency :urgency="workOrder.urgency" />
+                        </dd>
                     </div>
                     <div>
                         <dt class="text-muted-foreground">Target selesai</dt>
