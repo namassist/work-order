@@ -41,6 +41,8 @@ export type WorkOrder = {
     category: CategoryOption;
     requester: { id: number; name: string };
     created_at: string;
+    /** Last activity: edits, comments, status changes, and attachments. */
+    updated_at: string;
     deleted_at: string | null;
 };
 

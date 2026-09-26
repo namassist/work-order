@@ -36,6 +36,7 @@ class WorkOrderResource extends JsonResource
             'category' => $workOrder->category->only(['id', 'code', 'name']),
             'requester' => $workOrder->requester->only(['id', 'name']),
             'created_at' => $workOrder->created_at?->toIso8601String(),
+            'updated_at' => $workOrder->updated_at?->toIso8601String(),
             'deleted_at' => $workOrder->deleted_at?->toIso8601String(),
         ];
     }

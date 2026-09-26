@@ -161,6 +161,18 @@ it('applies the list\'s urgency filter and sort, and logs the urgency filter', f
         ->toBe('Urgensi: Tinggi');
 });
 
+it('follows the list\'s last-activity sort without logging it as a filter', function () {
+    exportableWorkOrder(['title' => 'Lama, baru diubah', 'created_at' => now()->subDays(2), 'updated_at' => now()]);
+    exportableWorkOrder(['title' => 'Baru', 'created_at' => now()->subDay(), 'updated_at' => now()->subDay()]);
+
+    $this->actingAs($this->exporter);
+
+    expect(exportedTitles($this->get(route('work-orders.export', ['sort' => 'diperbarui']))))
+        ->toBe(['Lama, baru diubah', 'Baru'])
+        ->and(Activity::query()->where('event', 'exported')->latest('id')->first()->properties['filter'])
+        ->toBe('Semua');
+});
+
 it('filters the created date by WITA day', function () {
     exportableWorkOrder(['title' => 'Pagi WITA', 'created_at' => '2026-09-24 23:30:00']);
     exportableWorkOrder(['title' => 'Kemarin', 'created_at' => '2026-09-24 15:00:00']);

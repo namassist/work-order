@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\WorkOrderUrgency;
 use App\Http\Resources\ActivityResource;
+use App\Http\Resources\WorkOrderResource;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\States\WorkOrder\Diajukan;
@@ -27,8 +28,15 @@ class DashboardController extends Controller
     private const int URGENT_LIMIT = 5;
 
     /**
-     * The dashboard: greeting, work order counts for users who may list work
-     * orders, and recent activity for users who may read the activity log.
+     * Entries in the "WO Terbaru" panel; "Lihat semua" opens the list sorted
+     * by last activity.
+     */
+    private const int RECENT_WORK_ORDER_LIMIT = 8;
+
+    /**
+     * The dashboard: greeting, work order counts, charts, and the most
+     * recently active work orders for users who may list work orders, and
+     * recent activity for users who may read the activity log.
      */
     public function __invoke(Request $request): Response
     {
@@ -48,6 +56,9 @@ class DashboardController extends Controller
                 : null,
             'urgentWorkOrders' => $canListWorkOrders
                 ? Inertia::defer(fn (): array => $this->urgentWorkOrders($user))
+                : null,
+            'recentWorkOrders' => $canListWorkOrders
+                ? Inertia::defer(fn (): array => $this->recentWorkOrders($request, $user))
                 : null,
             'recentActivities' => $user->can('viewAny', Activity::class)
                 ? Inertia::defer(fn (): array => $this->recentActivities($request))
@@ -104,6 +115,26 @@ class DashboardController extends Controller
             'requester' => ['id' => $workOrder->requester->id, 'name' => $workOrder->requester->name],
             'submitted_at' => $this->isoMoment($workOrder->getAttribute('submitted_at')),
         ])->all());
+    }
+
+    /**
+     * The work orders the user may see, most recently active first. Last
+     * activity is updated_at, which comments, status changes, and
+     * attachments also bump. Rows have the work order list's shape.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function recentWorkOrders(Request $request, User $user): array
+    {
+        $workOrders = WorkOrder::query()
+            ->visibleTo($user)
+            ->with(['department', 'category', 'requester'])
+            ->latest('updated_at')
+            ->latest('id')
+            ->limit(self::RECENT_WORK_ORDER_LIMIT)
+            ->get();
+
+        return WorkOrderResource::collection($workOrders)->resolve($request);
     }
 
     private function isoMoment(mixed $moment): ?string

@@ -15,15 +15,18 @@ use App\Models\WorkOrderComment;
 trait GuardsWorkOrderComments
 {
     /**
-     * Re-read the work order under a shared lock, so a cancellation running
+     * Re-read the work order under an update lock, so a cancellation running
      * at the same moment waits for the comment or sees it, and refuse when
      * its status no longer accepts comments. Call inside a transaction.
+     *
+     * Not a shared lock: the comment touches the work order, and two
+     * commenters holding shared locks would deadlock upgrading them.
      *
      * @throws CommentNotAllowed
      */
     protected function lockAcceptingComments(WorkOrder $workOrder): WorkOrder
     {
-        $locked = WorkOrder::query()->sharedLock()->findOrFail($workOrder->id);
+        $locked = WorkOrder::query()->lockForUpdate()->findOrFail($workOrder->id);
 
         if (! $locked->status->acceptsComments()) {
             throw CommentNotAllowed::readOnly($locked);

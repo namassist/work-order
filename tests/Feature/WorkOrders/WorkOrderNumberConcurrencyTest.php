@@ -16,22 +16,8 @@ const NUMBERS_PER_PROCESS = 25;
 
 it('never hands out the same number twice under concurrent submissions', function () {
     $connection = DB::connection();
-
-    if (! in_array($connection->getDriverName(), ['pgsql', 'mysql', 'mariadb'], true)) {
-        $this->markTestSkipped('Needs a shared PostgreSQL or MySQL database; '.$connection->getDriverName().' cannot run concurrent writers.');
-    }
-
+    $env = concurrentProcessEnv();
     $departmentCode = 'CC'.Str::upper(Str::random(6));
-    $env = [
-        'APP_ENV' => 'testing',
-        'DB_CONNECTION' => $connection->getName(),
-        'DB_URL' => '',
-        'DB_HOST' => (string) $connection->getConfig('host'),
-        'DB_PORT' => (string) $connection->getConfig('port'),
-        'DB_DATABASE' => $connection->getDatabaseName(),
-        'DB_USERNAME' => (string) $connection->getConfig('username'),
-        'DB_PASSWORD' => (string) $connection->getConfig('password'),
-    ];
     $command = [PHP_BINARY, base_path('tests/Fixtures/generate-work-order-numbers.php'), $departmentCode, (string) NUMBERS_PER_PROCESS];
 
     try {

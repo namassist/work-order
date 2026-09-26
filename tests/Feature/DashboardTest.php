@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\WorkOrders\AddWorkOrderComment;
 use App\Actions\WorkOrders\TransitionWorkOrder;
 use App\Enums\Permission;
 use App\Enums\WorkOrderUrgency;
@@ -99,7 +100,8 @@ test('users who cannot list work orders get no counts', function () {
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->where('workOrderCounts', null)
             ->where('requestOverview', null)
-            ->where('urgentWorkOrders', null));
+            ->where('urgentWorkOrders', null)
+            ->where('recentWorkOrders', null));
 });
 
 test('terlambat counts visible submitted work orders whose target date is before today in WITA', function () {
@@ -237,4 +239,90 @@ test('the urgent list is empty when nothing mendesak is waiting', function () {
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
                 ->where('urgentWorkOrders', [])));
+});
+
+/**
+ * The ids of the deferred "WO Terbaru" rows, in order.
+ *
+ * @return Closure(Assert): AssertableInertia
+ */
+function expectRecentWorkOrderIds(array $ids): Closure
+{
+    return fn (Assert $page): AssertableInertia => $page
+        ->missing('recentWorkOrders')
+        ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
+            ->where('recentWorkOrders', fn (Collection $rows): bool => $rows->pluck('id')->all() === $ids));
+}
+
+test('the recent list shows the eight most recently active visible work orders', function () {
+    $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
+    $department = Department::factory()->create();
+    $recent = collect(range(1, 10))->map(fn (int $hoursAgo): WorkOrder => WorkOrder::factory()->create([
+        'department_id' => $department->id,
+        'created_at' => now()->subDays(5),
+        'updated_at' => now()->subHours($hoursAgo),
+    ]));
+    WorkOrder::factory()->create(['updated_at' => now()]);
+    WorkOrder::factory()->create(['department_id' => $department->id, 'updated_at' => now()])->delete();
+
+    $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
+        ->get(route('dashboard'))
+        ->assertInertia(expectRecentWorkOrderIds($recent->take(8)->pluck('id')->all()));
+});
+
+test('the recent list rows match the work order list', function () {
+    $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
+    $department = Department::factory()->create();
+    $workOrder = WorkOrder::factory()->submitted()->create(['department_id' => $department->id, 'urgency' => WorkOrderUrgency::Mendesak]);
+    $workOrder->load(['department', 'category', 'requester']);
+
+    $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
+                ->where('recentWorkOrders.0.id', $workOrder->id)
+                ->where('recentWorkOrders.0.display_number', $workOrder->number)
+                ->where('recentWorkOrders.0.status.value', 'diajukan')
+                ->where('recentWorkOrders.0.urgency.value', 'mendesak')
+                ->where('recentWorkOrders.0.requester', ['id' => $workOrder->requester->id, 'name' => $workOrder->requester->name])
+                ->where('recentWorkOrders.0.category.code', $workOrder->category->code)
+                ->where('recentWorkOrders.0.updated_at', '2026-09-25T02:00:00+00:00')));
+});
+
+test('a comment or a status change moves a work order to the top of the recent list', function () {
+    $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
+    $department = Department::factory()->create();
+    $user = userInDepartment($department, Permission::WorkOrdersView);
+    $commented = WorkOrder::factory()->submitted()->create(['department_id' => $department->id]);
+    $submitted = WorkOrder::factory()->create(['department_id' => $department->id]);
+    $this->travel(1)->hours();
+    $untouched = WorkOrder::factory()->create(['department_id' => $department->id]);
+
+    $this->travel(1)->hours();
+    app(AddWorkOrderComment::class)->handle($commented, $user, 'Mohon dicek.');
+    $this->actingAs($user)->get(route('dashboard'))
+        ->assertInertia(expectRecentWorkOrderIds([$commented->id, $untouched->id, $submitted->id]));
+
+    $this->travel(1)->hours();
+    app(TransitionWorkOrder::class)->handle($submitted, 'diajukan', $user);
+    $this->get(route('dashboard'))
+        ->assertInertia(expectRecentWorkOrderIds([$submitted->id, $commented->id, $untouched->id]));
+});
+
+test('the recent list spans every department with work-orders.view-all', function () {
+    $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
+    $older = WorkOrder::factory()->create(['updated_at' => now()->subHour()]);
+    $newer = WorkOrder::factory()->create();
+
+    $this->actingAs(userWithPermissions(Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
+        ->get(route('dashboard'))
+        ->assertInertia(expectRecentWorkOrderIds([$newer->id, $older->id]));
+});
+
+test('the recent list is empty when the user may see no work orders', function () {
+    WorkOrder::factory()->create();
+
+    $this->actingAs(userInDepartment(Department::factory()->create(), Permission::WorkOrdersView))
+        ->get(route('dashboard'))
+        ->assertInertia(expectRecentWorkOrderIds([]));
 });
