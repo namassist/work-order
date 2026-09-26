@@ -149,6 +149,32 @@ Files on any model, through spatie/laravel-medialibrary. Work orders are the fir
 - Feature tests use `RefreshDatabase` through `tests/Pest.php`, so Postgres must be running before `composer test`.
 - `.npmrc` sets `ignore-scripts=true`, so npm packages' install scripts don't run.
 
+## Demo data (local only)
+
+`database/seeders/DemoSeeder.php` fills a local database with realistic data for development and visual checks. It is separate from `DatabaseSeeder`, refuses to run in production, and needs `DEFAULT_USER_PASSWORD` set.
+
+- **Run:** `php artisan db:seed --class=DemoSeeder`. Re-running is safe: departments, categories, and accounts are created only when missing (existing accounts, including their passwords, are left alone), and work orders only while no demo account has any.
+- **Clean refresh:** `php artisan migrate:fresh --seeder=DemoSeeder`. `migrate:fresh` leaves the old files on the attachments disk; when the database has no media and no work orders, the seeder deletes the `{uuid}/` media directories there, so a fresh seed leaves no orphans (other files on the disk are kept). To clear them without seeding, delete `storage/app/attachments/*`.
+- **Contents:**
+    - 7 departments (KEU, GA, ENG, PRD, HRD, IT, LOG) and 6 categories (Perbaikan, Pengadaan, Instalasi, Maintenance Rutin, Kebersihan, Kendaraan).
+    - 50 work orders from the last ~3 months: 15 Draft, 25 Diajukan, 6 Draft → Dibatalkan, 4 Diajukan → Dibatalkan.
+    - 5 of the Diajukan WOs are **overdue** (target date already passed), for the dashboard's "Terlambat" card once it is built.
+    - Every WO is created and moved through `CreateWorkOrder`/`TransitionWorkOrder` in chronological order with the clock set to that moment, so numbers follow submission time (restarting monthly per department), and the status history and activity log (with causers) are genuine.
+    - About a dozen WOs have sample documents (`dokumen.pdf`, `foto.jpg` from `tests/Fixtures/attachments`).
+- **Accounts** (all `@worder.test`, password `DEFAULT_USER_PASSWORD`). Every department has an approver and at least one pemohon. The ones marked \* still have `must_change_password`:
+
+| Dept | Accounts                                                                                                                |
+| ---- | ----------------------------------------------------------------------------------------------------------------------- |
+| IT   | `admin` (admin), `rizky.pratama` (approver), `dewi.lestari`, `andi.saputra`\* (pemohon)                                 |
+| KEU  | `sri.wahyuni` (approver), `budi.santoso`, `rina.kurniawati` (keuangan), `agus.setiawan` (pemohon)                       |
+| GA   | `hendra.gunawan` (approver), `siti.nurhaliza`, `joko.susilo` (pemohon), `wulan.sari` (viewer)                           |
+| ENG  | `bambang.hartono` (approver), `dimas.prasetyo`, `yoga.firmansyah`\*, `teguh.wibowo` (pemohon), `fajar.nugroho` (viewer) |
+| PRD  | `slamet.riyadi` (approver), `eko.purnomo`, `indah.permatasari`, `arif.hidayat` (pemohon)                                |
+| HRD  | `maya.anggraini` (approver), `putri.rahmawati` (pemohon), `lukman.hakim`\* (viewer)                                     |
+| LOG  | `hadi.kusuma` (approver), `nur.aini`, `rudi.hermawan` (pemohon)                                                         |
+
+`admin@worder.test` never has to change its password, so Playwright visual checks can sign in directly.
+
 ## Visual checks (local only)
 
 - App: http://127.0.0.1:8000 (run `composer run dev` first)
