@@ -40,19 +40,28 @@ export function isFiltering(
 
 /**
  * Keeps list filters in the query string. Changing a filter reloads the page
- * from page 1; the optional search box is debounced.
+ * from page 1; typing in the optional search box is debounced, clearing it is
+ * not. A query identical to the last one sent (e.g. the debounced search
+ * after a reset already reloaded) does not reload again.
  */
 export function useListFilters<T extends Record<string, string | boolean>>(
     initial: T,
     route: () => RouteDefinition<'get'>,
 ) {
     const filters = reactive({ ...initial }) as T;
+    const queryOf = () =>
+        toFilterQuery(filters as Record<string, string | boolean>);
+    let lastQuery = JSON.stringify(queryOf());
 
     const apply = () => {
-        const query = toFilterQuery(
-            filters as Record<string, string | boolean>,
-        );
+        const query = queryOf();
+        const serialized = JSON.stringify(query);
 
+        if (serialized === lastQuery) {
+            return;
+        }
+
+        lastQuery = serialized;
         router.get(route().url, query, {
             preserveState: true,
             preserveScroll: true,
@@ -65,7 +74,7 @@ export function useListFilters<T extends Record<string, string | boolean>>(
     if ('search' in initial) {
         watch(
             () => filters.search,
-            () => applyDebounced(),
+            (search) => (search === '' ? apply() : applyDebounced()),
         );
     }
     // Read only the non-search keys so typing does not bypass the debounce.

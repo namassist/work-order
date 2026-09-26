@@ -59,11 +59,56 @@ export function formatCalendarDate(date: string): string {
 }
 
 /**
+ * A calendar-day range (Y-m-d ends, either may be empty) as
+ * "1 Sep 2026 – 27 Sep 2026", "Sejak 1 Sep 2026", or "Sampai 27 Sep 2026".
+ */
+export function formatCalendarDateRange(from: string, to: string): string {
+    if (from && to) {
+        return `${formatCalendarDate(from)} – ${formatCalendarDate(to)}`;
+    }
+
+    if (from) {
+        return `Sejak ${formatCalendarDate(from)}`;
+    }
+
+    return to ? `Sampai ${formatCalendarDate(to)}` : '';
+}
+
+/**
  * A date-only value (Y-m-d) as "25 Sep", for chart axes where the year is
  * implied. Like formatCalendarDate, never timezone-converted.
  */
 export function formatShortCalendarDate(date: string): string {
     return formatCalendarDate(date).split(' ').slice(0, 2).join(' ');
+}
+
+const calendarDateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * The calendar day (Y-m-d) a moment falls on in the given timezone, e.g. the
+ * WITA "today" that date filters count from.
+ */
+export function calendarDateIn(moment: Date, timeZone: string): string {
+    let cached = calendarDateFormatters.get(timeZone);
+
+    if (cached === undefined) {
+        cached = new Intl.DateTimeFormat('en-CA', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            timeZone,
+        });
+        calendarDateFormatters.set(timeZone, cached);
+    }
+
+    const { year, month, day } = Object.fromEntries(
+        cached
+            .formatToParts(moment)
+            .filter((part) => part.type !== 'literal')
+            .map((part) => [part.type, part.value]),
+    );
+
+    return `${year}-${month}-${day}`;
 }
 
 const relativeTime = new Intl.RelativeTimeFormat('id-ID', {

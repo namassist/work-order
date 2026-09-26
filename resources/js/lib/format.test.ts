@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
+    calendarDateIn,
     formatCalendarDate,
+    formatCalendarDateRange,
     formatDate,
     formatDateTime,
     formatFileSize,
@@ -79,5 +81,40 @@ describe('formatRelative', () => {
         expect(formatRelative('2026-07-20T12:00:00Z', now)).toBe(
             '2 bulan yang lalu',
         );
+    });
+});
+
+describe('calendarDateIn', () => {
+    it('names the day in the display timezone, not in UTC', () => {
+        expect(calendarDateIn(new Date('2026-09-30T17:30:00Z'), WITA)).toBe(
+            '2026-10-01',
+        );
+    });
+
+    it('keeps the same day before midnight in the display timezone', () => {
+        expect(calendarDateIn(new Date('2026-09-30T15:59:00Z'), WITA)).toBe(
+            '2026-09-30',
+        );
+    });
+});
+
+describe('formatCalendarDateRange', () => {
+    it('names both ends of a range', () => {
+        expect(formatCalendarDateRange('2026-09-01', '2026-09-27')).toBe(
+            '1 Sep 2026 – 27 Sep 2026',
+        );
+    });
+
+    it('names a range open on one side', () => {
+        expect(formatCalendarDateRange('2026-09-01', '')).toBe(
+            'Sejak 1 Sep 2026',
+        );
+        expect(formatCalendarDateRange('', '2026-09-27')).toBe(
+            'Sampai 27 Sep 2026',
+        );
+    });
+
+    it('is empty without either end', () => {
+        expect(formatCalendarDateRange('', '')).toBe('');
     });
 });
