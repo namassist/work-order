@@ -8,6 +8,7 @@ namespace App\Enums;
 enum AuditSubject: string
 {
     case User = 'user';
+    case Company = 'company';
     case Department = 'department';
     case WorkOrderCategory = 'wo-category';
     case WorkOrder = 'work-order';
@@ -20,6 +21,7 @@ enum AuditSubject: string
     {
         return match ($this) {
             self::User => 'Pengguna',
+            self::Company => 'Perusahaan',
             self::Department => 'Departemen',
             self::WorkOrderCategory => 'Kategori WO',
             self::WorkOrder => 'Work Order',
@@ -34,7 +36,7 @@ enum AuditSubject: string
      */
     public static function withHistoryPanel(): array
     {
-        return [self::User->value, self::Department->value, self::WorkOrderCategory->value, self::WorkOrder->value];
+        return [self::User->value, self::Company->value, self::Department->value, self::WorkOrderCategory->value, self::WorkOrder->value];
     }
 
     /**

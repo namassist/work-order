@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\SystemRole;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrderCategory;
@@ -20,7 +21,10 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(RolePermissionSeeder::class);
 
-        $department = Department::factory()->create([
+        Company::factory()->client()->create(['code' => 'IC', 'name' => 'IC', 'email_domains' => []]);
+        $executor = Company::factory()->create(['code' => 'UGL', 'name' => 'Unggul', 'email_domains' => []]);
+
+        $department = Department::factory()->for($executor)->create([
             'code' => 'IT',
             'name' => 'Information Technology',
         ]);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreDepartmentRequest;
 use App\Http\Requests\Admin\UpdateDepartmentRequest;
+use App\Models\Company;
 use App\Models\Department;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class DepartmentController extends Controller
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', 'in:active,inactive'],
+            'company' => ['nullable', 'integer'],
             'trashed' => ['nullable', 'boolean'],
         ]);
 
@@ -34,9 +36,11 @@ class DepartmentController extends Controller
         }
 
         $departments = Department::query()
+            ->with('company:id,code,name,is_client,deleted_at')
             ->withCount('users')
             ->search($filters['search'] ?? null)
             ->when($filters['status'] ?? null, fn ($query, string $status) => $query->where('is_active', $status === 'active'))
+            ->when($filters['company'] ?? null, fn ($query, int $companyId) => $query->where('company_id', $companyId))
             ->when($showTrashed, fn ($query) => $query->onlyTrashed())
             ->orderBy('code')
             ->paginate(15)
@@ -49,8 +53,19 @@ class DepartmentController extends Controller
             'filters' => [
                 'search' => $filters['search'] ?? '',
                 'status' => $filters['status'] ?? '',
+                'company' => isset($filters['company']) ? (string) $filters['company'] : '',
                 'trashed' => $showTrashed,
             ],
+            // Every company for the filter; the form offers only active ones
+            // plus the department's current company.
+            'companies' => Company::query()
+                ->withTrashed()
+                ->orderBy('code')
+                ->get(['id', 'code', 'name', 'is_client', 'is_active', 'deleted_at'])
+                ->map(fn (Company $company): array => [
+                    ...$company->only(['id', 'code', 'name', 'is_client', 'is_active']),
+                    'deleted' => $company->trashed(),
+                ]),
             'can' => [
                 'create' => $user?->can('create', Department::class) ?? false,
                 'update' => $user?->can('update', new Department) ?? false,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, setLayoutProps, useForm } from '@inertiajs/vue3';
-import { computed, watchEffect } from 'vue';
+import { computed, watch, watchEffect } from 'vue';
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
 import InputError from '@/components/InputError.vue';
 import FormFooter from '@/components/FormFooter.vue';
@@ -9,12 +9,25 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { EditableRole } from '@/types';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import type { CompanyScope, EditableRole, SelectOption } from '@/types';
 
 const props = defineProps<{
     role: EditableRole | null;
     permissionGroups: Record<string, string[]>;
+    companyScopes: SelectOption[];
+    /** Permissions only a role for the executor company can hold. */
+    internalOnlyPermissions: string[];
 }>();
+
+/** The select's value for a role that fits users of any company. */
+const ANY_COMPANY = 'any';
 
 const pageTitle = computed(() =>
     props.role ? `Ubah role ${props.role.name}` : 'Tambah role',
@@ -35,7 +48,25 @@ const locked = props.role?.is_system ?? false;
 
 const form = useForm({
     name: props.role?.name ?? '',
+    company_scope: (props.role?.company_scope ?? ANY_COMPANY) as
+        | CompanyScope
+        | typeof ANY_COMPANY,
     permissions: props.role?.permissions ?? ([] as string[]),
+});
+
+const forExecutor = computed(() => form.company_scope === 'executor');
+
+const isUnavailable = (permission: string) =>
+    !forExecutor.value && props.internalOnlyPermissions.includes(permission);
+
+// Only executor roles hold internal-only permissions, so drop them when the
+// scope changes away from executor.
+watch(forExecutor, (executor) => {
+    if (!executor) {
+        form.permissions = form.permissions.filter(
+            (permission) => !props.internalOnlyPermissions.includes(permission),
+        );
+    }
 });
 
 const togglePermission = (
@@ -51,7 +82,11 @@ const togglePermission = (
 const actionLabel = (permission: string) => permission.split('.')[1];
 
 const submit = () => {
-    form.submit(
+    form.transform((data) => ({
+        ...data,
+        company_scope:
+            data.company_scope === ANY_COMPANY ? null : data.company_scope,
+    })).submit(
         props.role
             ? RoleController.update(props.role.id)
             : RoleController.store(),
@@ -89,6 +124,34 @@ const submit = () => {
                     <InputError :message="form.errors.name" />
                 </div>
 
+                <div class="grid max-w-sm gap-2">
+                    <Label for="role-scope">Berlaku untuk</Label>
+                    <Select v-model="form.company_scope" :disabled="locked">
+                        <SelectTrigger id="role-scope" class="w-full">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem :value="ANY_COMPANY">
+                                Semua perusahaan
+                            </SelectItem>
+                            <SelectItem
+                                v-for="scope in companyScopes"
+                                :key="scope.value"
+                                :value="scope.value"
+                            >
+                                {{ scope.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p class="text-xs text-muted-foreground">
+                        Role hanya dapat diberikan kepada pengguna perusahaan
+                        yang sesuai. Hak akses internal (master data, pengguna,
+                        role, log aktivitas, semua WO) hanya untuk role
+                        perusahaan pelaksana.
+                    </p>
+                    <InputError :message="form.errors.company_scope" />
+                </div>
+
                 <fieldset class="space-y-4">
                     <legend class="text-sm font-medium">Hak akses</legend>
                     <div
@@ -108,7 +171,9 @@ const submit = () => {
                                     :model-value="
                                         form.permissions.includes(permission)
                                     "
-                                    :disabled="locked"
+                                    :disabled="
+                                        locked || isUnavailable(permission)
+                                    "
                                     @update:model-value="
                                         togglePermission(permission, $event)
                                     "

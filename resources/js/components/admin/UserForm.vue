@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3';
+import { computed, watch } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import FormFooter from '@/components/FormFooter.vue';
 import InputError from '@/components/InputError.vue';
@@ -10,19 +11,31 @@ import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
+    SelectGroup,
     SelectItem,
+    SelectLabel,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import type { DepartmentOption, EditableUser } from '@/types';
+import type {
+    AssignableDepartment,
+    AssignableRole,
+    CompanyScope,
+    EditableUser,
+} from '@/types';
 
 const props = defineProps<{
     user: EditableUser | null;
-    departments: DepartmentOption[];
+    departments: AssignableDepartment[];
     /** Null when the current user may not assign roles. */
-    roles: string[] | null;
+    roles: AssignableRole[] | null;
     isSelf?: boolean;
 }>();
+
+const SCOPE_LABELS: Record<CompanyScope, string> = {
+    client: 'perusahaan klien',
+    executor: 'perusahaan pelaksana',
+};
 
 const form = useForm({
     name: props.user?.name ?? '',
@@ -30,6 +43,43 @@ const form = useForm({
     department_id: props.user?.department_id ?? null,
     is_active: props.user?.is_active ?? true,
     roles: props.user?.roles ?? [],
+});
+
+// Departments grouped under their company, in the order the server sent them.
+const departmentGroups = computed(() => {
+    const groups = new Map<string, AssignableDepartment[]>();
+
+    for (const department of props.departments) {
+        const name = department.company.name;
+        groups.set(name, [...(groups.get(name) ?? []), department]);
+    }
+
+    return [...groups].map(([company, departments]) => ({
+        company,
+        departments,
+    }));
+});
+
+// Roles fit users of one company kind, see App\Enums\CompanyScope. The
+// server refuses the rest; the form only disables them.
+const selectedScope = computed<CompanyScope | null>(
+    () =>
+        props.departments.find(
+            (department) => department.id === form.department_id,
+        )?.company.scope ?? null,
+);
+
+const fits = (role: AssignableRole) =>
+    role.company_scope === null ||
+    selectedScope.value === null ||
+    role.company_scope === selectedScope.value;
+
+watch(selectedScope, () => {
+    form.roles = form.roles.filter((name) => {
+        const role = props.roles?.find((candidate) => candidate.name === name);
+
+        return role === undefined || fits(role);
+    });
 });
 
 const toggleRole = (role: string, checked: boolean | 'indeterminate') => {
@@ -90,16 +140,22 @@ const submit = () => {
                             <SelectValue placeholder="Pilih departemen" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem
-                                v-for="department in departments"
-                                :key="department.id"
-                                :value="department.id"
+                            <SelectGroup
+                                v-for="group in departmentGroups"
+                                :key="group.company"
                             >
-                                <span class="font-mono">{{
-                                    department.code
-                                }}</span>
-                                {{ department.name }}
-                            </SelectItem>
+                                <SelectLabel>{{ group.company }}</SelectLabel>
+                                <SelectItem
+                                    v-for="department in group.departments"
+                                    :key="department.id"
+                                    :value="department.id"
+                                >
+                                    <span class="font-mono">{{
+                                        department.code
+                                    }}</span>
+                                    {{ department.name }}
+                                </SelectItem>
+                            </SelectGroup>
                         </SelectContent>
                     </Select>
                     <InputError :message="form.errors.department_id" />
@@ -127,15 +183,27 @@ const submit = () => {
                 <div class="flex flex-wrap gap-x-6 gap-y-3">
                     <div
                         v-for="role in roles"
-                        :key="role"
+                        :key="role.name"
                         class="flex items-center gap-2"
                     >
                         <Checkbox
-                            :id="`role-${role}`"
-                            :model-value="form.roles.includes(role)"
-                            @update:model-value="toggleRole(role, $event)"
+                            :id="`role-${role.name}`"
+                            :model-value="form.roles.includes(role.name)"
+                            :disabled="!fits(role)"
+                            @update:model-value="toggleRole(role.name, $event)"
                         />
-                        <Label :for="`role-${role}`">{{ role }}</Label>
+                        <Label
+                            :for="`role-${role.name}`"
+                            :class="{ 'text-muted-foreground': !fits(role) }"
+                        >
+                            {{ role.name }}
+                            <span
+                                v-if="!fits(role) && role.company_scope"
+                                class="text-xs font-normal"
+                            >
+                                (khusus {{ SCOPE_LABELS[role.company_scope] }})
+                            </span>
+                        </Label>
                     </div>
                 </div>
                 <InputError :message="form.errors.roles" />

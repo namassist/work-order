@@ -3,11 +3,11 @@ import { Head } from '@inertiajs/vue3';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import UserForm from '@/components/admin/UserForm.vue';
 import PagePanel from '@/components/PagePanel.vue';
-import type { DepartmentOption } from '@/types';
+import type { AssignableDepartment, AssignableRole } from '@/types';
 
 defineProps<{
-    departments: DepartmentOption[];
-    roles: string[] | null;
+    departments: AssignableDepartment[];
+    roles: AssignableRole[] | null;
 }>();
 
 defineOptions({

@@ -9,12 +9,16 @@ import ListToolbar from '@/components/ListToolbar.vue';
 import PagePanel from '@/components/PagePanel.vue';
 import { Button } from '@/components/ui/button';
 import { useCan } from '@/composables/useCan';
-import type { DepartmentOption, EditableUser } from '@/types';
+import type {
+    AssignableDepartment,
+    AssignableRole,
+    EditableUser,
+} from '@/types';
 
 defineProps<{
     user: EditableUser;
-    departments: DepartmentOption[];
-    roles: string[] | null;
+    departments: AssignableDepartment[];
+    roles: AssignableRole[] | null;
     isSelf: boolean;
 }>();
 

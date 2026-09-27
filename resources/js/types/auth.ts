@@ -13,4 +13,6 @@ export type User = {
 export type Auth = {
     user: User;
     permissions: string[];
+    /** Whether the user works for a client company (IC), see User::isClient(). */
+    isClient: boolean;
 };

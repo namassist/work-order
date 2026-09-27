@@ -25,14 +25,14 @@ execution and invoicing until payment is received.
 
 ### Roles
 
-| Role | Company | Can |
-|---|---|---|
-| `pemohon` | IC | Create, edit, submit, revise, resubmit and cancel WOs for their own department |
-| `pelaksana` **(Proposed, replaces `approver`)** | Unggul | Act on WOs addressed to their department: accept, reject, start, move to invoicing |
-| `keuangan` | Unggul | See all submitted WOs; confirm payment received (Penagihan → Selesai) |
-| `koordinator` **(Proposed)** | Unggul | Enter WOs on behalf of IC (`work-orders.create-on-behalf`) and act as the requester side for those WOs |
-| `viewer` | Either | Read-only within their visibility |
-| `admin` | Unggul | Everything, including user and master data management and registration approval |
+| Role                                            | Company | Can                                                                                                    |
+| ----------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `pemohon`                                       | IC      | Create, edit, submit, revise, resubmit and cancel WOs for their own department                         |
+| `pelaksana` **(Proposed, replaces `approver`)** | Unggul  | Act on WOs addressed to their department: accept, reject, start, move to invoicing                     |
+| `keuangan`                                      | Unggul  | See all submitted WOs; confirm payment received (Penagihan → Selesai)                                  |
+| `koordinator` **(Proposed)**                    | Unggul  | Enter WOs on behalf of IC (`work-orders.create-on-behalf`) and act as the requester side for those WOs |
+| `viewer`                                        | Either  | Read-only within their visibility                                                                      |
+| `admin`                                         | Unggul  | Everything, including user and master data management and registration approval                        |
 
 A user can hold multiple roles, but only roles that fit their company.
 
@@ -44,8 +44,8 @@ A user can hold multiple roles, but only roles that fit their company.
    from the email domain.
 3. New accounts are **pending**: after login they only see "Akun Anda sedang ditinjau admin".
 4. Admin reviews pending registrations (sidebar badge with count):
-   - **Approve:** assign role(s); may correct company and department.
-   - **Reject:** with a reason.
+    - **Approve:** assign role(s); may correct company and department.
+    - **Reject:** with a reason.
 5. No role is ever granted automatically.
 6. No forced password change (the user chose the password).
 7. Named rate limiter on registration. Registration, approval and rejection are audit-logged.
@@ -83,29 +83,29 @@ Dibatalkan: from Draft, Diajukan or Ditolak
 "Requester side" = users of the requester department with `pemohon`, or the koordinator who
 entered the WO.
 
-| From → To | By | Requirements |
-|---|---|---|
-| Draft → Diajukan | Requester side | Target department set. Number assigned on the first submission only |
-| Diajukan → Dikerjakan | Pelaksana of the target department | Optional note |
-| Diajukan → Ditolak | Pelaksana of the target department | **Note required** |
-| Ditolak → Diajukan | Requester side | After revision; keeps the same number |
-| Dikerjakan → Penagihan | Pelaksana of the target department | Invoice number, invoice date and **at least one invoice file** required; amount, due date and BAST optional |
-| Penagihan → Selesai | Keuangan (Unggul) | Payment date required; proof of payment optional |
-| Draft / Diajukan / Ditolak → Dibatalkan | Requester side | **Note required** |
+| From → To                               | By                                 | Requirements                                                                                                |
+| --------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Draft → Diajukan                        | Requester side                     | Target department set. Number assigned on the first submission only                                         |
+| Diajukan → Dikerjakan                   | Pelaksana of the target department | Optional note                                                                                               |
+| Diajukan → Ditolak                      | Pelaksana of the target department | **Note required**                                                                                           |
+| Ditolak → Diajukan                      | Requester side                     | After revision; keeps the same number                                                                       |
+| Dikerjakan → Penagihan                  | Pelaksana of the target department | Invoice number, invoice date and **at least one invoice file** required; amount, due date and BAST optional |
+| Penagihan → Selesai                     | Keuangan (Unggul)                  | Payment date required; proof of payment optional                                                            |
+| Draft / Diajukan / Ditolak → Dibatalkan | Requester side                     | **Note required**                                                                                           |
 
 Every transition writes a status history row and an audit entry.
 
 ### Status properties
 
-| Status | Requester can edit | Comments | Attachments | Overdue basis | Final |
-|---|---|---|---|---|---|
-| Draft | Yes | Yes | Requester: dokumen | none | No |
-| Diajukan | No | Yes | none | target date | No |
-| Ditolak | Yes | Yes | Requester: dokumen | none | No |
-| Dikerjakan | No | Yes | Pelaksana: BAST, dokumen | target date | No |
-| Penagihan | No | Yes | Keuangan: bukti bayar | payment due date | No |
-| Selesai | No | Read-only | none | none | Yes |
-| Dibatalkan | No | Read-only | none | none | Yes |
+| Status     | Requester can edit | Comments  | Attachments              | Overdue basis    | Final |
+| ---------- | ------------------ | --------- | ------------------------ | ---------------- | ----- |
+| Draft      | Yes                | Yes       | Requester: dokumen       | none             | No    |
+| Diajukan   | No                 | Yes       | none                     | target date      | No    |
+| Ditolak    | Yes                | Yes       | Requester: dokumen       | none             | No    |
+| Dikerjakan | No                 | Yes       | Pelaksana: BAST, dokumen | target date      | No    |
+| Penagihan  | No                 | Yes       | Keuangan: bukti bayar    | payment due date | No    |
+| Selesai    | No                 | Read-only | none                     | none             | Yes   |
+| Dibatalkan | No                 | Read-only | none                     | none             | Yes   |
 
 These map to the existing status flags (`isEditable`, `acceptsComments`,
 `countsAsOverdueWhenLate`) plus new ones as needed. Every new status must set all flags.
@@ -179,7 +179,7 @@ Email notifications depend on the mail setup (see open points).
 0. This document (reviewed and confirmed)
 1. Cross-company foundation: companies, target department, requester vs entered-by,
    on-behalf creation, visibility and IC isolation, roles, demo seeder
-1b. Registration with admin approval and email domain rules
+   1b. Registration with admin approval and email domain rules
 2. Full status flow (Section 5)
 3. Invoicing (Section 8)
 4. Deadlines, dashboard, filters and export for the new statuses and fields

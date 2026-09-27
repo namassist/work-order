@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\Media;
 use App\Models\User;
@@ -56,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Relation::enforceMorphMap([
             'user' => User::class,
+            'company' => Company::class,
             'department' => Department::class,
             'wo-category' => WorkOrderCategory::class,
             'work-order' => WorkOrder::class,

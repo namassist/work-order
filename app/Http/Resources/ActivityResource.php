@@ -4,7 +4,9 @@ namespace App\Http\Resources;
 
 use App\Enums\AuditEvent;
 use App\Enums\AuditSubject;
+use App\Enums\CompanyScope;
 use App\Enums\WorkOrderUrgency;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
@@ -40,6 +42,10 @@ class ActivityResource extends JsonResource
         'description' => 'Deskripsi',
         'is_active' => 'Status',
         'department_id' => 'Departemen',
+        'company_id' => 'Perusahaan',
+        'is_client' => 'Jenis perusahaan',
+        'email_domains' => 'Domain email',
+        'company_scope' => 'Berlaku untuk',
         'must_change_password' => 'Wajib ganti password',
         'roles' => 'Role',
         'permissions' => 'Izin',
@@ -56,9 +62,10 @@ class ActivityResource extends JsonResource
     /**
      * Logged foreign keys shown as the referenced record's code.
      *
-     * @var array<string, class-string<Department|WorkOrderCategory>>
+     * @var array<string, class-string<Company|Department|WorkOrderCategory>>
      */
     private const array REFERENCE_FIELDS = [
+        'company_id' => Company::class,
         'department_id' => Department::class,
         'work_order_category_id' => WorkOrderCategory::class,
     ];
@@ -199,6 +206,8 @@ class ActivityResource extends JsonResource
         return match (true) {
             $value === null => null,
             $field === 'is_active' => $value ? 'Aktif' : 'Nonaktif',
+            $field === 'is_client' => $value ? 'Klien' : 'Pelaksana',
+            $field === 'company_scope' && is_string($value) => CompanyScope::tryFrom($value)?->label() ?? $value,
             isset(self::REFERENCE_FIELDS[$field]) => $this->referenceCodes[$field][$value] ?? '#'.$value,
             $field === 'status' && is_string($value) => WorkOrderStatus::labelFor($value),
             $field === 'urgency' && is_string($value) => WorkOrderUrgency::tryFrom($value)?->label() ?? $value,

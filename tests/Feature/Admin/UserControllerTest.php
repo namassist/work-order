@@ -77,14 +77,15 @@ describe('index', function () {
     });
 
     it('leaves soft-deleted departments out of the filter options', function () {
+        $viewer = userWithPermissions(Permission::UsersView);
         Department::factory()->create(['code' => 'FIN']);
         Department::factory()->create(['code' => 'OLD'])->delete();
 
-        $this->actingAs(userWithPermissions(Permission::UsersView))
+        $this->actingAs($viewer)
             ->get(route('admin.users.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
-                ->has('departments', 1)
-                ->where('departments.0.code', 'FIN'));
+                ->where('departments', fn ($departments): bool => collect($departments)->pluck('code')->sort()->values()->all()
+                    === collect(['FIN', $viewer->department->code])->sort()->values()->all()));
     });
 
     it('counts users by status, ignoring list filters and deleted users', function () {
@@ -110,14 +111,14 @@ describe('store', function () {
     it('creates a user with roles and the default password without sending email', function () {
         Notification::fake();
         config(['auth.default_user_password' => 'Rahasia#2026']);
-        $department = Department::factory()->create();
+        $department = Department::factory()->client()->create();
 
         $this->actingAs(adminUser())
             ->post(route('admin.users.store'), [
                 'name' => 'Budi',
                 'email' => 'budi@example.com',
                 'department_id' => $department->id,
-                'roles' => ['pemohon', 'approver'],
+                'roles' => ['pemohon', 'viewer'],
             ])
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('admin.users.index'));
@@ -128,7 +129,7 @@ describe('store', function () {
             ->is_active->toBeTrue()
             ->must_change_password->toBeTrue()
             ->and(Hash::check('Rahasia#2026', $user->password))->toBeTrue()
-            ->and($user->getRoleNames()->sort()->values()->all())->toBe(['approver', 'pemohon']);
+            ->and($user->getRoleNames()->sort()->values()->all())->toBe(['pemohon', 'viewer']);
         Notification::assertNothingSent();
     });
 
@@ -306,7 +307,7 @@ describe('update', function () {
 describe('destroy', function () {
     it('soft-deletes a user and keeps their role assignments', function () {
         $admin = adminUser();
-        $user = User::factory()->create()->assignRole('pemohon');
+        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('pemohon');
 
         $this->actingAs($admin)
             ->delete(route('admin.users.destroy', $user))
@@ -371,4 +372,116 @@ describe('authorization', function () {
         'destroy' => ['delete', fn (User $user): string => route('admin.users.destroy', $user)],
         'restore' => ['patch', fn (User $user, User $deleted): string => route('admin.users.restore', $deleted)],
     ]);
+});
+
+describe('roles fit the company', function () {
+    it('accepts or refuses a role depending on the department\'s company', function (string $role, bool $clientDepartment, bool $fits) {
+        config(['auth.default_user_password' => 'Rahasia#2026']);
+        $department = $clientDepartment ? Department::factory()->client()->create() : Department::factory()->create();
+
+        $response = $this->actingAs(adminUser())->post(route('admin.users.store'), [
+            'name' => 'Budi',
+            'email' => 'budi@example.com',
+            'department_id' => $department->id,
+            'roles' => [$role],
+        ]);
+
+        if ($fits) {
+            $response->assertSessionHasNoErrors();
+            expect(User::where('email', 'budi@example.com')->firstOrFail()->hasRole($role))->toBeTrue();
+        } else {
+            $response->assertSessionHasErrors('roles');
+            $this->assertDatabaseMissing('users', ['email' => 'budi@example.com']);
+        }
+    })->with([
+        'pemohon, IC' => ['pemohon', true, true],
+        'pemohon, Unggul' => ['pemohon', false, false],
+        'pelaksana, IC' => ['pelaksana', true, false],
+        'pelaksana, Unggul' => ['pelaksana', false, true],
+        'koordinator, IC' => ['koordinator', true, false],
+        'koordinator, Unggul' => ['koordinator', false, true],
+        'keuangan, IC' => ['keuangan', true, false],
+        'keuangan, Unggul' => ['keuangan', false, true],
+        'admin, IC' => ['admin', true, false],
+        'admin, Unggul' => ['admin', false, true],
+        'viewer, IC' => ['viewer', true, true],
+        'viewer, Unggul' => ['viewer', false, true],
+    ]);
+
+    it('refuses roles that do not fit when an update changes the roles', function () {
+        $admin = adminUser();
+        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('pemohon');
+
+        $this->actingAs($admin)
+            ->put(route('admin.users.update', $user), [
+                'name' => $user->name,
+                'email' => $user->email,
+                'department_id' => $user->department_id,
+                'is_active' => true,
+                'roles' => ['pemohon', 'keuangan'],
+            ])
+            ->assertSessionHasErrors(['roles' => 'Role keuangan tidak dapat diberikan kepada pengguna '.$user->department->company->name.' (perusahaan klien).']);
+
+        expect($user->refresh()->getRoleNames()->all())->toBe(['pemohon']);
+    });
+
+    it('refuses moving a user to another company\'s department while their roles do not fit it', function () {
+        $editor = userWithPermissions(Permission::UsersUpdate);
+        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('pemohon');
+        $unggul = Department::factory()->create();
+
+        // Without assignRoles, the roles field is not sent: the current roles are checked.
+        $this->actingAs($editor)
+            ->put(route('admin.users.update', $user), [
+                'name' => $user->name,
+                'email' => $user->email,
+                'department_id' => $unggul->id,
+                'is_active' => true,
+            ])
+            ->assertSessionHasErrors('department_id');
+
+        expect($user->refresh()->department_id)->not->toBe($unggul->id);
+    });
+
+    it('moves a user to another company when the new roles fit it', function () {
+        $admin = adminUser();
+        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('pemohon');
+        $unggul = Department::factory()->create();
+
+        $this->actingAs($admin)
+            ->put(route('admin.users.update', $user), [
+                'name' => $user->name,
+                'email' => $user->email,
+                'department_id' => $unggul->id,
+                'is_active' => true,
+                'roles' => ['pelaksana'],
+            ])
+            ->assertSessionHasNoErrors();
+
+        expect($user->refresh())
+            ->department_id->toBe($unggul->id)
+            ->and($user->getRoleNames()->all())->toBe(['pelaksana']);
+    });
+
+    it('gives the form each department\'s company and each role\'s scope', function () {
+        $admin = adminUser();
+        $client = Department::factory()->client()->create(['code' => 'PRD']);
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.create'))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('departments', fn ($departments): bool => collect($departments)->firstWhere('code', 'PRD')['company'] === [
+                    'code' => $client->company->code,
+                    'name' => $client->company->name,
+                    'scope' => 'client',
+                ])
+                ->where('roles', fn ($roles): bool => collect($roles)->pluck('company_scope', 'name')->all() === [
+                    'admin' => 'executor',
+                    'keuangan' => 'executor',
+                    'koordinator' => 'executor',
+                    'pelaksana' => 'executor',
+                    'pemohon' => 'client',
+                    'viewer' => null,
+                ]));
+    });
 });

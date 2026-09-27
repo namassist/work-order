@@ -16,17 +16,31 @@ function activitiesWithEvent(string $event, string $subjectType): array
     return Activity::query()->forEvent($event)->where('subject_type', $subjectType)->orderBy('id')->get()->all();
 }
 
+/**
+ * The seeded viewer role, scoped to the executor company (so it may hold
+ * internal-only permissions) with exactly the given permissions.
+ *
+ * @param  list<string>  $permissions
+ */
+function executorViewerRole(array $permissions): Role
+{
+    $role = Role::findByName('viewer');
+    $role->forceFill(['company_scope' => 'executor'])->save();
+
+    return $role->syncPermissions($permissions);
+}
+
 describe('user roles', function () {
     it('logs the roles before and after an admin changes them', function () {
         $admin = adminUser();
-        $user = User::factory()->for(Department::factory())->create()->assignRole('viewer', 'pemohon');
+        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('viewer');
 
         $this->actingAs($admin)->put(route('admin.users.update', $user), [
             'name' => $user->name,
             'email' => $user->email,
             'department_id' => $user->department_id,
             'is_active' => true,
-            'roles' => ['keuangan', 'pemohon'],
+            'roles' => ['pemohon', 'viewer'],
         ])->assertSessionHasNoErrors();
 
         [$activity] = activitiesWithEvent('roles_updated', 'user');
@@ -35,8 +49,8 @@ describe('user roles', function () {
             ->subject_id->toBe($user->id)
             ->causer_id->toBe($admin->id)
             ->and($activity->attribute_changes->all())->toBe([
-                'attributes' => ['roles' => ['keuangan', 'pemohon']],
-                'old' => ['roles' => ['pemohon', 'viewer']],
+                'attributes' => ['roles' => ['pemohon', 'viewer']],
+                'old' => ['roles' => ['viewer']],
             ]);
     });
 
@@ -94,10 +108,11 @@ describe('roles', function () {
 
     it('logs a rename and permission change with before and after values', function () {
         $manager = userWithPermissions(Permission::RolesManage);
-        $role = Role::findByName('viewer')->syncPermissions([Permission::DepartmentsView->value, Permission::WorkOrdersView->value]);
+        $role = executorViewerRole([Permission::DepartmentsView->value, Permission::WorkOrdersView->value]);
 
         $this->actingAs($manager)->put(route('admin.roles.update', $role), [
             'name' => 'pengamat',
+            'company_scope' => 'executor',
             'permissions' => [Permission::WorkOrdersView->value, Permission::UsersView->value],
         ])->assertSessionHasNoErrors();
 
@@ -111,10 +126,11 @@ describe('roles', function () {
 
     it('logs only the permissions when the name is unchanged', function () {
         $manager = userWithPermissions(Permission::RolesManage);
-        $role = Role::findByName('viewer')->syncPermissions([Permission::DepartmentsView->value]);
+        $role = executorViewerRole([Permission::DepartmentsView->value]);
 
         $this->actingAs($manager)->put(route('admin.roles.update', $role), [
             'name' => 'viewer',
+            'company_scope' => 'executor',
             'permissions' => [Permission::DepartmentsView->value, Permission::UsersView->value],
         ])->assertSessionHasNoErrors();
 
@@ -127,10 +143,11 @@ describe('roles', function () {
 
     it('logs nothing when a role is saved unchanged', function () {
         $manager = userWithPermissions(Permission::RolesManage);
-        $role = Role::findByName('viewer')->syncPermissions([Permission::DepartmentsView->value]);
+        $role = executorViewerRole([Permission::DepartmentsView->value]);
 
         $this->actingAs($manager)->put(route('admin.roles.update', $role), [
             'name' => 'viewer',
+            'company_scope' => 'executor',
             'permissions' => [Permission::DepartmentsView->value],
         ])->assertSessionHasNoErrors();
 
@@ -139,7 +156,7 @@ describe('roles', function () {
 
     it('keeps the name and permissions of a deleted role', function () {
         $manager = userWithPermissions(Permission::RolesManage);
-        $role = Role::findByName('viewer')->syncPermissions([Permission::DepartmentsView->value]);
+        $role = executorViewerRole([Permission::DepartmentsView->value]);
 
         $this->actingAs($manager)->delete(route('admin.roles.destroy', $role))
             ->assertInertiaFlash('toast.type', 'success');
@@ -150,6 +167,7 @@ describe('roles', function () {
             ->subject_id->toBe($role->id)
             ->and($activity->attribute_changes->get('old'))->toBe([
                 'name' => 'viewer',
+                'company_scope' => 'executor',
                 'permissions' => [Permission::DepartmentsView->value],
             ]);
     });

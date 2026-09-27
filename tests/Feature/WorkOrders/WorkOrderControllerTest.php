@@ -51,7 +51,7 @@ describe('index', function () {
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->has('workOrders.data', 1)
                 ->where('workOrders.data.0.id', $other->id)
-                ->has('departments', 2));
+                ->has('departments', Department::count()));
     });
 
     it('ignores a department filter that falls outside the user\'s visibility', function () {
@@ -175,16 +175,16 @@ describe('index', function () {
                 ]));
     });
 
-    it('counts nothing for a user without a department', function () {
+    it('counts only their own department\'s work orders for a client user holding work-orders.view-all', function () {
+        $client = Department::factory()->client()->create();
+        WorkOrder::factory()->create(['department_id' => $client->id]);
         ownWorkOrder();
-        $user = userWithPermissions(Permission::WorkOrdersView);
-        $user->update(['department_id' => null]);
 
-        $this->actingAs($user)
+        $this->actingAs(userInDepartment($client, Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
             ->get(route('work-orders.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
-                ->where('stats.total', 0)
-                ->where('stats.statuses.draft', 0));
+                ->where('stats.total', 1)
+                ->where('departments', null));
     });
 
     it('counts every department\'s work orders with work-orders.view-all', function () {
@@ -268,12 +268,6 @@ describe('create and store', function () {
                 'target_date' => '2026-09-25',
             ])
             ->assertSessionHasErrors(['target_date' => 'Target selesai tidak boleh sebelum hari ini.']);
-    });
-
-    it('forbids users without a department', function () {
-        $this->actingAs(userWithPermissions(Permission::WorkOrdersCreate))
-            ->post(route('work-orders.store'), ['title' => 'X', 'work_order_category_id' => $this->category->id])
-            ->assertForbidden();
     });
 
     it('attaches the documents chosen on the form', function () {

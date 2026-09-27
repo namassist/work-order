@@ -43,6 +43,7 @@ class UpdateRoleRequest extends FormRequest
     public function after(): array
     {
         return [
+            ...$this->companyScopeChecks($this->role()),
             function (Validator $validator): void {
                 if ($this->revokesLastRoleManagement()) {
                     $validator->errors()->add('permissions', __('Role ini satu-satunya sumber hak kelola role bagi pengguna aktif; permission roles.manage tidak boleh dicabut.'));

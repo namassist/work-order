@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import {
+    Building,
     Building2,
     ClipboardList,
     History,
@@ -11,6 +12,7 @@ import {
 } from '@lucide/vue';
 import { computed } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
+import CompanyController from '@/actions/App/Http/Controllers/Admin/CompanyController';
 import DepartmentController from '@/actions/App/Http/Controllers/Admin/DepartmentController';
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
@@ -34,7 +36,8 @@ import type { NavGroup } from '@/types';
 /**
  * Sidebar sections in display order. Each item names the permission that
  * shows it (a UI hint only; the server authorizes every request), and a
- * group whose items are all hidden disappears with its heading.
+ * group whose items are all hidden disappears with its heading. Internal
+ * groups are never shown to client company (IC) users.
  */
 const navGroups: NavGroup[] = [
     {
@@ -53,7 +56,14 @@ const navGroups: NavGroup[] = [
     },
     {
         label: 'Master Data',
+        internal: true,
         items: [
+            {
+                title: 'Perusahaan',
+                href: CompanyController.index(),
+                icon: Building,
+                permission: 'companies.view',
+            },
             {
                 title: 'Departemen',
                 href: DepartmentController.index(),
@@ -70,6 +80,7 @@ const navGroups: NavGroup[] = [
     },
     {
         label: 'Administrasi',
+        internal: true,
         items: [
             {
                 title: 'Pengguna',
@@ -94,7 +105,10 @@ const navGroups: NavGroup[] = [
 ];
 
 const can = useCan();
-const visibleGroups = computed(() => visibleNavGroups(navGroups, can));
+const page = usePage();
+const visibleGroups = computed(() =>
+    visibleNavGroups(navGroups, can, page.props.auth.isClient),
+);
 </script>
 
 <template>

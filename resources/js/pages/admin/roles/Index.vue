@@ -81,6 +81,9 @@ const destroy = () => {
             <TableHeader>
                 <TableRow>
                     <TableHead>Role</TableHead>
+                    <TableHead class="hidden sm:table-cell"
+                        >Berlaku untuk</TableHead
+                    >
                     <TableHead class="text-right">Hak akses</TableHead>
                     <TableHead class="text-right">Pengguna</TableHead>
                     <TableHead class="w-0">
@@ -106,6 +109,11 @@ const destroy = () => {
                                 <Lock /> Sistem
                             </Badge>
                         </div>
+                    </TableCell>
+                    <TableCell
+                        class="hidden whitespace-nowrap text-muted-foreground sm:table-cell"
+                    >
+                        {{ role.company_scope?.label ?? 'Semua perusahaan' }}
                     </TableCell>
                     <TableCell class="text-right tabular-nums">
                         {{ role.permissions_count }}

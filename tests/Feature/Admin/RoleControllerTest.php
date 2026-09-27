@@ -2,6 +2,7 @@
 
 use App\Enums\Permission;
 use App\Enums\SystemRole;
+use App\Models\Department;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -16,9 +17,12 @@ describe('index', function () {
             ->get(route('admin.roles.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->component('admin/roles/Index')
-                ->has('roles', 5)
-                ->where('roles.4.name', 'viewer')
-                ->where('roles.4.users_count', 2));
+                ->has('roles', 6)
+                ->where('roles.0.name', 'admin')
+                ->where('roles.0.company_scope', ['value' => 'executor', 'label' => 'Perusahaan pelaksana'])
+                ->where('roles.5.name', 'viewer')
+                ->where('roles.5.company_scope', null)
+                ->where('roles.5.users_count', 2));
     });
 });
 
@@ -51,6 +55,7 @@ describe('update', function () {
         $this->actingAs($admin)
             ->put(route('admin.roles.update', $role), [
                 'name' => 'pengamat',
+                'company_scope' => 'executor',
                 'permissions' => [Permission::UsersView->value],
             ])
             ->assertSessionHasNoErrors();
@@ -159,4 +164,107 @@ describe('authorization', function () {
         'update' => ['put', fn (Role $role): string => route('admin.roles.update', $role)],
         'destroy' => ['delete', fn (Role $role): string => route('admin.roles.destroy', $role)],
     ]);
+});
+
+describe('company scope', function () {
+    it('stores the company scope of a new role', function () {
+        $this->actingAs(adminUser())
+            ->post(route('admin.roles.store'), [
+                'name' => 'teknisi',
+                'company_scope' => 'executor',
+                'permissions' => [Permission::WorkOrdersView->value],
+            ])
+            ->assertSessionHasNoErrors();
+
+        expect(Role::findByName('teknisi')->company_scope)->toBe('executor');
+    });
+
+    it('refuses internal-only permissions on a role that is not for the executor company', function (?string $scope, Permission $permission) {
+        $this->actingAs(adminUser())
+            ->post(route('admin.roles.store'), [
+                'name' => 'campuran',
+                'company_scope' => $scope,
+                'permissions' => [Permission::WorkOrdersView->value, $permission->value],
+            ])
+            ->assertSessionHasErrors(['permissions' => "Izin internal hanya untuk role perusahaan pelaksana: {$permission->value}."]);
+
+        expect(Role::where('name', 'campuran')->exists())->toBeFalse();
+    })->with(['client' => 'client', 'any company' => null])
+        ->with(fn (): array => array_map(fn (Permission $permission): array => [$permission], array_values(array_filter(Permission::cases(), fn (Permission $permission): bool => $permission->isInternalOnly()))));
+
+    it('allows internal-only permissions on an executor role', function () {
+        $this->actingAs(adminUser())
+            ->post(route('admin.roles.store'), [
+                'name' => 'viewer-internal',
+                'company_scope' => 'executor',
+                'permissions' => [Permission::WorkOrdersView->value, Permission::DepartmentsView->value, Permission::ActivityLogView->value],
+            ])
+            ->assertSessionHasNoErrors();
+
+        expect(Role::findByName('viewer-internal')->permissions)->toHaveCount(3);
+    });
+
+    it('refuses widening an executor role that holds internal-only permissions', function () {
+        $admin = adminUser();
+        $role = Role::create(['name' => 'auditor', 'guard_name' => 'web', 'company_scope' => 'executor'])
+            ->givePermissionTo(Permission::ActivityLogView->value);
+
+        $this->actingAs($admin)
+            ->put(route('admin.roles.update', $role), ['name' => 'auditor', 'company_scope' => null, 'permissions' => [Permission::ActivityLogView->value]])
+            ->assertSessionHasErrors('permissions');
+
+        expect($role->refresh()->company_scope)->toBe('executor');
+    });
+
+    it('keeps the admin role for the executor company', function (?string $scope) {
+        $admin = adminUser();
+        $role = Role::findByName(SystemRole::Admin->value);
+
+        $this->actingAs($admin)
+            ->put(route('admin.roles.update', $role), [
+                'name' => SystemRole::Admin->value,
+                'company_scope' => $scope,
+                'permissions' => Permission::values(),
+            ])
+            ->assertSessionHasErrors(['company_scope' => 'Role admin hanya untuk perusahaan pelaksana.']);
+    })->with(['client', null]);
+
+    it('refuses a scope that excludes users who already hold the role, deleted ones included', function (bool $deleted) {
+        $admin = adminUser();
+        $role = Role::findByName('viewer');
+        $holder = User::factory()->for(Department::factory()->client())->create()->assignRole('viewer');
+
+        if ($deleted) {
+            $holder->delete();
+        }
+
+        $this->actingAs($admin)
+            ->put(route('admin.roles.update', $role), ['name' => 'viewer', 'company_scope' => 'executor', 'permissions' => []])
+            ->assertSessionHasErrors(['company_scope' => '1 pengguna dengan role ini bukan dari perusahaan pelaksana. Ubah role mereka terlebih dahulu.']);
+
+        expect($role->refresh()->company_scope)->toBeNull();
+    })->with(['active holder' => false, 'deleted holder' => true]);
+
+    it('narrows the scope when every holder fits', function () {
+        $admin = adminUser();
+        $role = Role::findByName('viewer');
+        User::factory()->for(Department::factory()->client())->create()->assignRole('viewer');
+
+        $this->actingAs($admin)
+            ->put(route('admin.roles.update', $role), ['name' => 'viewer', 'company_scope' => 'client', 'permissions' => [Permission::WorkOrdersView->value]])
+            ->assertSessionHasNoErrors();
+
+        expect($role->refresh()->company_scope)->toBe('client');
+    });
+
+    it('gives the form the scopes and the internal-only permissions', function () {
+        $this->actingAs(adminUser())
+            ->get(route('admin.roles.create'))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('companyScopes', [
+                    ['value' => 'client', 'label' => 'Perusahaan klien'],
+                    ['value' => 'executor', 'label' => 'Perusahaan pelaksana'],
+                ])
+                ->where('internalOnlyPermissions', Permission::internalOnlyValues()));
+    });
 });
