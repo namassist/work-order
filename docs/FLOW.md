@@ -179,6 +179,10 @@ Email notifications depend on the mail setup (see open points).
 - Whether pelaksana may change urgency or target date.
 - Which roles may export.
 - Whether the WO number should include the target department.
+- Correcting the requester of an on-behalf draft: only the koordinator who entered it may change
+  the requester account or contact name. If that koordinator is unavailable, nobody can correct it
+  (the IC side can still edit the other fields, submit, or cancel). Should another koordinator or
+  admin be allowed to take over?
 
 ## 12. Implementation order
 

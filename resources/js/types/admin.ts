@@ -148,6 +148,8 @@ export type ActivityEntry = {
     } | null;
     causer: { id: number; name: string } | null;
     changes: ActivityChange[];
+    /** "Diinput oleh X atas nama Y" for a work order entered on someone's behalf. */
+    summary: string | null;
     properties: Record<string, string>;
     created_at: string;
 };

@@ -257,6 +257,13 @@ Nanti saya kabari lagi.'],
     ];
 
     /**
+     * People without an account whom the koordinator enters work orders for.
+     *
+     * @var list<string>
+     */
+    private const array CONTACTS = ['Pak Andi', 'Bu Ratna', 'Pak Darto', 'Bu Yuni'];
+
+    /**
      * Posted by the requester on the first work order with comments, then
      * deleted a minute later, so the timeline shows "Komentar dihapus".
      */
@@ -474,9 +481,19 @@ Nanti saya kabari lagi.'],
         $events = [];
         $withComments = 0;
 
+        $koordinator = $users->first(fn (User $user): bool => $user->hasRole('koordinator'));
+
         foreach ($paths as $index => $path) {
             /** @var User $requester */
             $requester = $this->faker->randomElement($requesters);
+            // Every sixth work order is entered by the koordinator on behalf of
+            // IC, every other one of those for a contact without an account.
+            // The koordinator then acts as the requester side of it.
+            $onBehalf = $index % 6 === 5;
+            $contactName = $onBehalf && $index % 12 === 11
+                ? self::CONTACTS[intdiv($index, 12) % count(self::CONTACTS)].', '.$requester->department->name
+                : null;
+            $actor = $onBehalf ? $koordinator : $requester;
             /** @var string $categoryCode */
             $categoryCode = $this->faker->randomElement(array_keys(self::TEMPLATES));
             /** @var User $pelaksana */
@@ -491,14 +508,16 @@ Nanti saya kabari lagi.'],
                     'target_department_id' => $path === 'draft' && $index % 3 === 0 ? null : $pelaksana->department_id,
                 ];
 
-            $events[] = ['at' => $createdAt, 'actor' => $requester, 'run' => function () use (&$created, $index, $attributes, $requester): void {
-                $created[$index] = $this->createWorkOrder->handle($attributes, $requester);
+            $events[] = ['at' => $createdAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $attributes, $requester, $actor, $onBehalf, $contactName): void {
+                $created[$index] = $onBehalf
+                    ? $this->createWorkOrder->handle($attributes, $actor, $requester->department, $contactName === null ? $requester : null, $contactName)
+                    : $this->createWorkOrder->handle($attributes, $requester);
             }];
 
             if ($index % 4 === 0) {
                 foreach ($this->sampleFilesFor($index) as $sample) {
-                    $events[] = ['at' => $createdAt->addMinutes(2), 'actor' => $requester, 'run' => function () use (&$created, $index, $sample, $requester): void {
-                        $this->attachSample($created[$index], $sample, $requester);
+                    $events[] = ['at' => $createdAt->addMinutes(2), 'actor' => $actor, 'run' => function () use (&$created, $index, $sample, $actor): void {
+                        $this->attachSample($created[$index], $sample, $actor);
                     }];
                 }
             }
@@ -515,19 +534,19 @@ Nanti saya kabari lagi.'],
             // which makes them read-only.
             if (in_array($path, ['submitted', 'overdue', 'cancelled_submitted'], true) && in_array($index % 5, [1, 2, 3], true)) {
                 $until = $cancelledAt ?? CarbonImmutable::now()->subHour();
-                array_push($events, ...$this->planComments($created, $index, $nextAt, $until, $requester, $pelaksana, $withComments++ === 0));
+                array_push($events, ...$this->planComments($created, $index, $nextAt, $until, $actor, $pelaksana, $withComments++ === 0));
             }
 
             if ($path === 'cancelled_draft') {
                 $note = $this->faker->randomElement(self::DRAFT_CANCEL_NOTES);
-                $events[] = ['at' => $nextAt, 'actor' => $requester, 'run' => function () use (&$created, $index, $requester, $note): void {
-                    $this->transitionWorkOrder->handle($created[$index], Dibatalkan::getMorphClass(), $requester, $note);
+                $events[] = ['at' => $nextAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $actor, $note): void {
+                    $this->transitionWorkOrder->handle($created[$index], Dibatalkan::getMorphClass(), $actor, $note);
                 }];
             }
 
             if (in_array($path, ['submitted', 'overdue', 'cancelled_submitted'], true)) {
-                $events[] = ['at' => $nextAt, 'actor' => $requester, 'run' => function () use (&$created, $index, $requester): void {
-                    $this->transitionWorkOrder->handle($created[$index], Diajukan::getMorphClass(), $requester);
+                $events[] = ['at' => $nextAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $actor): void {
+                    $this->transitionWorkOrder->handle($created[$index], Diajukan::getMorphClass(), $actor);
                 }];
             }
 

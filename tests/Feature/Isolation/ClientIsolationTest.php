@@ -19,10 +19,11 @@ use Spatie\Permission\Models\Role;
 */
 
 /**
- * Route name segments of the resources only the executor company manages.
+ * Route name segments of the resources only the executor company manages,
+ * and of every endpoint that lists or searches users (requester-accounts).
  * A route whose name contains one must be internal, wherever it is defined.
  */
-const INTERNAL_RESOURCES = ['users', 'roles', 'departments', 'work-order-categories', 'companies', 'activity-log', 'registrations'];
+const INTERNAL_RESOURCES = ['users', 'roles', 'departments', 'work-order-categories', 'companies', 'activity-log', 'registrations', 'requester-accounts'];
 
 /**
  * Every admin.* route with the HTTP method to call it with.
@@ -156,6 +157,10 @@ describe('internal routes', function () {
         expect($unguarded)->toBe([]);
     });
 
+    it('keeps the requester account picker internal', function () {
+        expect(Route::getRoutes()->getByName('work-orders.requester-accounts')?->gatherMiddleware())->toContain('internal');
+    });
+
     it('covers users, roles, departments, categories, companies, and the activity log', function () {
         expect(collect(adminRoutes())->pluck('name')->map(fn (string $name): string => explode('.', $name)[1])->unique()->sort()->values()->all())
             ->toBe(['activity-log', 'companies', 'departments', 'roles', 'users', 'work-order-categories']);
@@ -267,6 +272,9 @@ describe('page props', function () {
 
                 if (in_array($name, ['Buat WO', 'Ubah WO'], true)) {
                     assertTargetDepartmentsOnly($props);
+                    // The koordinator's requester choices never reach IC users.
+                    expect($props['requesterDepartments'] ?? null)->toBeNull()
+                        ->and($props['requesterCorrection'] ?? null)->toBeNull();
                 }
 
                 if ($name === 'Detail WO diinput koordinator') {

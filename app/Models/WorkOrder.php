@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Spatie\Activitylog\Support\LogOptions;
 use Spatie\ModelStates\HasStates;
 
 /**
@@ -68,6 +69,15 @@ class WorkOrder extends Model implements Attachable
     protected $attributes = [
         'urgency' => 'normal',
     ];
+
+    /**
+     * Log the requester too: it is not fillable (the action sets it) but may
+     * be corrected on an on-behalf draft.
+     */
+    protected function activityLogOptions(LogOptions $options): LogOptions
+    {
+        return $options->logOnly(['requester_id', 'requester_name']);
+    }
 
     /**
      * @return array<string, AttachmentCollection>
@@ -141,6 +151,15 @@ class WorkOrder extends Model implements Attachable
     public function enteredBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by')->withTrashed();
+    }
+
+    /**
+     * Whether someone other than the requester entered the work order (a
+     * koordinator, for an IC account or a contact without one).
+     */
+    public function wasEnteredOnBehalf(): bool
+    {
+        return $this->requester_id !== $this->created_by;
     }
 
     /**

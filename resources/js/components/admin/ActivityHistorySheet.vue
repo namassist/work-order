@@ -119,6 +119,9 @@ watch(
                                 {{ formatDateTime(entry.created_at) }}
                             </time>
                         </div>
+                        <p v-if="entry.summary" class="text-sm">
+                            {{ entry.summary }}
+                        </p>
                         <ActivityChanges
                             v-if="entry.changes.length > 0"
                             :changes="entry.changes"

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Attachments\AttachmentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\WorkOrders\RequesterAccountController;
 use App\Http\Controllers\WorkOrders\WorkOrderCommentController;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
 use App\Http\Controllers\WorkOrders\WorkOrderExportController;
@@ -19,6 +20,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('work-orders/export', WorkOrderExportController::class)
         ->middleware('throttle:wo-export')
         ->name('work-orders.export');
+    // Lists users, so executor-only: IC users get 404 (ClientIsolationTest).
+    Route::get('work-orders/requester-accounts', RequesterAccountController::class)
+        ->middleware(['internal', 'throttle:wo-requester-search'])
+        ->name('work-orders.requester-accounts');
     Route::resource('work-orders', WorkOrderController::class)->parameters(['work-orders' => 'workOrder']);
     Route::patch('work-orders/{workOrder}/restore', [WorkOrderController::class, 'restore'])
         ->withTrashed()

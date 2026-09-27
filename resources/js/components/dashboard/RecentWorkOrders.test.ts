@@ -22,6 +22,7 @@ const workOrder: WorkOrder = {
     category: { id: 2, code: 'PRB', name: 'Perbaikan' },
     requester: { id: 4, name: 'Dewi Lestari' },
     entered_by: { name: 'Dewi Lestari' },
+    entered_on_behalf: false,
     created_at: '2026-09-20T01:00:00+00:00',
     updated_at: '2026-09-24T23:30:00+00:00',
     deleted_at: null,

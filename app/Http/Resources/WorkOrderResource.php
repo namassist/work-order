@@ -40,6 +40,7 @@ class WorkOrderResource extends JsonResource
             // Only the name: IC users see who entered their work order (a
             // koordinator of the executor company), nothing else about them.
             'entered_by' => ['name' => $workOrder->enteredBy->name],
+            'entered_on_behalf' => $workOrder->wasEnteredOnBehalf(),
             'created_at' => $workOrder->created_at?->toIso8601String(),
             'updated_at' => $workOrder->updated_at?->toIso8601String(),
             'deleted_at' => $workOrder->deleted_at?->toIso8601String(),

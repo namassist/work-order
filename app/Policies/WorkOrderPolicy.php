@@ -59,13 +59,43 @@ class WorkOrderPolicy
     }
 
     /**
-     * Determine whether the user can create work orders for their own
-     * department. Only client company (IC) departments request work
-     * (FLOW.md §4); the executor enters work orders on behalf of IC instead.
+     * Determine whether the user can create work orders (FLOW.md §4): an IC
+     * user for their own department, or an executor user (koordinator) on
+     * behalf of an IC department.
      */
     public function create(User $user): bool
     {
-        return $user->isClient() && $user->checkPermissionTo(Permission::WorkOrdersCreate->value);
+        return $user->isClient()
+            ? $user->checkPermissionTo(Permission::WorkOrdersCreate->value)
+            : $this->createOnBehalf($user);
+    }
+
+    /**
+     * Determine whether the user enters work orders on behalf of IC, picking
+     * the requester department and account (internal-only, so never an IC
+     * user).
+     */
+    public function createOnBehalf(User $user): bool
+    {
+        return ! $user->isClient() && $user->checkPermissionTo(Permission::WorkOrdersCreateOnBehalf->value);
+    }
+
+    /**
+     * Determine whether the user can correct the requester (account or
+     * contact name, within the same department) of a work order: only the
+     * koordinator who entered it on behalf of someone else, while it is a
+     * draft. See the open point in FLOW.md §11.
+     */
+    public function updateRequester(User $user, WorkOrder $workOrder): Response
+    {
+        return $this->ifVisible(
+            $user,
+            $workOrder,
+            $workOrder->status->isEditable()
+                && $workOrder->wasEnteredOnBehalf()
+                && $workOrder->created_by === $user->id
+                && $this->createOnBehalf($user),
+        );
     }
 
     /**

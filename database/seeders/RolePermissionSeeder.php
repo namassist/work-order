@@ -56,7 +56,7 @@ class RolePermissionSeeder extends Seeder
             'permissions' => [
                 Permission::DepartmentsView,
                 Permission::WorkOrdersView,
-                Permission::WorkOrdersCreate,
+                Permission::WorkOrdersCreateOnBehalf,
                 Permission::WorkOrdersUpdate,
                 Permission::WorkOrdersComment,
             ],

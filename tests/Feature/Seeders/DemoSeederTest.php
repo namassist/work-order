@@ -104,13 +104,27 @@ it('requests every work order from an IC department and addresses it to an Unggu
 
     $workOrders = WorkOrder::query()->with(['requesterDepartment.company', 'targetDepartment.company', 'enteredBy'])->get();
 
-    expect($workOrders->every(fn (WorkOrder $workOrder): bool => $workOrder->requesterDepartment->company->is_client
-        && $workOrder->requester_id === $workOrder->created_by
-        && $workOrder->enteredBy->department_id === $workOrder->requester_department_id))->toBeTrue()
+    expect($workOrders->every(fn (WorkOrder $workOrder): bool => $workOrder->requesterDepartment->company->is_client))->toBeTrue()
         ->and($workOrders->filter(fn (WorkOrder $workOrder): bool => $workOrder->wasSubmitted())
             ->every(fn (WorkOrder $workOrder): bool => $workOrder->targetDepartment !== null && ! $workOrder->targetDepartment->company->is_client))->toBeTrue()
         ->and($workOrders->whereNull('target_department_id')->every(fn (WorkOrder $workOrder): bool => ! $workOrder->wasSubmitted()))->toBeTrue()
         ->and($workOrders->whereNull('target_department_id'))->not->toBeEmpty();
+});
+
+it('enters some work orders on behalf of IC, for accounts and for contacts', function () {
+    $this->seed(DemoSeeder::class);
+
+    $workOrders = WorkOrder::query()->with(['enteredBy.roles', 'requester'])->get();
+    [$onBehalf, $own] = $workOrders->partition(fn (WorkOrder $workOrder): bool => $workOrder->wasEnteredOnBehalf());
+
+    expect($own->every(fn (WorkOrder $workOrder): bool => $workOrder->requester_id === $workOrder->created_by
+        && $workOrder->enteredBy->department_id === $workOrder->requester_department_id))->toBeTrue()
+        ->and($onBehalf->every(fn (WorkOrder $workOrder): bool => $workOrder->enteredBy->hasRole('koordinator')))->toBeTrue()
+        ->and($onBehalf->whereNotNull('requester_id')->every(fn (WorkOrder $workOrder): bool => $workOrder->requester->department_id === $workOrder->requester_department_id))->toBeTrue()
+        ->and($onBehalf->whereNotNull('requester_id'))->not->toBeEmpty()
+        ->and($onBehalf->whereNotNull('requester_name'))->not->toBeEmpty()
+        ->and($onBehalf->filter(fn (WorkOrder $workOrder): bool => $workOrder->wasSubmitted()))->not->toBeEmpty()
+        ->and($onBehalf->reject(fn (WorkOrder $workOrder): bool => $workOrder->wasSubmitted()))->not->toBeEmpty();
 });
 
 it('only lets people act on work orders they can see', function () {
@@ -221,23 +235,26 @@ it('logs every status change with the user who made it', function () {
     });
 });
 
-it('adds comments from requesters and pelaksana while the work order still took them', function () {
+it('adds comments from the requester side and pelaksana while the work order still took them', function () {
     $this->seed(DemoSeeder::class);
 
     $comments = WorkOrderComment::withTrashed()->with(['workOrder.statusHistories', 'author.roles', 'author.department.company'])->get();
 
     expect($comments->pluck('work_order_id')->unique()->count())->toBeGreaterThanOrEqual(8)
         ->and($comments->pluck('author')->flatMap(fn (User $author) => $author->roles->pluck('name'))->unique()->sort()->values()->all())
-        ->toBe(['pelaksana', 'pemohon'])
+        ->toBe(['koordinator', 'pelaksana', 'pemohon'])
         ->and($comments->whereNotNull('edited_at'))->not->toBeEmpty()
         ->and($comments->whereNotNull('deleted_at'))->not->toBeEmpty();
 
     $comments->each(function (WorkOrderComment $comment): void {
         $cancelledAt = $comment->workOrder->statusHistories->firstWhere('to_status', 'dibatalkan')?->created_at;
 
+        // The pelaksana of the target department, or the requester side: an
+        // account of the requester department or the koordinator who entered it.
         expect($comment->author->hasRole('pelaksana')
             ? $comment->author->department_id === $comment->workOrder->target_department_id
-            : $comment->author->department_id === $comment->workOrder->requester_department_id)->toBeTrue()
+            : $comment->author->department_id === $comment->workOrder->requester_department_id
+                || $comment->author->id === $comment->workOrder->created_by)->toBeTrue()
             ->and($comment->created_at->greaterThan($comment->workOrder->created_at))->toBeTrue()
             ->and($comment->created_at->lessThanOrEqualTo(now()))->toBeTrue()
             ->and($cancelledAt === null || $comment->created_at->lessThan($cancelledAt))->toBeTrue();

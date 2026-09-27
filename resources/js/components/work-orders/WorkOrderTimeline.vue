@@ -40,7 +40,12 @@ const { formatDateTime } = useFormatDate();
                         </template>
                     </p>
                     <p class="text-sm text-muted-foreground">
-                        {{ entry.user.name }} &middot;
+                        <template v-if="entry.on_behalf_of">
+                            Diinput oleh {{ entry.user.name }} atas nama
+                            {{ entry.on_behalf_of }}
+                        </template>
+                        <template v-else>{{ entry.user.name }}</template>
+                        &middot;
                         <time :datetime="entry.created_at" class="tabular-nums">
                             {{ formatDateTime(entry.created_at) }}
                         </time>
