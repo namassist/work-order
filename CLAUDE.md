@@ -195,3 +195,5 @@ Files on any model, through spatie/laravel-medialibrary. Work orders are the fir
 - App: http://127.0.0.1:8000 (run `composer run dev` first)
 - Dev login: admin@worder.test / value of DEFAULT_USER_PASSWORD in .env (local only)
 - Check every page in light and dark mode, at 390px (mobile) and 1440px (desktop) widths
+
+Business flow and rules: docs/FLOW.md (source of truth; implementation tasks reference its sections).
