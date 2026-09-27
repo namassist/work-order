@@ -33,8 +33,8 @@ describe('visibleNavItems', () => {
 describe('visibleNavGroups', () => {
     const groups: NavGroup[] = [
         { items: [items[0]] },
-        { label: 'Master Data', items: [items[1]] },
-        { label: 'Administrasi', items: [items[2]] },
+        { label: 'Master Data', internal: true, items: [items[1]] },
+        { label: 'Administrasi', internal: true, items: [items[2]] },
     ];
 
     it('drops groups left with no visible items', () => {
@@ -44,7 +44,21 @@ describe('visibleNavGroups', () => {
             visibleNavGroups(groups, (permission) => granted.has(permission)),
         ).toEqual([
             { items: [items[0]] },
-            { label: 'Master Data', items: [items[1]] },
+            { label: 'Master Data', internal: true, items: [items[1]] },
         ]);
+    });
+
+    it('hides internal groups from client company users, whatever they hold', () => {
+        expect(visibleNavGroups(groups, () => true, true)).toEqual([
+            { items: [items[0]] },
+        ]);
+    });
+
+    it('shows internal groups to executor company users', () => {
+        expect(
+            visibleNavGroups(groups, () => true, false).map(
+                (group) => group.label,
+            ),
+        ).toEqual([undefined, 'Master Data', 'Administrasi']);
     });
 });

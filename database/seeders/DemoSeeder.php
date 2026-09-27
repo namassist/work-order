@@ -8,6 +8,7 @@ use App\Actions\WorkOrders\CreateWorkOrder;
 use App\Actions\WorkOrders\DeleteWorkOrderComment;
 use App\Actions\WorkOrders\TransitionWorkOrder;
 use App\Actions\WorkOrders\UpdateWorkOrderComment;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\Media;
 use App\Models\User;
@@ -32,8 +33,8 @@ use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
- * Demo data for local development and visual checks: departments, accounts
- * for every role, categories, and work orders spread over the last three
+ * Demo data for local development and visual checks: the IC and Unggul
+ * companies with their departments, accounts for every role, categories, and work orders spread over the last three
  * months. Work orders go through CreateWorkOrder, AddAttachment,
  * TransitionWorkOrder, and the comment actions at their historical moments,
  * in chronological order, so numbers, status history, the timeline, and the
@@ -45,6 +46,9 @@ use RuntimeException;
  */
 class DemoSeeder extends Seeder
 {
+    /**
+     * The email domain of the executor company's accounts (admin@worder.test).
+     */
     public const string EMAIL_DOMAIN = 'worder.test';
 
     /**
@@ -55,16 +59,48 @@ class DemoSeeder extends Seeder
     private const int FAKER_SEED = 20260926;
 
     /**
-     * @var array<string, string>
+     * Companies as code => [name, is client, email domain] (FLOW.md §2).
+     *
+     * @var array<string, array{0: string, 1: bool, 2: string}>
+     */
+    private const array COMPANIES = [
+        'IC' => ['IC', true, 'ic.worder.test'],
+        'UGL' => ['Unggul', false, self::EMAIL_DOMAIN],
+    ];
+
+    /**
+     * Departments as code => [name, company code]. IC departments request
+     * work orders; Unggul departments carry them out.
+     *
+     * @var array<string, array{0: string, 1: string}>
      */
     private const array DEPARTMENTS = [
-        'KEU' => 'Keuangan',
-        'GA' => 'General Affair',
-        'ENG' => 'Engineering',
-        'PRD' => 'Produksi',
-        'HRD' => 'Human Resources',
-        'IT' => 'Information Technology',
-        'LOG' => 'Logistik',
+        'PRD' => ['Produksi', 'IC'],
+        'HRD' => ['Human Resources', 'IC'],
+        'LOG' => ['Logistik', 'IC'],
+        'MTC' => ['Maintenance', 'IC'],
+        'ENG' => ['Engineering', 'UGL'],
+        'GA' => ['General Affair', 'UGL'],
+        'IT' => ['Information Technology', 'UGL'],
+        'KEU' => ['Keuangan', 'UGL'],
+    ];
+
+    /**
+     * The Unggul department that handles each category. Its pelaksana
+     * discuss and cancel the work order. PENDING (FLOW.md step 1b): this
+     * becomes the work order's target department; until then those pelaksana
+     * cannot see the work orders they act on here (the actions do not
+     * authorize), only keuangan and admin can.
+     *
+     * @var array<string, string>
+     */
+    private const array CATEGORY_DEPARTMENTS = [
+        'PRB' => 'ENG',
+        'PGD' => 'GA',
+        'INS' => 'IT',
+        'MNT' => 'ENG',
+        'KBR' => 'GA',
+        'KND' => 'GA',
     ];
 
     /**
@@ -80,39 +116,36 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * Accounts as [name, department code, role, must change password]. Every
-     * department has an approver and at least one pemohon.
+     * Accounts as [name, department code, role, must change password]. IC
+     * departments have pemohon (and some a viewer); ENG, GA, and IT have a
+     * pelaksana; GA has the koordinator; KEU has keuangan.
      *
      * @var list<array{0: string, 1: string, 2: string, 3: bool}>
      */
     private const array USERS = [
         ['Administrator', 'IT', 'admin', false],
-        ['Rizky Pratama', 'IT', 'approver', false],
-        ['Dewi Lestari', 'IT', 'pemohon', false],
-        ['Andi Saputra', 'IT', 'pemohon', true],
-        ['Sri Wahyuni', 'KEU', 'approver', false],
-        ['Budi Santoso', 'KEU', 'keuangan', false],
-        ['Rina Kurniawati', 'KEU', 'keuangan', false],
-        ['Agus Setiawan', 'KEU', 'pemohon', false],
-        ['Hendra Gunawan', 'GA', 'approver', false],
-        ['Siti Nurhaliza', 'GA', 'pemohon', false],
-        ['Joko Susilo', 'GA', 'pemohon', false],
+        ['Rizky Pratama', 'IT', 'pelaksana', false],
+        ['Andi Saputra', 'IT', 'viewer', true],
+        ['Bambang Hartono', 'ENG', 'pelaksana', false],
+        ['Fajar Nugroho', 'ENG', 'pelaksana', false],
+        ['Hendra Gunawan', 'GA', 'pelaksana', false],
+        ['Dewi Lestari', 'GA', 'koordinator', false],
         ['Wulan Sari', 'GA', 'viewer', false],
-        ['Bambang Hartono', 'ENG', 'approver', false],
-        ['Dimas Prasetyo', 'ENG', 'pemohon', false],
-        ['Yoga Firmansyah', 'ENG', 'pemohon', true],
-        ['Teguh Wibowo', 'ENG', 'pemohon', false],
-        ['Fajar Nugroho', 'ENG', 'viewer', false],
-        ['Slamet Riyadi', 'PRD', 'approver', false],
+        ['Sri Wahyuni', 'KEU', 'keuangan', false],
+        ['Budi Santoso', 'KEU', 'keuangan', false],
+        ['Rina Kurniawati', 'KEU', 'viewer', false],
         ['Eko Purnomo', 'PRD', 'pemohon', false],
         ['Indah Permatasari', 'PRD', 'pemohon', false],
         ['Arif Hidayat', 'PRD', 'pemohon', false],
-        ['Maya Anggraini', 'HRD', 'approver', false],
+        ['Slamet Riyadi', 'PRD', 'viewer', false],
         ['Putri Rahmawati', 'HRD', 'pemohon', false],
+        ['Maya Anggraini', 'HRD', 'pemohon', false],
         ['Lukman Hakim', 'HRD', 'viewer', true],
-        ['Hadi Kusuma', 'LOG', 'approver', false],
         ['Nur Aini', 'LOG', 'pemohon', false],
         ['Rudi Hermawan', 'LOG', 'pemohon', false],
+        ['Dimas Prasetyo', 'MTC', 'pemohon', false],
+        ['Yoga Firmansyah', 'MTC', 'pemohon', true],
+        ['Teguh Wibowo', 'MTC', 'pemohon', false],
     ];
 
     /**
@@ -190,38 +223,38 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * Comment threads between the department's approver and the requester,
+     * Comment threads between the handling pelaksana and the requester,
      * in order. A work order gets the first one to three messages of one.
      *
-     * @var list<list<array{0: 'approver'|'requester', 1: string}>>
+     * @var list<list<array{0: 'pelaksana'|'requester', 1: string}>>
      */
     private const array COMMENT_THREADS = [
         [
-            ['approver', 'Mohon dilampirkan foto kondisi saat ini supaya bisa kami nilai.'],
+            ['pelaksana', 'Mohon dilampirkan foto kondisi saat ini supaya bisa kami nilai.'],
             ['requester', 'Baik, Pak. Foto sudah saya unggah di bagian Dokumen.'],
-            ['approver', 'Terima kasih, sudah jelas.'],
+            ['pelaksana', 'Terima kasih, sudah jelas.'],
         ],
         [
             ['requester', 'Mohon diprioritaskan, kondisi ini mengganggu pekerjaan tim kami setiap hari.'],
-            ['approver', 'Dipahami. Kami cek jadwal teknisi minggu ini.
+            ['pelaksana', 'Dipahami. Kami cek jadwal teknisi minggu ini.
 Nanti saya kabari lagi.'],
         ],
         [
-            ['approver', 'Apakah sudah ada perkiraan biaya dari vendor?'],
+            ['pelaksana', 'Apakah sudah ada perkiraan biaya dari vendor?'],
             ['requester', 'Belum, Bu. Penawaran dari vendor baru masuk paling lambat hari Jumat.'],
-            ['approver', 'Oke, ditunggu. Sementara WO ini saya tahan dulu.'],
+            ['pelaksana', 'Oke, ditunggu. Sementara WO ini saya tahan dulu.'],
         ],
         [
             ['requester', 'Tambahan info: lokasinya di sisi timur, dekat pintu darurat.'],
-            ['approver', 'Noted, terima kasih infonya.'],
+            ['pelaksana', 'Noted, terima kasih infonya.'],
         ],
         [
-            ['approver', 'Target selesai terlalu mepet. Bisa dimundurkan satu minggu?'],
+            ['pelaksana', 'Target selesai terlalu mepet. Bisa dimundurkan satu minggu?'],
             ['requester', 'Bisa, Pak. Yang penting sebelum akhir bulan.'],
         ],
         [
             ['requester', 'Apakah perlu persetujuan kepala departemen juga untuk pekerjaan ini?'],
-            ['approver', 'Tidak perlu, cukup lewat WO ini.'],
+            ['pelaksana', 'Tidak perlu, cukup lewat WO ini.'],
         ],
     ];
 
@@ -302,7 +335,7 @@ Nanti saya kabari lagi.'],
         $this->call(RolePermissionSeeder::class);
         $this->purgeOrphanedAttachments();
 
-        $departments = $this->seedDepartments();
+        $departments = $this->seedDepartments($this->seedCompanies());
         $categories = $this->seedCategories();
         $users = $this->seedUsers($departments, $password);
 
@@ -322,13 +355,13 @@ Nanti saya kabari lagi.'],
 
     /**
      * The demo email for an account: admin@worder.test for the admin,
-     * first.last@worder.test for everyone else.
+     * first.last@ followed by their company's domain for everyone else.
      */
-    public static function emailFor(string $name, string $role): string
+    public static function emailFor(string $name, string $role, string $domain = self::EMAIL_DOMAIN): string
     {
         $local = $role === 'admin' ? 'admin' : str($name)->lower()->replace(' ', '.')->toString();
 
-        return $local.'@'.self::EMAIL_DOMAIN;
+        return $local.'@'.$domain;
     }
 
     /**
@@ -353,12 +386,30 @@ Nanti saya kabari lagi.'],
     }
 
     /**
+     * @return Collection<string, Company> keyed by code
+     */
+    private function seedCompanies(): Collection
+    {
+        return collect(self::COMPANIES)->map(
+            fn (array $company, string $code): Company => Company::query()->firstOrCreate(['code' => $code], [
+                'name' => $company[0],
+                'is_client' => $company[1],
+                'email_domains' => [$company[2]],
+            ]),
+        );
+    }
+
+    /**
+     * @param  Collection<string, Company>  $companies
      * @return Collection<string, Department> keyed by code
      */
-    private function seedDepartments(): Collection
+    private function seedDepartments(Collection $companies): Collection
     {
         return collect(self::DEPARTMENTS)->map(
-            fn (string $name, string $code): Department => Department::query()->firstOrCreate(['code' => $code], ['name' => $name]),
+            fn (array $department, string $code): Department => Department::query()->firstOrCreate(['code' => $code], [
+                'name' => $department[0],
+                'company_id' => $companies[$department[1]]->id,
+            ]),
         );
     }
 
@@ -384,11 +435,14 @@ Nanti saya kabari lagi.'],
         return collect(self::USERS)->map(function (array $account) use ($departments, $password): User {
             [$name, $departmentCode, $role, $mustChangePassword] = $account;
 
-            $user = User::query()->firstOrCreate(['email' => self::emailFor($name, $role)], [
+            $department = $departments[$departmentCode];
+            $domain = self::COMPANIES[self::DEPARTMENTS[$departmentCode][1]][2];
+
+            $user = User::query()->firstOrCreate(['email' => self::emailFor($name, $role, $domain)], [
                 'name' => $name,
                 'password' => $password,
                 'must_change_password' => $mustChangePassword,
-                'department_id' => $departments[$departmentCode]->id,
+                'department_id' => $department->id,
             ]);
 
             if (! $user->hasRole($role)) {
@@ -410,7 +464,9 @@ Nanti saya kabari lagi.'],
     private function planWorkOrders(Collection $users, Collection $categories): array
     {
         $requesters = $users->filter(fn (User $user): bool => $user->hasRole('pemohon'))->values()->all();
-        $approvers = $users->filter(fn (User $user): bool => $user->hasRole('approver'))->keyBy('department_id');
+        $pelaksanaByDepartment = $users
+            ->filter(fn (User $user): bool => $user->hasRole('pelaksana'))
+            ->groupBy(fn (User $user): string => $user->department->code);
 
         $paths = $this->faker->shuffleArray(collect(self::PATHS)->flatMap(fn (int $count, string $path): array => array_fill(0, $count, $path))->all());
         $urgencies = $this->faker->shuffleArray(collect(self::URGENCIES)->flatMap(fn (int $count, string $urgency): array => array_fill(0, $count, $urgency))->all());
@@ -423,10 +479,10 @@ Nanti saya kabari lagi.'],
         foreach ($paths as $index => $path) {
             /** @var User $requester */
             $requester = $this->faker->randomElement($requesters);
-            /** @var User $approver */
-            $approver = $approvers[$requester->department_id];
             /** @var string $categoryCode */
             $categoryCode = $this->faker->randomElement(array_keys(self::TEMPLATES));
+            /** @var User $pelaksana */
+            $pelaksana = $this->faker->randomElement($pelaksanaByDepartment[self::CATEGORY_DEPARTMENTS[$categoryCode]]->all());
 
             $createdAt = $this->creationMoment($path);
             $attributes = $this->workOrderAttributes($path, $categoryCode, $requester, $createdAt)
@@ -454,7 +510,7 @@ Nanti saya kabari lagi.'],
             if ($index % 5 === 1 || $index % 5 === 3) {
                 // Comments end before a cancellation, which makes them read-only.
                 $until = $cancelledAt ?? CarbonImmutable::now()->subHour();
-                array_push($events, ...$this->planComments($created, $index, $createdAt, $until, $requester, $approver, $withComments++ === 0));
+                array_push($events, ...$this->planComments($created, $index, $createdAt, $until, $requester, $pelaksana, $withComments++ === 0));
             }
 
             if ($path === 'cancelled_draft') {
@@ -472,8 +528,8 @@ Nanti saya kabari lagi.'],
 
             if ($path === 'cancelled_submitted') {
                 $note = $this->faker->randomElement(self::SUBMITTED_CANCEL_NOTES);
-                $events[] = ['at' => $cancelledAt, 'actor' => $approver, 'run' => function () use (&$created, $index, $approver, $note): void {
-                    $this->transitionWorkOrder->handle($created[$index], Dibatalkan::getMorphClass(), $approver, $note);
+                $events[] = ['at' => $cancelledAt, 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana, $note): void {
+                    $this->transitionWorkOrder->handle($created[$index], Dibatalkan::getMorphClass(), $pelaksana, $note);
                 }];
             }
         }
@@ -492,9 +548,9 @@ Nanti saya kabari lagi.'],
      * @param  array<int, WorkOrder>  $created  filled while the timeline runs
      * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
      */
-    private function planComments(array &$created, int $index, CarbonImmutable $createdAt, CarbonImmutable $until, User $requester, User $approver, bool $mistaken): array
+    private function planComments(array &$created, int $index, CarbonImmutable $createdAt, CarbonImmutable $until, User $requester, User $pelaksana, bool $mistaken): array
     {
-        /** @var list<array{0: 'approver'|'requester', 1: string}> $thread */
+        /** @var list<array{0: 'pelaksana'|'requester', 1: string}> $thread */
         $thread = $this->faker->randomElement(self::COMMENT_THREADS);
         $messages = array_slice($thread, 0, $this->faker->numberBetween(1, count($thread)));
         $latestAt = $until->subMinutes(10);
@@ -523,7 +579,7 @@ Nanti saya kabari lagi.'],
                 break;
             }
 
-            $author = $role === 'approver' ? $approver : $requester;
+            $author = $role === 'pelaksana' ? $pelaksana : $requester;
             $edited = ($index + $position) % 3 === 0;
             $firstDraft = $edited ? Str::beforeLast($body, ' ') : $body;
 

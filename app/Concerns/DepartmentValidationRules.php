@@ -2,6 +2,7 @@
 
 namespace App\Concerns;
 
+use App\Models\Company;
 use App\Models\Department;
 use App\Rules\NotTakenByTrashed;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -14,15 +15,23 @@ trait DepartmentValidationRules
      *
      * @return array<string, array<int, ValidationRule|array<mixed>|string>>
      */
-    protected function departmentRules(?int $departmentId = null): array
+    protected function departmentRules(?Department $department = null): array
     {
         return [
+            // Active companies, plus the one the department already has.
+            'company_id' => [
+                'required',
+                'integer',
+                Rule::exists(Company::class, 'id')->where(fn ($query) => $query
+                    ->where(fn ($query) => $query->where('is_active', true)->whereNull('deleted_at'))
+                    ->when($department?->company_id, fn ($query, int $id) => $query->orWhere('id', $id))),
+            ],
             'code' => [
                 'required',
                 'string',
                 'max:20',
                 'regex:/^[A-Z0-9_-]+$/',
-                Rule::unique(Department::class)->withoutTrashed()->ignore($departmentId),
+                Rule::unique(Department::class)->withoutTrashed()->ignore($department?->id),
                 new NotTakenByTrashed(Department::class, 'code', $this->user()?->can('viewTrashed', Department::class) ?? false),
             ],
             'name' => ['required', 'string', 'max:255'],

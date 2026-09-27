@@ -39,6 +39,12 @@ enum Permission: string
     case WorkOrderCategoriesDelete = 'work-order-categories.delete';
     case WorkOrderCategoriesRestore = 'work-order-categories.restore';
 
+    case CompaniesView = 'companies.view';
+    case CompaniesCreate = 'companies.create';
+    case CompaniesUpdate = 'companies.update';
+    case CompaniesDelete = 'companies.delete';
+    case CompaniesRestore = 'companies.restore';
+
     case ActivityLogView = 'activity-log.view';
 
     /**
@@ -47,6 +53,36 @@ enum Permission: string
     public function resource(): string
     {
         return explode('.', $this->value)[0];
+    }
+
+    /**
+     * Whether only users of the executor company may use this permission:
+     * master data, user and role management, the activity log, and seeing
+     * every department's work orders. Only executor-scoped roles may include
+     * it, and client company users never hold it, even through a direct
+     * grant (see User::hasPermissionTo()).
+     */
+    public function isInternalOnly(): bool
+    {
+        return $this === self::WorkOrdersViewAll || in_array($this->resource(), [
+            'departments',
+            'users',
+            'roles',
+            'work-order-categories',
+            'companies',
+            'activity-log',
+        ], true);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function internalOnlyValues(): array
+    {
+        return array_values(array_map(
+            fn (self $permission): string => $permission->value,
+            array_filter(self::cases(), fn (self $permission): bool => $permission->isInternalOnly()),
+        ));
     }
 
     /**

@@ -38,12 +38,6 @@ test('the greeting shows the user\'s department, even a deleted one', function (
             ->where('department', ['code' => 'FIN', 'name' => 'Keuangan']));
 });
 
-test('a user without a department gets none', function () {
-    $this->actingAs(User::factory()->create())
-        ->get(route('dashboard'))
-        ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('department', null));
-});
-
 test('activity-log viewers get the latest activity as a deferred prop', function () {
     $this->travelTo(Carbon::parse('2026-09-01', 'UTC'));
     $auditor = userWithPermissions(Permission::ActivityLogView);

@@ -43,7 +43,10 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $user,
+                // Without internal-only permissions for client company users, see User::getAllPermissions().
                 'permissions' => $user?->getAllPermissions()->pluck('name')->values()->all() ?? [],
+                // Client company (IC) users see no internal navigation.
+                'isClient' => $user?->isClient() ?? false,
             ],
             'displayTimezone' => DisplayDate::timezone(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

@@ -49,11 +49,22 @@ import {
 import { useCan } from '@/composables/useCan';
 import { isFiltering, useListFilters } from '@/composables/useListFilters';
 import { panelTableClass } from '@/lib/panel';
-import type { Department, ListAbilities, Paginated } from '@/types';
+import type {
+    CompanyOption,
+    Department,
+    ListAbilities,
+    Paginated,
+} from '@/types';
 
 const props = defineProps<{
     departments: Paginated<Department>;
-    filters: { search: string; status: string; trashed: boolean };
+    filters: {
+        search: string;
+        status: string;
+        company: string;
+        trashed: boolean;
+    };
+    companies: CompanyOption[];
     can: ListAbilities;
 }>();
 
@@ -67,7 +78,11 @@ defineOptions({
 });
 
 const filters = useListFilters(
-    { ...props.filters, status: props.filters.status || 'all' },
+    {
+        ...props.filters,
+        status: props.filters.status || 'all',
+        company: props.filters.company || 'all',
+    },
     () => DepartmentController.index(),
 );
 
@@ -157,6 +172,24 @@ const hasActions = (department: Department) =>
                     aria-label="Cari departemen"
                 />
             </div>
+            <Select v-model="filters.company">
+                <SelectTrigger
+                    class="w-full sm:w-48"
+                    aria-label="Filter perusahaan"
+                >
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Semua perusahaan</SelectItem>
+                    <SelectItem
+                        v-for="company in companies"
+                        :key="company.id"
+                        :value="String(company.id)"
+                    >
+                        {{ company.name }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
             <Select v-model="filters.status">
                 <SelectTrigger
                     class="w-full sm:w-40"
@@ -180,6 +213,9 @@ const hasActions = (department: Department) =>
             <TableHeader class="sticky top-0 bg-card">
                 <TableRow>
                     <TableHead>Departemen</TableHead>
+                    <TableHead class="hidden md:table-cell"
+                        >Perusahaan</TableHead
+                    >
                     <TableHead class="hidden text-right sm:table-cell"
                         >Pengguna</TableHead
                     >
@@ -215,6 +251,17 @@ const hasActions = (department: Department) =>
                                 {{ department.name }}
                             </span>
                         </component>
+                    </TableCell>
+                    <TableCell class="hidden md:table-cell">
+                        {{ department.company.name }}
+                        <span class="text-muted-foreground">
+                            ·
+                            {{
+                                department.company.is_client
+                                    ? 'Klien'
+                                    : 'Pelaksana'
+                            }}
+                        </span>
                     </TableCell>
                     <TableCell
                         class="hidden text-right tabular-nums sm:table-cell"
@@ -266,7 +313,7 @@ const hasActions = (department: Department) =>
                         </RowActionsMenu>
                     </TableCell>
                 </ClickableRow>
-                <TableEmpty v-if="departments.data.length === 0" :colspan="4">
+                <TableEmpty v-if="departments.data.length === 0" :colspan="5">
                     <EmptyState
                         v-if="filtered"
                         :icon="SearchX"
@@ -296,7 +343,11 @@ const hasActions = (department: Department) =>
         <TablePagination :paginator="departments" />
     </PagePanel>
 
-    <DepartmentFormDialog v-model:open="formOpen" :department="editing" />
+    <DepartmentFormDialog
+        v-model:open="formOpen"
+        :department="editing"
+        :companies="companies"
+    />
 
     <ActivityHistorySheet
         v-if="hasPermission('activity-log.view')"

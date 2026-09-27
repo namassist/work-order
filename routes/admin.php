@@ -2,13 +2,25 @@
 
 use App\Enums\AuditSubject;
 use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WorkOrderCategoryController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function (): void {
+/*
+| Internal pages of the executor company. The `internal` middleware answers
+| 404 to client company (IC) users, so every route that manages users, roles,
+| master data, registrations, or the activity log belongs in this group
+| (tests/Feature/Isolation/ClientIsolationTest.php checks every admin.* route).
+*/
+Route::middleware(['auth', 'verified', 'internal'])->prefix('admin')->name('admin.')->group(function (): void {
+    Route::resource('companies', CompanyController::class)->only(['index', 'store', 'update', 'destroy']);
+    Route::patch('companies/{company}/restore', [CompanyController::class, 'restore'])
+        ->withTrashed()
+        ->name('companies.restore');
+
     Route::resource('departments', DepartmentController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::patch('departments/{department}/restore', [DepartmentController::class, 'restore'])
         ->withTrashed()

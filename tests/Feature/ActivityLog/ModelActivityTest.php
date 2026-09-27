@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Permission;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
@@ -23,6 +24,7 @@ function activatableModels(): array
 {
     return [
         'user' => [fn (): User => User::factory()->create(['name' => 'Lama']), 'user', 'name'],
+        'company' => [fn (): Company => Company::factory()->create(['name' => 'Lama']), 'company', 'name'],
         'department' => [fn (): Department => Department::factory()->create(['name' => 'Lama']), 'department', 'name'],
         'work order category' => [fn (): WorkOrderCategory => WorkOrderCategory::factory()->create(['name' => 'Lama']), 'wo-category', 'name'],
     ];
@@ -92,7 +94,7 @@ it('records the signed-in user as the causer', function () {
     $department = Department::factory()->create(['code' => 'FIN']);
 
     $this->actingAs($admin)
-        ->put(route('admin.departments.update', $department), ['code' => 'FIN', 'name' => 'Finance', 'is_active' => true]);
+        ->put(route('admin.departments.update', $department), ['company_id' => $department->company_id, 'code' => 'FIN', 'name' => 'Finance', 'is_active' => true]);
 
     expect(latestActivityFor($department))
         ->event->toBe('updated')

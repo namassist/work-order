@@ -20,8 +20,9 @@ function auditor(): User
 describe('index', function () {
     it('lists activity newest first with readable changes', function () {
         $auditor = auditor();
-        $finance = Department::factory()->create(['code' => 'FIN']);
-        $operations = Department::factory()->create(['code' => 'OPS']);
+        $company = $auditor->department->company;
+        $finance = Department::factory()->for($company)->create(['code' => 'FIN']);
+        $operations = Department::factory()->for($company)->create(['code' => 'OPS']);
         $user = User::factory()->for($finance)->create(['name' => 'Budi']);
         $this->actingAs($auditor);
         $user->update(['department_id' => $operations->id, 'is_active' => false]);
@@ -29,7 +30,8 @@ describe('index', function () {
         $this->get(route('admin.activity-log.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->component('admin/activity-log/Index')
-                ->where('activities.total', 5)
+                // The auditor with their department and company, the two departments, Budi, and his change.
+                ->where('activities.total', 7)
                 ->where('activities.data.0.event', 'deactivated')
                 ->where('activities.data.0.event_label', 'Dinonaktifkan')
                 ->where('activities.data.0.subject', ['type' => 'user', 'type_label' => 'Pengguna', 'id' => $user->id, 'label' => 'Budi'])
@@ -126,7 +128,8 @@ describe('index', function () {
 
     it('paginates 15 entries per page', function () {
         $auditor = auditor();
-        Department::factory()->count(15)->create();
+        // With the auditor, their department, and their company: 16 entries.
+        Department::factory()->count(13)->for($auditor->department->company)->create();
 
         $this->actingAs($auditor)
             ->get(route('admin.activity-log.index', ['page' => 2]))

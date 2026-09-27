@@ -50,7 +50,8 @@ expect()->extend('toBeOne', fn () => $this->toBe(1));
 */
 
 /**
- * Create a user holding exactly the given permissions (granted directly).
+ * Create a user holding exactly the given permissions (granted directly), in
+ * a department of a new executor company (Unggul).
  */
 function userWithPermissions(Permission ...$permissions): User
 {
@@ -80,6 +81,24 @@ function userInDepartment(Department $department, Permission ...$permissions): U
     $user->update(['department_id' => $department->id]);
 
     return $user;
+}
+
+/**
+ * Create a user of a new client company (IC) department holding exactly the
+ * given permissions.
+ */
+function icUser(Permission ...$permissions): User
+{
+    return userInDepartment(Department::factory()->client()->create(), ...$permissions);
+}
+
+/**
+ * Create a user of a new executor company (Unggul) department holding
+ * exactly the given permissions.
+ */
+function unggulUser(Permission ...$permissions): User
+{
+    return userInDepartment(Department::factory()->create(), ...$permissions);
 }
 
 /**

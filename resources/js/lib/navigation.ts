@@ -15,13 +15,16 @@ export function visibleNavItems(
 
 /**
  * Keeps each group's visible items and drops groups left empty, so a user
- * never sees a heading with nothing under it.
+ * never sees a heading with nothing under it. Client company users never
+ * see internal groups, whatever permissions they hold.
  */
 export function visibleNavGroups(
     groups: NavGroup[],
     can: (permission: string) => boolean,
+    isClient = false,
 ): NavGroup[] {
     return groups
+        .filter((group) => !(isClient && group.internal))
         .map((group) => ({
             ...group,
             items: visibleNavItems(group.items, can),

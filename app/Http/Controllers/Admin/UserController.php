@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Concerns\LogsAuditChanges;
 use App\Enums\AuditEvent;
+use App\Enums\CompanyScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
@@ -60,7 +61,7 @@ class UserController extends Controller
                 'email' => $user->email,
                 'is_active' => $user->is_active,
                 'deleted_at' => $user->deleted_at?->toIso8601String(),
-                'department' => $user->department?->only(['id', 'code', 'name']),
+                'department' => $user->department->only(['id', 'code', 'name']),
                 'roles' => $user->roles->pluck('name')->all(),
             ]);
 
@@ -96,7 +97,7 @@ class UserController extends Controller
 
         return Inertia::render('admin/users/Create', [
             'departments' => $this->assignableDepartments(),
-            'roles' => $request->user()?->can('assignRoles', User::class) ? $this->roleNames() : null,
+            'roles' => $request->user()?->can('assignRoles', User::class) ? $this->assignableRoles() : null,
         ]);
     }
 
@@ -148,7 +149,7 @@ class UserController extends Controller
                 'roles' => $user->roles()->pluck('name')->all(),
             ],
             'departments' => $this->assignableDepartments($user),
-            'roles' => $request->user()?->can('assignRoles', User::class) ? $this->roleNames() : null,
+            'roles' => $request->user()?->can('assignRoles', User::class) ? $this->assignableRoles() : null,
             'isSelf' => $user->is($request->user()),
         ]);
     }
@@ -231,19 +232,48 @@ class UserController extends Controller
     }
 
     /**
-     * Active departments, plus the user's current one even if it was deactivated.
+     * Active departments, plus the user's current one even if it was
+     * deactivated, with the company whose roles fit their users.
      *
-     * @return Collection<int, Department>
+     * @return Collection<int, array{id: int, code: string, name: string, company: array{code: string, name: string, scope: string}}>
      */
     private function assignableDepartments(?User $user = null): Collection
     {
         return Department::query()
+            ->with('company:id,code,name,is_client,deleted_at')
             ->where(fn ($query) => $query
                 ->where('is_active', true)
                 ->when($user?->department_id, fn ($query, int $departmentId) => $query->orWhere('id', $departmentId)))
             ->orderBy('code')
-            ->get(['id', 'code', 'name'])
-            ->toBase();
+            ->get(['id', 'company_id', 'code', 'name'])
+            ->toBase()
+            ->map(fn (Department $department): array => [
+                'id' => $department->id,
+                'code' => $department->code,
+                'name' => $department->name,
+                'company' => [
+                    'code' => $department->company->code,
+                    'name' => $department->company->name,
+                    'scope' => CompanyScope::of($department->company)->value,
+                ],
+            ]);
+    }
+
+    /**
+     * Role names with the company scope each one fits (null: any company).
+     *
+     * @return list<array{name: string, company_scope: string|null}>
+     */
+    private function assignableRoles(): array
+    {
+        return array_values(Role::where('guard_name', 'web')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Role $role): array => [
+                'name' => $role->name,
+                'company_scope' => CompanyScope::tryFrom((string) $role->getAttribute('company_scope'))?->value,
+            ])
+            ->all());
     }
 
     /**

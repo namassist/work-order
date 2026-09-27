@@ -47,7 +47,7 @@ class DashboardController extends Controller
         $period = WorkOrderRequestOverview::period($request->query('period'));
 
         return Inertia::render('Dashboard', [
-            'department' => $user->department?->only(['code', 'name']),
+            'department' => $user->department->only(['code', 'name']),
             'workOrderCounts' => $canListWorkOrders
                 ? Inertia::defer(fn (): array => $this->workOrderCounts($user))
                 : null,

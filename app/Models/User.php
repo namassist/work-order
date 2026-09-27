@@ -16,14 +16,16 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Permission\Contracts\Permission as PermissionContract;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
  * @property int $id
  * @property string $name
  * @property string $email
- * @property int|null $department_id
+ * @property int $department_id
  * @property bool $is_active
  * @property Carbon|null $email_verified_at
  * @property string $password
@@ -35,14 +37,19 @@ use Spatie\Permission\Traits\HasRoles;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
- * @property-read Department|null $department
+ * @property-read Department $department
  */
 #[Fillable(['name', 'email', 'password', 'must_change_password', 'department_id', 'is_active'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasRoles, LogsModelActivity, Notifiable, SearchesColumns, SoftDeletes;
+    use HasFactory, LogsModelActivity, Notifiable, SearchesColumns, SoftDeletes;
+
+    use HasRoles {
+        HasRoles::hasPermissionTo as private hasPermissionToIgnoringCompany;
+        HasRoles::getAllPermissions as private getAllPermissionsIgnoringCompany;
+    }
 
     /**
      * The department the user belongs to, even if it was deleted later.
@@ -52,6 +59,52 @@ class User extends Authenticatable
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class)->withTrashed();
+    }
+
+    /**
+     * Whether the user works for a client company (IC), which requests work
+     * orders, rather than the executor company.
+     */
+    public function isClient(): bool
+    {
+        return $this->department->company->is_client;
+    }
+
+    /**
+     * Spatie's check, except that users of a client company never hold an
+     * internal-only permission (Permission::isInternalOnly()), whichever role
+     * or direct grant gives it to them.
+     *
+     * @param  string|int|PermissionContract|\BackedEnum  $permission
+     */
+    public function hasPermissionTo($permission, ?string $guardName = null): bool
+    {
+        $permission = $this->filterPermission($permission, $guardName);
+
+        if ($this->isClient() && Permission::tryFrom($permission->name)?->isInternalOnly()) {
+            return false;
+        }
+
+        return $this->hasPermissionToIgnoringCompany($permission, $guardName);
+    }
+
+    /**
+     * Every permission the user holds, directly or through roles, without
+     * internal-only ones for client company users (see hasPermissionTo()).
+     *
+     * @return Collection<int, PermissionContract>
+     */
+    public function getAllPermissions(): Collection
+    {
+        $permissions = $this->getAllPermissionsIgnoringCompany();
+
+        if (! $this->isClient()) {
+            return $permissions;
+        }
+
+        return $permissions
+            ->reject(fn (PermissionContract $permission): bool => Permission::tryFrom($permission->name)?->isInternalOnly() ?? false)
+            ->values();
     }
 
     /**

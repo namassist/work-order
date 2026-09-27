@@ -145,12 +145,12 @@ class WorkOrder extends Model implements Attachable
 
     /**
      * Whether the user may see this work order: their own department's, or
-     * any with work-orders.view-all.
+     * any with work-orders.view-all (never held by client company users).
      */
     public function isVisibleTo(User $user): bool
     {
         return $user->checkPermissionTo(Permission::WorkOrdersViewAll->value)
-            || ($user->department_id !== null && $user->department_id === $this->department_id);
+            || $user->department_id === $this->department_id;
     }
 
     /**
@@ -162,12 +162,6 @@ class WorkOrder extends Model implements Attachable
     protected function visibleTo(Builder $query, User $user): void
     {
         if ($user->checkPermissionTo(Permission::WorkOrdersViewAll->value)) {
-            return;
-        }
-
-        if ($user->department_id === null) {
-            $query->whereRaw('1 = 0');
-
             return;
         }
 

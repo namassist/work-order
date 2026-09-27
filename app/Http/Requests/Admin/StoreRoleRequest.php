@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 use App\Concerns\RoleValidationRules;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 use Spatie\Permission\Models\Role;
 
 class StoreRoleRequest extends FormRequest
@@ -27,5 +28,13 @@ class StoreRoleRequest extends FormRequest
     public function rules(): array
     {
         return $this->roleRules();
+    }
+
+    /**
+     * @return array<int, callable(Validator): void>
+     */
+    public function after(): array
+    {
+        return $this->companyScopeChecks();
     }
 }

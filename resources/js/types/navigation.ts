@@ -19,5 +19,7 @@ export type NavItem = {
 export type NavGroup = {
     /** Heading shown above the items; omitted for the top group. */
     label?: string;
+    /** Executor company (Unggul) navigation, never shown to client company users. */
+    internal?: boolean;
     items: NavItem[];
 };

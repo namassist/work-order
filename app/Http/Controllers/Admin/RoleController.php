@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Concerns\LogsAuditChanges;
 use App\Enums\AuditEvent;
+use App\Enums\CompanyScope;
 use App\Enums\Permission;
 use App\Enums\SystemRole;
 use App\Http\Controllers\Controller;
@@ -39,6 +40,7 @@ class RoleController extends Controller
                 'name' => $role->name,
                 'users_count' => $role->users_count,
                 'permissions_count' => $role->permissions_count,
+                'company_scope' => $this->scopeOf($role)?->toOption(),
                 'is_system' => $role->name === SystemRole::Admin->value,
             ]);
 
@@ -56,7 +58,7 @@ class RoleController extends Controller
 
         return Inertia::render('admin/roles/Form', [
             'role' => null,
-            'permissionGroups' => $this->permissionGroups(),
+            ...$this->formOptions(),
         ]);
     }
 
@@ -66,7 +68,11 @@ class RoleController extends Controller
     public function store(StoreRoleRequest $request): RedirectResponse
     {
         $role = DB::transaction(function () use ($request): Role {
-            $role = new Role(['name' => $request->validated('name'), 'guard_name' => 'web']);
+            $role = new Role([
+                'name' => $request->validated('name'),
+                'guard_name' => 'web',
+                'company_scope' => $request->validated('company_scope'),
+            ]);
             $role->save();
             $role->syncPermissions($request->validated('permissions'));
             $this->logAuditChange($role, AuditEvent::Created, [], $this->auditState($role));
@@ -90,10 +96,11 @@ class RoleController extends Controller
             'role' => [
                 'id' => $role->id,
                 'name' => $role->name,
+                'company_scope' => $this->scopeOf($role)?->value,
                 'permissions' => $role->permissions()->pluck('name')->all(),
                 'is_system' => $role->name === SystemRole::Admin->value,
             ],
-            'permissionGroups' => $this->permissionGroups(),
+            ...$this->formOptions(),
         ]);
     }
 
@@ -104,7 +111,10 @@ class RoleController extends Controller
     {
         DB::transaction(function () use ($request, $role): void {
             $before = $this->auditState($role);
-            $role->update(['name' => $request->validated('name')]);
+            $role->update([
+                'name' => $request->validated('name'),
+                'company_scope' => $request->validated('company_scope'),
+            ]);
             $role->syncPermissions($request->validated('permissions'));
             $this->logAuditChange($role, AuditEvent::Updated, $before, $this->auditState($role));
         });
@@ -147,18 +157,42 @@ class RoleController extends Controller
     /**
      * The role as recorded in the audit log.
      *
-     * @return array{name: string, permissions: list<string>}
+     * @return array{name: string, company_scope: string|null, permissions: list<string>}
      */
     private function auditState(Role $role): array
     {
         return [
             'name' => $role->name,
+            'company_scope' => $this->scopeOf($role)?->value,
             'permissions' => array_values(PermissionModel::query()
                 ->whereRelation('roles', 'roles.id', $role->id)
                 ->orderBy('name')
                 ->get()
                 ->map(fn (PermissionModel $permission): string => $permission->name)
                 ->all()),
+        ];
+    }
+
+    /**
+     * The role's company scope, see CompanyScope.
+     */
+    private function scopeOf(Role $role): ?CompanyScope
+    {
+        return CompanyScope::tryFrom((string) $role->getAttribute('company_scope'));
+    }
+
+    /**
+     * What the role form offers: permissions by group, the scopes, and which
+     * permissions a client-scoped role cannot hold.
+     *
+     * @return array{permissionGroups: array<string, list<string>>, companyScopes: list<array{value: string, label: string}>, internalOnlyPermissions: list<string>}
+     */
+    private function formOptions(): array
+    {
+        return [
+            'permissionGroups' => $this->permissionGroups(),
+            'companyScopes' => CompanyScope::options(),
+            'internalOnlyPermissions' => Permission::internalOnlyValues(),
         ];
     }
 

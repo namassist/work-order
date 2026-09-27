@@ -10,24 +10,37 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
+ * @property int $company_id
  * @property string $code
  * @property string $name
  * @property bool $is_active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
+ * @property-read Company $company
  */
-#[Fillable(['code', 'name', 'is_active'])]
+#[Fillable(['company_id', 'code', 'name', 'is_active'])]
 class Department extends Model
 {
     /** @use HasFactory<DepartmentFactory> */
     use HasFactory, LogsModelActivity, SearchesColumns, SoftDeletes;
+
+    /**
+     * The company the department belongs to, even if it was deleted later.
+     *
+     * @return BelongsTo<Company, $this>
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class)->withTrashed();
+    }
 
     /**
      * Users assigned to the department (soft-deleted users excluded).

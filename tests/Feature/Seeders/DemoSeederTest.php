@@ -1,7 +1,9 @@
 <?php
 
 use App\Enums\AuditEvent;
+use App\Enums\CompanyScope;
 use App\Enums\SystemRole;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\Media;
 use App\Models\User;
@@ -17,6 +19,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
+use Spatie\Permission\Models\Role;
 
 beforeEach(function () {
     config(['auth.default_user_password' => 'demo-secret']);
@@ -41,31 +44,65 @@ it('refuses to run without a default user password', function () {
     expect(User::count())->toBe(0);
 });
 
-it('creates departments, categories, and accounts covering every role', function () {
+it('creates the IC and Unggul companies with their departments', function () {
     $this->seed(DemoSeeder::class);
 
-    expect(Department::count())->toBeBetween(6, 8)
-        ->and(WorkOrderCategory::count())->toBeGreaterThanOrEqual(4);
+    expect(Company::query()->orderBy('code')->get()->map(fn (Company $company): array => $company->only(['code', 'name', 'is_client', 'email_domains']))->all())
+        ->toBe([
+            ['code' => 'IC', 'name' => 'IC', 'is_client' => true, 'email_domains' => ['ic.worder.test']],
+            ['code' => 'UGL', 'name' => 'Unggul', 'is_client' => false, 'email_domains' => ['worder.test']],
+        ])
+        ->and(Department::query()->with('company')->orderBy('code')->get()->groupBy('company.code')->map(fn ($departments): array => $departments->pluck('code')->all())->all())
+        ->toBe([
+            'UGL' => ['ENG', 'GA', 'IT', 'KEU'],
+            'IC' => ['HRD', 'LOG', 'MTC', 'PRD'],
+        ]);
+});
 
-    $users = User::query()->with('roles')->get();
+it('creates categories and accounts for every role, each fitting its company', function () {
+    $this->seed(DemoSeeder::class);
+
+    expect(WorkOrderCategory::count())->toBeGreaterThanOrEqual(4);
+
+    $users = User::query()->with(['roles', 'department.company'])->get();
 
     expect($users->pluck('roles')->flatten()->pluck('name')->unique()->sort()->values()->all())
-        ->toBe(['admin', 'approver', 'keuangan', 'pemohon', 'viewer'])
+        ->toBe(['admin', 'keuangan', 'koordinator', 'pelaksana', 'pemohon', 'viewer'])
         ->and($users->every(fn (User $user): bool => Hash::check('demo-secret', $user->password)))->toBeTrue()
         ->and($users->where('must_change_password', true)->count())->toBeBetween(2, 3);
 
-    Department::all()->each(function (Department $department) use ($users): void {
-        $members = $users->where('department_id', $department->id);
+    $users->each(function (User $user): void {
+        $company = $user->department->company;
 
-        expect($members->count())->toBeBetween(3, 5)
-            ->and($members->contains(fn (User $user): bool => $user->hasRole('approver')))->toBeTrue()
-            ->and($members->contains(fn (User $user): bool => $user->hasRole('pemohon')))->toBeTrue();
+        expect($user->roles->every(fn (Role $role): bool => CompanyScope::fits(CompanyScope::tryFrom((string) $role->company_scope), $company)))->toBeTrue()
+            ->and($user->email)->toEndWith('@'.$company->email_domains[0]);
     });
+
+    $rolesIn = fn (string $code): array => $users->filter(fn (User $user): bool => $user->department->code === $code)
+        ->flatMap(fn (User $user) => $user->roles->pluck('name'))->unique()->values()->all();
+
+    foreach (['PRD', 'HRD', 'LOG', 'MTC'] as $code) {
+        expect($rolesIn($code))->toContain('pemohon');
+    }
+
+    foreach (['ENG', 'GA', 'IT'] as $code) {
+        expect($rolesIn($code))->toContain('pelaksana');
+    }
+
+    expect($rolesIn('KEU'))->toContain('keuangan')
+        ->and($rolesIn('GA'))->toContain('koordinator');
 
     $admin = User::query()->where('email', 'admin@worder.test')->firstOrFail();
 
     expect($admin->hasRole(SystemRole::Admin->value))->toBeTrue()
+        ->and($admin->isClient())->toBeFalse()
         ->and($admin->must_change_password)->toBeFalse();
+});
+
+it('creates work orders only in IC departments', function () {
+    $this->seed(DemoSeeder::class);
+
+    expect(WorkOrder::query()->with('department.company')->get()->every(fn (WorkOrder $workOrder): bool => $workOrder->department->company->is_client))->toBeTrue();
 });
 
 it('creates work orders in every status over the last three months', function () {
@@ -166,21 +203,23 @@ it('logs every status change with the user who made it', function () {
     });
 });
 
-it('adds comments from requesters and approvers while the work order still took them', function () {
+it('adds comments from requesters and pelaksana while the work order still took them', function () {
     $this->seed(DemoSeeder::class);
 
-    $comments = WorkOrderComment::withTrashed()->with(['workOrder.statusHistories', 'author.roles'])->get();
+    $comments = WorkOrderComment::withTrashed()->with(['workOrder.statusHistories', 'author.roles', 'author.department.company'])->get();
 
     expect($comments->pluck('work_order_id')->unique()->count())->toBeGreaterThanOrEqual(8)
         ->and($comments->pluck('author')->flatMap(fn (User $author) => $author->roles->pluck('name'))->unique()->sort()->values()->all())
-        ->toBe(['approver', 'pemohon'])
+        ->toBe(['pelaksana', 'pemohon'])
         ->and($comments->whereNotNull('edited_at'))->not->toBeEmpty()
         ->and($comments->whereNotNull('deleted_at'))->not->toBeEmpty();
 
     $comments->each(function (WorkOrderComment $comment): void {
         $cancelledAt = $comment->workOrder->statusHistories->firstWhere('to_status', 'dibatalkan')?->created_at;
 
-        expect($comment->author->department_id)->toBe($comment->workOrder->department_id)
+        expect($comment->author->hasRole('pelaksana')
+            ? ! $comment->author->department->company->is_client
+            : $comment->author->department_id === $comment->workOrder->department_id)->toBeTrue()
             ->and($comment->created_at->greaterThan($comment->workOrder->created_at))->toBeTrue()
             ->and($comment->created_at->lessThanOrEqualTo(now()))->toBeTrue()
             ->and($cancelledAt === null || $comment->created_at->lessThan($cancelledAt))->toBeTrue();
@@ -228,7 +267,7 @@ it('does not duplicate data or remove files when run again', function () {
     $this->seed(DemoSeeder::class);
 
     $counts = fn (): array => [
-        Department::count(), WorkOrderCategory::count(), User::count(),
+        Company::count(), Department::count(), WorkOrderCategory::count(), User::count(),
         WorkOrder::count(), WorkOrderStatusHistory::count(), WorkOrderComment::withTrashed()->count(), Media::count(),
     ];
     $before = $counts();

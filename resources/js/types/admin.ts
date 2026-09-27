@@ -15,6 +15,30 @@ export type Paginated<T> = {
     links: PaginationLink[];
 };
 
+/** Which companies' users a role fits, see App\Enums\CompanyScope. */
+export type CompanyScope = 'client' | 'executor';
+
+export type Company = {
+    id: number;
+    code: string;
+    name: string;
+    is_client: boolean;
+    email_domains: string[];
+    is_active: boolean;
+    departments_count: number;
+    deleted_at: string | null;
+};
+
+/** A company as the department filter and form offer it. */
+export type CompanyOption = {
+    id: number;
+    code: string;
+    name: string;
+    is_client: boolean;
+    is_active: boolean;
+    deleted: boolean;
+};
+
 export type DepartmentOption = {
     id: number;
     code: string;
@@ -22,9 +46,27 @@ export type DepartmentOption = {
 };
 
 export type Department = DepartmentOption & {
+    company_id: number;
+    company: {
+        id: number;
+        code: string;
+        name: string;
+        is_client: boolean;
+        deleted_at: string | null;
+    };
     is_active: boolean;
     users_count: number;
     deleted_at: string | null;
+};
+
+/** A department the user form offers, with the company whose roles fit. */
+export type AssignableDepartment = DepartmentOption & {
+    company: { code: string; name: string; scope: CompanyScope };
+};
+
+export type AssignableRole = {
+    name: string;
+    company_scope: CompanyScope | null;
 };
 
 export type WorkOrderCategory = {
@@ -60,12 +102,14 @@ export type RoleSummary = {
     name: string;
     users_count: number;
     permissions_count: number;
+    company_scope: SelectOption | null;
     is_system: boolean;
 };
 
 export type EditableRole = {
     id: number;
     name: string;
+    company_scope: CompanyScope | null;
     permissions: string[];
     is_system: boolean;
 };
@@ -111,6 +155,7 @@ export type ActivityEntry = {
 /** Morph aliases that have a history panel, see AuditSubject::withHistoryPanel(). */
 export type HistorySubjectType =
     | 'user'
+    | 'company'
     | 'department'
     | 'wo-category'
     | 'work-order';

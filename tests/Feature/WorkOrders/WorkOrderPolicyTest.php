@@ -20,12 +20,15 @@ it('lets work-orders.view-all see every department', function () {
     expect($user->can('view', WorkOrder::factory()->create()))->toBeTrue();
 });
 
-it('shows a user without a department no work orders', function () {
-    $user = userWithPermissions(Permission::WorkOrdersView);
-    WorkOrder::factory()->create();
+it('ignores work-orders.view-all for a client company user', function () {
+    $own = Department::factory()->client()->create();
+    $user = userInDepartment($own, Permission::WorkOrdersView, Permission::WorkOrdersViewAll);
+    $mine = WorkOrder::factory()->create(['department_id' => $own->id]);
+    $other = WorkOrder::factory()->create();
 
-    expect($user->can('view', WorkOrder::factory()->create()))->toBeFalse()
-        ->and(WorkOrder::visibleTo($user)->count())->toBe(0);
+    expect($user->can('view', $other))->toBeFalse()
+        ->and($user->can('viewAllDepartments', WorkOrder::class))->toBeFalse()
+        ->and(WorkOrder::visibleTo($user)->pluck('id')->all())->toBe([$mine->id]);
 });
 
 it('limits the visibleTo scope to the same work orders as the policy', function () {
@@ -81,11 +84,6 @@ it('answers 404 for attachment changes on another department\'s work order', fun
     'addAttachment' => ['addAttachment', fn (): string => 'dokumen'],
     'deleteAttachment' => ['deleteAttachment', fn (): Media => new Media],
 ]);
-
-it('requires a department to create work orders', function () {
-    expect(userWithPermissions(Permission::WorkOrdersCreate)->can('create', WorkOrder::class))->toBeFalse()
-        ->and(userInDepartment(Department::factory()->create(), Permission::WorkOrdersCreate)->can('create', WorkOrder::class))->toBeTrue();
-});
 
 it('grants each action only with its permission', function (string $ability, Permission $permission) {
     $department = Department::factory()->create();

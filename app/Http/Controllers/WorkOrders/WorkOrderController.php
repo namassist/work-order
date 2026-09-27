@@ -81,7 +81,7 @@ class WorkOrderController extends Controller
         $user = $request->user();
 
         return Inertia::render('work-orders/Create', [
-            'department' => $user->department?->only(['id', 'code', 'name']),
+            'department' => $user->department->only(['id', 'code', 'name']),
             'categories' => $this->selectableCategories(),
             'urgencies' => WorkOrderUrgency::options(),
             'attachmentRules' => (new WorkOrder)->documentsCollection()->toFrontend(),

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureInternalUser;
 use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleAppearance;
@@ -20,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+
+        $middleware->alias(['internal' => EnsureInternalUser::class]);
 
         $middleware->web(append: [
             HandleAppearance::class,

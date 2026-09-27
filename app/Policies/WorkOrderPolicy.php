@@ -58,12 +58,12 @@ class WorkOrderPolicy
     }
 
     /**
-     * Determine whether the user can create work orders. A work order belongs
-     * to its requester's department, so the requester needs one.
+     * Determine whether the user can create work orders, which belong to
+     * their requester's department.
      */
     public function create(User $user): bool
     {
-        return $user->checkPermissionTo(Permission::WorkOrdersCreate->value) && $user->department_id !== null;
+        return $user->checkPermissionTo(Permission::WorkOrdersCreate->value);
     }
 
     /**

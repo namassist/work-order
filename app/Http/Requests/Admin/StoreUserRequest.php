@@ -6,6 +6,7 @@ use App\Concerns\UserManagementValidationRules;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreUserRequest extends FormRequest
 {
@@ -27,5 +28,13 @@ class StoreUserRequest extends FormRequest
     public function rules(): array
     {
         return $this->userManagementRules();
+    }
+
+    /**
+     * @return array<int, callable(Validator): void>
+     */
+    public function after(): array
+    {
+        return [$this->roleFitCheck()];
     }
 }
