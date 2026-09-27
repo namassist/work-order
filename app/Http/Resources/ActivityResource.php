@@ -42,6 +42,7 @@ class ActivityResource extends JsonResource
         'description' => 'Deskripsi',
         'is_active' => 'Status',
         'department_id' => 'Departemen',
+        'target_department_id' => 'Departemen tujuan',
         'company_id' => 'Perusahaan',
         'is_client' => 'Jenis perusahaan',
         'email_domains' => 'Domain email',
@@ -67,6 +68,7 @@ class ActivityResource extends JsonResource
     private const array REFERENCE_FIELDS = [
         'company_id' => Company::class,
         'department_id' => Department::class,
+        'target_department_id' => Department::class,
         'work_order_category_id' => WorkOrderCategory::class,
     ];
 

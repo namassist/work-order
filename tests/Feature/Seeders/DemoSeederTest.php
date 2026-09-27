@@ -99,10 +99,28 @@ it('creates categories and accounts for every role, each fitting its company', f
         ->and($admin->must_change_password)->toBeFalse();
 });
 
-it('creates work orders only in IC departments', function () {
+it('requests every work order from an IC department and addresses it to an Unggul one', function () {
     $this->seed(DemoSeeder::class);
 
-    expect(WorkOrder::query()->with('department.company')->get()->every(fn (WorkOrder $workOrder): bool => $workOrder->department->company->is_client))->toBeTrue();
+    $workOrders = WorkOrder::query()->with(['requesterDepartment.company', 'targetDepartment.company', 'enteredBy'])->get();
+
+    expect($workOrders->every(fn (WorkOrder $workOrder): bool => $workOrder->requesterDepartment->company->is_client
+        && $workOrder->requester_id === $workOrder->created_by
+        && $workOrder->enteredBy->department_id === $workOrder->requester_department_id))->toBeTrue()
+        ->and($workOrders->filter(fn (WorkOrder $workOrder): bool => $workOrder->wasSubmitted())
+            ->every(fn (WorkOrder $workOrder): bool => $workOrder->targetDepartment !== null && ! $workOrder->targetDepartment->company->is_client))->toBeTrue()
+        ->and($workOrders->whereNull('target_department_id')->every(fn (WorkOrder $workOrder): bool => ! $workOrder->wasSubmitted()))->toBeTrue()
+        ->and($workOrders->whereNull('target_department_id'))->not->toBeEmpty();
+});
+
+it('only lets people act on work orders they can see', function () {
+    $this->seed(DemoSeeder::class);
+
+    $comments = WorkOrderComment::withTrashed()->with(['workOrder', 'author'])->get();
+    $transitions = WorkOrderStatusHistory::query()->with(['workOrder', 'user'])->get();
+
+    expect($comments->every(fn (WorkOrderComment $comment): bool => $comment->workOrder->isVisibleTo($comment->author)))->toBeTrue()
+        ->and($transitions->every(fn (WorkOrderStatusHistory $history): bool => $history->workOrder->isVisibleTo($history->user)))->toBeTrue();
 });
 
 it('creates work orders in every status over the last three months', function () {
@@ -218,8 +236,8 @@ it('adds comments from requesters and pelaksana while the work order still took 
         $cancelledAt = $comment->workOrder->statusHistories->firstWhere('to_status', 'dibatalkan')?->created_at;
 
         expect($comment->author->hasRole('pelaksana')
-            ? ! $comment->author->department->company->is_client
-            : $comment->author->department_id === $comment->workOrder->department_id)->toBeTrue()
+            ? $comment->author->department_id === $comment->workOrder->target_department_id
+            : $comment->author->department_id === $comment->workOrder->requester_department_id)->toBeTrue()
             ->and($comment->created_at->greaterThan($comment->workOrder->created_at))->toBeTrue()
             ->and($comment->created_at->lessThanOrEqualTo(now()))->toBeTrue()
             ->and($cancelledAt === null || $comment->created_at->lessThan($cancelledAt))->toBeTrue();

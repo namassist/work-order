@@ -7,12 +7,14 @@ import WorkOrderForm from '@/components/work-orders/WorkOrderForm.vue';
 import type {
     AttachmentPanelData,
     CategoryOption,
+    DepartmentOption,
     WorkOrder,
     WorkOrderUrgencyOption,
 } from '@/types';
 
 defineProps<{
     workOrder: WorkOrder;
+    targetDepartments: DepartmentOption[];
     categories: CategoryOption[];
     urgencies: WorkOrderUrgencyOption[];
     attachments: AttachmentPanelData;
@@ -36,7 +38,8 @@ defineOptions({
         <template #meta>{{ workOrder.title }}</template>
         <WorkOrderForm
             :work-order="workOrder"
-            :department="workOrder.department"
+            :department="workOrder.requester_department"
+            :target-departments="targetDepartments"
             :categories="categories"
             :urgencies="urgencies"
         />

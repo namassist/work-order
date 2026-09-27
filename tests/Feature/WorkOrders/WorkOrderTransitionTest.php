@@ -4,15 +4,16 @@ use App\Actions\WorkOrders\TransitionWorkOrder;
 use App\Enums\Permission;
 use App\Models\Department;
 use App\Models\WorkOrder;
+use App\States\WorkOrder\WorkOrderStatus;
 use Illuminate\Support\Carbon;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\ModelStates\Exceptions\CouldNotPerformTransition;
 
 beforeEach(function () {
     $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
-    $this->department = Department::factory()->create(['code' => 'IT']);
+    $this->department = Department::factory()->client()->create(['code' => 'IT']);
     $this->user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate, Permission::ActivityLogView);
-    $this->workOrder = WorkOrder::factory()->create(['department_id' => $this->department->id]);
+    $this->workOrder = WorkOrder::factory()->targeting(Department::factory()->create())->create(['requester_department_id' => $this->department->id]);
 });
 
 it('numbers a draft on submission and records the change', function () {
@@ -41,7 +42,8 @@ it('shows the status change with labels in the history panel', function () {
     $this->travel(1)->minutes();
     app(TransitionWorkOrder::class)->handle($this->workOrder, 'diajukan', $this->user);
 
-    $this->actingAs($this->user)
+    // The activity log is internal (Unggul) only.
+    $this->actingAs(unggulUser(Permission::ActivityLogView))
         ->getJson(route('admin.activity-log.history', ['work-order', $this->workOrder->id]))
         ->assertOk()
         ->assertJsonPath('data.0.event_label', 'Status diubah')
@@ -89,7 +91,12 @@ it('requires a note to cancel', function () {
 });
 
 it('rejects a transition the current status does not allow', function (string $from, string $to) {
-    $workOrder = WorkOrder::factory()->create(['department_id' => $this->department->id, 'status' => $from]);
+    $workOrder = WorkOrder::factory()->create([
+        'requester_department_id' => $this->department->id,
+        'status' => $from,
+        // A submitted status always has a number (work_orders_submitted_number_check).
+        'number' => $from === 'diajukan' ? 'WO/IT/2026/09/0009' : null,
+    ]);
 
     $this->actingAs($this->user)
         ->post(route('work-orders.transitions.store', $workOrder), ['status' => $to, 'note' => 'x'])
@@ -119,4 +126,33 @@ it('forbids transitions without the update permission', function () {
     $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
         ->post(route('work-orders.transitions.store', $this->workOrder), ['status' => 'diajukan'])
         ->assertForbidden();
+});
+
+it('refuses to submit a draft without a target department', function () {
+    $draft = WorkOrder::factory()->create(['requester_department_id' => $this->department->id]);
+
+    $this->actingAs($this->user)
+        ->post(route('work-orders.transitions.store', $draft), ['status' => 'diajukan'])
+        ->assertSessionHasErrors(['status' => 'Pilih departemen tujuan sebelum mengajukan.']);
+
+    expect($draft->refresh())
+        ->status->getValue()->toBe('draft')
+        ->number->toBeNull()
+        ->and($draft->statusHistories()->where('to_status', 'diajukan')->exists())->toBeFalse();
+});
+
+it('still cancels a draft without a target department', function () {
+    $draft = WorkOrder::factory()->create(['requester_department_id' => $this->department->id]);
+
+    $this->actingAs($this->user)
+        ->post(route('work-orders.transitions.store', $draft), ['status' => 'dibatalkan', 'note' => 'Tidak jadi.'])
+        ->assertSessionHasNoErrors();
+
+    expect($draft->refresh()->status->getValue())->toBe('dibatalkan');
+});
+
+it('requires a target department for exactly the statuses after the first submission', function () {
+    expect(collect(WorkOrderStatus::options())->mapWithKeys(fn (array $option): array => [
+        $option['value'] => WorkOrderStatus::fromName($option['value'])?->requiresTargetDepartment(),
+    ])->all())->toBe(['draft' => false, 'diajukan' => true, 'dibatalkan' => false]);
 });

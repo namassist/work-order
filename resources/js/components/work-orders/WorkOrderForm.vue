@@ -29,16 +29,23 @@ const props = defineProps<{
     workOrder: WorkOrder | null;
     /** The requester's department, which the work order belongs to. */
     department: DepartmentOption;
+    /** Executor company departments the work order can be addressed to. */
+    targetDepartments: DepartmentOption[];
     categories: CategoryOption[];
     urgencies: WorkOrderUrgencyOption[];
     /** On create only: documents are sent with the form. Edit uploads them separately. */
     attachmentRules?: AttachmentRules;
 }>();
 
+/** The target select's value while no department is chosen. */
+const NO_TARGET = 'none';
+
 const form = useForm({
     title: props.workOrder?.title ?? '',
     description: props.workOrder?.description ?? '',
     work_order_category_id: props.workOrder?.category.id ?? null,
+    target_department_id: (props.workOrder?.target_department?.id ??
+        NO_TARGET) as number | typeof NO_TARGET,
     urgency: props.workOrder?.urgency.value ?? 'normal',
     target_date: props.workOrder?.target_date ?? '',
     attachments: [] as File[],
@@ -61,6 +68,10 @@ const submit = () => {
     form.transform(({ attachments, ...data }) => ({
         ...data,
         target_date: data.target_date || null,
+        target_department_id:
+            data.target_department_id === NO_TARGET
+                ? null
+                : data.target_department_id,
         ...(props.workOrder ? {} : { attachments }),
     })).submit(
         props.workOrder
@@ -106,11 +117,38 @@ const submit = () => {
             </div>
 
             <div class="grid content-start gap-2">
-                <Label>Departemen</Label>
+                <Label>Departemen pemohon</Label>
                 <p class="flex h-9 items-center gap-2 text-sm">
                     <span class="font-mono">{{ department.code }}</span>
                     {{ department.name }}
                 </p>
+            </div>
+
+            <div class="grid content-start gap-2">
+                <Label for="wo-target-department">Departemen tujuan</Label>
+                <Select v-model="form.target_department_id">
+                    <SelectTrigger id="wo-target-department" class="w-full">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem :value="NO_TARGET"
+                            >Belum dipilih</SelectItem
+                        >
+                        <SelectItem
+                            v-for="target in targetDepartments"
+                            :key="target.id"
+                            :value="target.id"
+                        >
+                            <span class="font-mono">{{ target.code }}</span>
+                            {{ target.name }}
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+                <p class="text-xs text-muted-foreground">
+                    Departemen pelaksana yang mengerjakan. Wajib dipilih sebelum
+                    diajukan.
+                </p>
+                <InputError :message="form.errors.target_department_id" />
             </div>
 
             <div class="grid content-start gap-2">

@@ -12,6 +12,7 @@ import type {
 
 defineProps<{
     department: DepartmentOption;
+    targetDepartments: DepartmentOption[];
     categories: CategoryOption[];
     urgencies: WorkOrderUrgencyOption[];
     attachmentRules: AttachmentRules;
@@ -35,6 +36,7 @@ defineOptions({
         <WorkOrderForm
             :work-order="null"
             :department="department"
+            :target-departments="targetDepartments"
             :categories="categories"
             :urgencies="urgencies"
             :attachment-rules="attachmentRules"

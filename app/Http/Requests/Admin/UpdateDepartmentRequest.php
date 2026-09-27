@@ -50,7 +50,9 @@ class UpdateDepartmentRequest extends FormRequest
                 }
 
                 $inUse = User::withTrashed()->whereBelongsTo($department)->exists()
-                    || WorkOrder::withTrashed()->whereBelongsTo($department)->exists();
+                    || WorkOrder::withTrashed()->where(fn ($query) => $query
+                        ->where('requester_department_id', $department->id)
+                        ->orWhere('target_department_id', $department->id))->exists();
 
                 if ($inUse) {
                     $validator->errors()->add('company_id', __('Departemen yang sudah memiliki pengguna atau work order tidak dapat dipindah ke perusahaan lain.'));

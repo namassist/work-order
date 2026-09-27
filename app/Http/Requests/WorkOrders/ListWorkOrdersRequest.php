@@ -99,7 +99,7 @@ class ListWorkOrdersRequest extends FormRequest
             ->search($filters['search'])
             ->when($filters['status'], fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($filters['urgency'], fn (Builder $query, string $urgency) => $query->where('urgency', $urgency))
-            ->when($filters['department'], fn (Builder $query, string $id) => $query->where('department_id', (int) $id))
+            ->when($filters['department'], fn (Builder $query, string $id) => $query->where('requester_department_id', (int) $id))
             ->when($filters['category'], fn (Builder $query, string $id) => $query->where('work_order_category_id', (int) $id))
             ->when($filters['from'], fn (Builder $query, string $from) => $query
                 ->where('created_at', '>=', DisplayDate::startOfDayUtc($from)))

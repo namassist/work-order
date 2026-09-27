@@ -7,8 +7,9 @@ use App\Models\WorkOrder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Creates a draft work order in its requester's department and writes the
- * first status history row (null → draft).
+ * Creates a draft work order for its requester's department, with the
+ * requester as the one who entered it, and writes the first status history
+ * row (null → draft).
  */
 class CreateWorkOrder
 {
@@ -19,7 +20,8 @@ class CreateWorkOrder
     {
         return DB::transaction(function () use ($attributes, $requester): WorkOrder {
             $workOrder = new WorkOrder($attributes);
-            $workOrder->department_id = (int) $requester->department_id;
+            $workOrder->requester_department_id = $requester->department_id;
+            $workOrder->requester_id = $requester->id;
             $workOrder->created_by = $requester->id;
             $workOrder->save();
 

@@ -16,7 +16,7 @@ class StoreWorkOrderCommentRequest extends FormRequest
      */
     public function authorize(): Response
     {
-        // The policy's response keeps its 404 for other departments' work orders.
+        // The policy's response keeps its 404 for work orders the user cannot see.
         return Gate::inspect('addComment', $this->workOrder());
     }
 

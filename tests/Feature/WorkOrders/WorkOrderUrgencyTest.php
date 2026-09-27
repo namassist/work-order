@@ -12,7 +12,7 @@ use Inertia\Testing\AssertableInertia;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
-    $this->department = Department::factory()->create(['code' => 'IT']);
+    $this->department = Department::factory()->client()->create(['code' => 'IT']);
     $this->category = WorkOrderCategory::factory()->create();
 });
 
@@ -21,7 +21,7 @@ beforeEach(function () {
  */
 function urgentWorkOrder(array $attributes = []): WorkOrder
 {
-    return WorkOrder::factory()->create(['department_id' => test()->department->id, ...$attributes]);
+    return WorkOrder::factory()->create(['requester_department_id' => test()->department->id, ...$attributes]);
 }
 
 describe('storage', function () {
@@ -45,7 +45,8 @@ describe('storage', function () {
         $migration->down();
         DB::table('work_orders')->insert([
             'title' => 'Sebelum urgensi',
-            'department_id' => $this->department->id,
+            'requester_department_id' => $this->department->id,
+            'requester_id' => $existing->created_by,
             'work_order_category_id' => $this->category->id,
             'created_by' => $existing->created_by,
             'status' => 'draft',

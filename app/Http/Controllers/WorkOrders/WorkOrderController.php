@@ -31,6 +31,11 @@ use Inertia\Response;
 class WorkOrderController extends Controller
 {
     /**
+     * What WorkOrderResource shows.
+     */
+    public const array LIST_RELATIONS = ['requesterDepartment', 'targetDepartment', 'category', 'requester', 'enteredBy'];
+
+    /**
      * List the work orders the user may see, with search, filters, and pagination.
      */
     public function index(ListWorkOrdersRequest $request): Response
@@ -39,7 +44,7 @@ class WorkOrderController extends Controller
         $user = $request->user();
 
         $workOrders = $request->workOrders()
-            ->with(['department', 'category', 'requester'])
+            ->with(self::LIST_RELATIONS)
             ->paginate(15)
             ->withQueryString();
 
@@ -56,9 +61,12 @@ class WorkOrderController extends Controller
             'statuses' => WorkOrderStatus::options(),
             'urgencies' => WorkOrderUrgency::options(),
             'stats' => $this->statusCounts($user),
-            // Only users who see other departments can filter by department.
+            // Only users who see other departments can filter by (requesting, so client company) department.
             'departments' => $user->can('viewAllDepartments', WorkOrder::class)
-                ? Department::orderBy('code')->get(['id', 'code', 'name'])
+                ? Department::query()
+                    ->whereRelation('company', 'is_client', true)
+                    ->orderBy('code')
+                    ->get(['id', 'code', 'name'])
                 : null,
             'categories' => WorkOrderCategory::orderBy('code')->get(['id', 'code', 'name']),
             'can' => [
@@ -82,6 +90,7 @@ class WorkOrderController extends Controller
 
         return Inertia::render('work-orders/Create', [
             'department' => $user->department->only(['id', 'code', 'name']),
+            'targetDepartments' => $this->selectableTargetDepartments(),
             'categories' => $this->selectableCategories(),
             'urgencies' => WorkOrderUrgency::options(),
             'attachmentRules' => (new WorkOrder)->documentsCollection()->toFrontend(),
@@ -127,7 +136,7 @@ class WorkOrderController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $workOrder->load(['department', 'category', 'requester']);
+        $workOrder->load(self::LIST_RELATIONS);
 
         $canTransition = $user->can('transition', $workOrder);
 
@@ -160,10 +169,11 @@ class WorkOrderController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $workOrder->load(['department', 'category', 'requester']);
+        $workOrder->load(self::LIST_RELATIONS);
 
         return Inertia::render('work-orders/Edit', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
+            'targetDepartments' => $this->selectableTargetDepartments($workOrder),
             'categories' => $this->selectableCategories($workOrder),
             'urgencies' => WorkOrderUrgency::options(),
             'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
@@ -220,6 +230,25 @@ class WorkOrderController extends Controller
     }
 
     /**
+     * Departments a work order can be addressed to (FLOW.md §2): active ones
+     * of the executor company, plus the work order's current target even if
+     * it was deactivated or deleted. Only id, code, and name, since client
+     * company users see this list too.
+     *
+     * @return Collection<int, Department>
+     */
+    private function selectableTargetDepartments(?WorkOrder $workOrder = null): Collection
+    {
+        return Department::withTrashed()
+            ->whereRelation('company', 'is_client', false)
+            ->where(fn (Builder $query) => $query
+                ->where(fn (Builder $query) => $query->where('is_active', true)->whereNull('deleted_at'))
+                ->when($workOrder?->target_department_id, fn (Builder $query, int $id) => $query->orWhere('id', $id)))
+            ->orderBy('code')
+            ->get(['id', 'code', 'name']);
+    }
+
+    /**
      * Active categories, plus the work order's current one even if it was
      * deactivated or deleted.
      *
@@ -261,7 +290,7 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * @return array{value: string, label: string, tone: string, requires_note: bool}
+     * @return array{value: string, label: string, tone: string, requires_note: bool, requires_target_department: bool}
      */
     private function transitionOption(string $name): array
     {
@@ -272,6 +301,7 @@ class WorkOrderController extends Controller
             'label' => $state?->actionLabel() ?? $name,
             'tone' => $state?->tone() ?? 'secondary',
             'requires_note' => $state?->requiresNote() ?? false,
+            'requires_target_department' => $state?->requiresTargetDepartment() ?? false,
         ];
     }
 }

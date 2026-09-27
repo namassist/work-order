@@ -233,7 +233,7 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                         <PersonName :name="workOrder.requester.name" />
                     </TableCell>
                     <TableCell class="hidden font-mono xl:table-cell">
-                        {{ workOrder.department.code }}
+                        {{ workOrder.requester_department.code }}
                     </TableCell>
                     <TableCell class="hidden font-mono xl:table-cell">
                         {{ workOrder.category.code }}
