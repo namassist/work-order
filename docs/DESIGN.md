@@ -115,11 +115,42 @@ Hanya transisi yang menjawab aksi user (buka dialog, expand baris, toast konfirm
 - Halaman daftar, urutan dari atas:
     1. Strip statistik: 4 kolom dipisah garis vertikal, angka besar di atas label,
        ikon kecil monokrom di pojok kanan atas.
-    2. Toolbar: aksi utama di kiri, pencarian dan filter di kanan.
+    2. Toolbar: aksi utama di kiri, pencarian dan filter di kanan (lihat Toolbar filter).
     3. Tabel.
 - Halaman form: field langsung di dalam panel, tanpa kotak tambahan. Grid 2 kolom di desktop,
   1 kolom di mobile. Textarea deskripsi selebar penuh. Tombol Simpan dan Batal di kanan bawah.
   Form create tidak menampilkan nomor WO (nomor dibuat saat diajukan).
+
+### Toolbar filter
+
+Pola untuk daftar dengan banyak filter; Daftar WO yang pertama. Bagian-bagiannya ada di
+`components/list-filters/` (`FilterToolbar`, `SearchFilter`, `FilterSelect`, `FilterPopover`,
+`FilterSheet`, `DateRangeFilter`, `SortSelect`, `ActiveFilterChips`). Parameter query tetap
+milik server, jadi URL lama, ekspor, dan tautan dashboard tetap berlaku.
+
+- Selalu terlihat: pencarian plus dua atau tiga filter yang paling sering dipakai (Daftar WO:
+  Status, Urgensi). Sisanya di balik tombol "Filter" (popover) dengan badge jumlah filter aktif
+  di dalamnya. Filter yang butuh izin (mis. Departemen, Tampilkan terhapus) tidak dirender sama
+  sekali tanpa izinnya.
+- Urutkan terpisah di ujung kanan, setelah garis vertikal. Urutan bukan filter: tanpa chip,
+  tidak dihitung di badge, tidak memicu empty state "Tidak ada … yang cocok", dan tetap
+  dipertahankan oleh "Reset semua".
+- Chip filter aktif di bawah kontrol, di dalam bagian toolbar yang sama: satu chip per filter
+  ("Status: Diajukan", "Dibuat: 1 Sep 2026 – 27 Sep 2026"), klik untuk menghapusnya, lalu
+  "Reset semua". Chip dibaca dari filter yang dikirim server, bukan dari isian yang belum
+  diterapkan. Tanpa filter aktif, baris chip tidak ada.
+- Filter diterapkan langsung, tanpa tombol Terapkan. Reload memakai `preserveState` dan
+  `preserveScroll`, jadi popover dan sheet tetap terbuka selama filter diubah.
+- Rentang tanggal: `DateRangeFilter` (kalender id-ID, minggu mulai Senin) dengan preset Hari
+  ini, 7 hari terakhir, 30 hari terakhir, Bulan ini, dihitung dari "hari ini" WITA. Rentang
+  diterapkan hanya saat kedua ujung sudah dipilih atau preset diklik; "Hapus" mengosongkan
+  kedua ujung sekaligus. Nilainya tanggal kalender (Y-m-d); server mengubahnya ke batas UTC.
+- Responsif: kontrol inline mulai `xl`. Di bawah `xl`, hanya pencarian dan satu tombol
+  "Filter" yang membuka Sheet berisi semua filter plus Urutkan. Hasil cek 390, 768, 1024,
+  1280, dan 1440px: kontrol inline Daftar WO butuh ±810px dalam satu baris, sedangkan lebar
+  toolbar di 1024px hanya ±690px, jadi `lg` memecahnya jadi dua baris; mulai `xl` muat satu
+  baris. Bila tidak muat di samping aksi utama, seluruh baris kontrol turun ke bawah aksi,
+  tidak pernah terpecah.
 
 ### Tabel
 
