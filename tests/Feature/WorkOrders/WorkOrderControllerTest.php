@@ -5,7 +5,6 @@ use App\Actions\WorkOrders\AddWorkOrderComment;
 use App\Enums\Permission;
 use App\Models\Department;
 use App\Models\Media;
-use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use Illuminate\Database\QueryException;
@@ -228,9 +227,6 @@ describe('create and store', function () {
             'work_order_category_id' => $this->category->id,
             'urgency' => 'tinggi',
             'target_date' => '2026-09-25',
-            // Fixed by the server: the requester's own department and account.
-            'requester_department_id' => Department::factory()->client()->create()->id,
-            'requester_id' => User::factory()->create()->id,
         ]);
 
         $workOrder = WorkOrder::sole();

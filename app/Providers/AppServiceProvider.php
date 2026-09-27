@@ -83,6 +83,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('wo-comment-post', $perUserPerMinute(10));
         RateLimiter::for('wo-comment-change', $perUserPerMinute(10));
         RateLimiter::for('attachment-upload', $perUserPerMinute(30));
+        RateLimiter::for('wo-requester-search', $perUserPerMinute(30));
     }
 
     /**

@@ -8,6 +8,7 @@ import type {
     AttachmentPanelData,
     CategoryOption,
     DepartmentOption,
+    RequesterCorrection,
     WorkOrder,
     WorkOrderUrgencyOption,
 } from '@/types';
@@ -15,6 +16,7 @@ import type {
 defineProps<{
     workOrder: WorkOrder;
     targetDepartments: DepartmentOption[];
+    requesterCorrection: RequesterCorrection | null;
     categories: CategoryOption[];
     urgencies: WorkOrderUrgencyOption[];
     attachments: AttachmentPanelData;
@@ -40,6 +42,7 @@ defineOptions({
             :work-order="workOrder"
             :department="workOrder.requester_department"
             :target-departments="targetDepartments"
+            :requester-correction="requesterCorrection"
             :categories="categories"
             :urgencies="urgencies"
         />

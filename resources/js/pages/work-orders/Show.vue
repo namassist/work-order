@@ -171,7 +171,19 @@ const destroy = () => {
                 </div>
                 <div>
                     <dt class="text-muted-foreground">Pemohon</dt>
-                    <dd>{{ workOrder.requester.name }}</dd>
+                    <dd>
+                        {{ workOrder.requester.name }}
+                        <span
+                            v-if="workOrder.requester.id === null"
+                            class="text-muted-foreground"
+                        >
+                            (tanpa akun)
+                        </span>
+                    </dd>
+                </div>
+                <div v-if="workOrder.entered_on_behalf">
+                    <dt class="text-muted-foreground">Diinput oleh</dt>
+                    <dd>{{ workOrder.entered_by.name }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted-foreground">Urgensi</dt>

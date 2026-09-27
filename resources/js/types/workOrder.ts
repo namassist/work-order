@@ -46,6 +46,8 @@ export type WorkOrder = {
     requester: { id: number | null; name: string };
     /** Who entered the work order: the requester, or a koordinator on their behalf. */
     entered_by: { name: string };
+    /** Entered by someone other than the requester (a koordinator). */
+    entered_on_behalf: boolean;
     created_at: string;
     /** Last activity: edits, comments, status changes, and attachments. */
     updated_at: string;
@@ -74,6 +76,8 @@ export type StatusHistoryEntry = {
     to: { value: string; label: string };
     user: { id: number; name: string };
     note: string | null;
+    /** On the creation entry of an on-behalf work order: the requester's name. */
+    on_behalf_of: string | null;
     created_at: string;
 };
 
@@ -116,4 +120,18 @@ export type UrgentWorkOrder = {
     requester: { id: number | null; name: string };
     /** ISO moment of the first submission. */
     submitted_at: string | null;
+};
+
+/** An account the koordinator can pick as the requester of an on-behalf work order. */
+export type RequesterAccount = {
+    id: number;
+    name: string;
+    email: string;
+};
+
+/** The current requester of an on-behalf draft, for the koordinator who entered it. */
+export type RequesterCorrection = {
+    department_id: number;
+    account: RequesterAccount | null;
+    contact_name: string | null;
 };

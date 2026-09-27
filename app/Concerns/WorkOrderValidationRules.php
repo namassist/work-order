@@ -67,6 +67,10 @@ trait WorkOrderValidationRules
         return [
             'target_date.after_or_equal' => __('Target selesai tidak boleh sebelum hari ini.'),
             'target_department_id.exists' => __('Pilih departemen aktif dari perusahaan pelaksana.'),
+            'requester_department_id.exists' => __('Pilih departemen aktif dari perusahaan klien.'),
+            'requester_id.exists' => __('Pilih akun aktif dari departemen pemohon.'),
+            'requester_id.required_if' => __('Pilih akun pemohon.'),
+            'requester_name.required_if' => __('Isi nama kontak pemohon.'),
         ];
     }
 }

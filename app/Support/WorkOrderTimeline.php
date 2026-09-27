@@ -23,6 +23,7 @@ class WorkOrderTimeline
     public static function for(WorkOrder $workOrder, User $viewer): array
     {
         $workOrder->loadMissing([
+            'requester',
             'statusHistories.user',
             'comments' => fn ($query) => $query->withTrashed()->with('author'),
         ]);
@@ -32,7 +33,12 @@ class WorkOrderTimeline
         $entries = [
             ...$workOrder->statusHistories->map(fn (WorkOrderStatusHistory $history): array => [
                 'sort' => [$history->created_at->getTimestamp(), $history->created_at->micro, 0, $history->id],
-                'entry' => ['type' => 'status', ...$history->toTimelineEntry()],
+                'entry' => [
+                    'type' => 'status',
+                    ...$history->toTimelineEntry(),
+                    // "Diinput oleh X atas nama Y" on the creation entry.
+                    'on_behalf_of' => $history->from_status === null && $workOrder->wasEnteredOnBehalf() ? $workOrder->requesterName() : null,
+                ],
             ]),
             ...$workOrder->comments->map(fn (WorkOrderComment $comment): array => [
                 'sort' => [$comment->created_at->getTimestamp(), $comment->created_at->micro, 1, $comment->id],

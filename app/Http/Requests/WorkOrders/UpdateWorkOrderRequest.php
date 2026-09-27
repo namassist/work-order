@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\WorkOrders;
 
+use App\Concerns\WorkOrderRequesterRules;
 use App\Concerns\WorkOrderValidationRules;
 use App\Models\WorkOrder;
 use Illuminate\Auth\Access\Response;
@@ -11,7 +12,7 @@ use Illuminate\Support\Facades\Gate;
 
 class UpdateWorkOrderRequest extends FormRequest
 {
-    use WorkOrderValidationRules;
+    use WorkOrderRequesterRules, WorkOrderValidationRules;
 
     /**
      * Determine if the user is authorized to make this request.
@@ -23,13 +24,34 @@ class UpdateWorkOrderRequest extends FormRequest
     }
 
     /**
-     * Get the validation rules that apply to the request.
+     * Get the validation rules that apply to the request. The requester
+     * department never changes; the koordinator who entered an on-behalf
+     * draft may correct its requester within that department.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
-        return $this->workOrderRules($this->workOrder());
+        $workOrder = $this->workOrder();
+
+        if (! $this->correctsRequester()) {
+            return [...$this->workOrderRules($workOrder), ...$this->prohibitedRequesterRules(withDepartment: true)];
+        }
+
+        return [
+            ...$this->workOrderRules($workOrder),
+            'requester_department_id' => ['prohibited'],
+            ...$this->requesterRules($workOrder->requester_department_id),
+        ];
+    }
+
+    /**
+     * Whether the request sets the requester, which only the user allowed to
+     * correct it may send (WorkOrderPolicy::updateRequester()).
+     */
+    public function correctsRequester(): bool
+    {
+        return $this->has('requester_mode') && ($this->user()?->can('updateRequester', $this->workOrder()) ?? false);
     }
 
     /**
@@ -39,5 +61,10 @@ class UpdateWorkOrderRequest extends FormRequest
     {
         /** @var WorkOrder */
         return $this->route('workOrder');
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->prepareRequesterForValidation();
     }
 }

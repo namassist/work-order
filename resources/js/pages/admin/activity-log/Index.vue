@@ -238,6 +238,9 @@ const subjectTypeLabel = computed(
                         class="hidden min-w-72 whitespace-normal md:table-cell"
                     >
                         <div class="flex flex-col gap-1.5">
+                            <p v-if="entry.summary" class="text-sm">
+                                {{ entry.summary }}
+                            </p>
                             <ActivityChanges
                                 v-if="entry.changes.length > 0"
                                 :changes="entry.changes"

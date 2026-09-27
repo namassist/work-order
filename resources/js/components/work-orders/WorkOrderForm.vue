@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
 import AttachmentPanel from '@/components/attachments/AttachmentPanel.vue';
 import FormFooter from '@/components/FormFooter.vue';
@@ -16,19 +16,28 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import RequesterAccountPicker from '@/components/work-orders/RequesterAccountPicker.vue';
 import WorkOrderUrgency from '@/components/work-orders/WorkOrderUrgency.vue';
+import { requesterPayload } from '@/lib/workOrderRequester';
+import type { RequesterMode } from '@/lib/workOrderRequester';
 import type {
     AttachmentRules,
     CategoryOption,
     DepartmentOption,
+    RequesterAccount,
+    RequesterCorrection,
     WorkOrder,
     WorkOrderUrgencyOption,
 } from '@/types';
 
 const props = defineProps<{
     workOrder: WorkOrder | null;
-    /** The requester's department, which the work order belongs to. */
-    department: DepartmentOption;
+    /** The requester's department; null when a koordinator picks one (requesterDepartments). */
+    department: DepartmentOption | null;
+    /** On create by a koordinator: the IC departments to enter the work order for. */
+    requesterDepartments?: DepartmentOption[] | null;
+    /** On edit by the koordinator who entered this draft: its current requester, to correct. */
+    requesterCorrection?: RequesterCorrection | null;
     /** Executor company departments the work order can be addressed to. */
     targetDepartments: DepartmentOption[];
     categories: CategoryOption[];
@@ -40,6 +49,20 @@ const props = defineProps<{
 /** The target select's value while no department is chosen. */
 const NO_TARGET = 'none';
 
+/** Create on behalf of IC: the koordinator picks the department and the requester. */
+const onBehalf = computed(
+    () => !props.workOrder && !!props.requesterDepartments,
+);
+
+/** The requester section: on-behalf create, or correcting an on-behalf draft. */
+const choosesRequester = computed(
+    () => onBehalf.value || !!props.requesterCorrection,
+);
+
+const requesterAccount = ref<RequesterAccount | null>(
+    props.requesterCorrection?.account ?? null,
+);
+
 const form = useForm({
     title: props.workOrder?.title ?? '',
     description: props.workOrder?.description ?? '',
@@ -49,10 +72,21 @@ const form = useForm({
     urgency: props.workOrder?.urgency.value ?? 'normal',
     target_date: props.workOrder?.target_date ?? '',
     attachments: [] as File[],
+    requester_department_id: (props.requesterCorrection?.department_id ??
+        null) as number | null,
+    requester_mode: (props.requesterCorrection?.contact_name
+        ? 'contact'
+        : 'account') as RequesterMode,
+    requester_name: props.requesterCorrection?.contact_name ?? '',
 });
 
 const selectedUrgency = computed(() =>
     props.urgencies.find((urgency) => urgency.value === form.urgency),
+);
+
+/** requester_id is sent from the picker, not a field of this form. */
+const requesterIdError = computed(
+    () => (form.errors as Record<string, string | undefined>).requester_id,
 );
 
 /** Errors on the list ("attachments") or on one file ("attachments.0"). */
@@ -65,15 +99,31 @@ const attachmentsError = computed(
 );
 
 const submit = () => {
-    form.transform(({ attachments, ...data }) => ({
-        ...data,
-        target_date: data.target_date || null,
-        target_department_id:
-            data.target_department_id === NO_TARGET
-                ? null
-                : data.target_department_id,
-        ...(props.workOrder ? {} : { attachments }),
-    })).submit(
+    form.transform(
+        ({
+            attachments,
+            requester_department_id,
+            requester_mode,
+            requester_name,
+            ...data
+        }) => ({
+            ...data,
+            ...requesterPayload({
+                choosesRequester: choosesRequester.value,
+                onBehalf: onBehalf.value,
+                mode: requester_mode,
+                account: requesterAccount.value,
+                contactName: requester_name,
+                departmentId: requester_department_id,
+            }),
+            target_date: data.target_date || null,
+            target_department_id:
+                data.target_department_id === NO_TARGET
+                    ? null
+                    : data.target_department_id,
+            ...(props.workOrder ? {} : { attachments }),
+        }),
+    ).submit(
         props.workOrder
             ? WorkOrderController.update(props.workOrder.id)
             : WorkOrderController.store(),
@@ -116,7 +166,116 @@ const submit = () => {
                 <InputError :message="form.errors.work_order_category_id" />
             </div>
 
-            <div class="grid content-start gap-2">
+            <section
+                v-if="choosesRequester"
+                class="grid gap-4 border-y py-6 md:col-span-2"
+                aria-labelledby="wo-requester-heading"
+            >
+                <div>
+                    <h2 id="wo-requester-heading" class="font-medium">
+                        Pemohon
+                    </h2>
+                    <p class="text-sm text-muted-foreground">
+                        <template v-if="onBehalf">
+                            Anda menginput work order ini atas nama departemen
+                            IC. Anda tercatat sebagai penginput, pemohonnya yang
+                            dipilih di sini.
+                        </template>
+                        <template v-else>
+                            Perbaiki pemohon draft yang Anda input. Departemen
+                            pemohon tidak dapat diubah.
+                        </template>
+                    </p>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div v-if="onBehalf" class="grid content-start gap-2">
+                        <Label for="wo-requester-department"
+                            >Departemen pemohon</Label
+                        >
+                        <Select v-model="form.requester_department_id">
+                            <SelectTrigger
+                                id="wo-requester-department"
+                                class="w-full"
+                            >
+                                <SelectValue
+                                    placeholder="Pilih departemen IC"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="option in requesterDepartments"
+                                    :key="option.id"
+                                    :value="option.id"
+                                >
+                                    <span class="font-mono">{{
+                                        option.code
+                                    }}</span>
+                                    {{ option.name }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError
+                            :message="form.errors.requester_department_id"
+                        />
+                    </div>
+
+                    <div class="grid content-start gap-2">
+                        <Label for="wo-requester-mode">Jenis pemohon</Label>
+                        <Select v-model="form.requester_mode">
+                            <SelectTrigger
+                                id="wo-requester-mode"
+                                class="w-full"
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="account">
+                                    Akun pemohon
+                                </SelectItem>
+                                <SelectItem value="contact">
+                                    Nama kontak (tanpa akun)
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError :message="form.errors.requester_mode" />
+                    </div>
+
+                    <div
+                        v-if="form.requester_mode === 'account'"
+                        class="grid content-start gap-2 md:col-span-2"
+                    >
+                        <Label for="wo-requester-account">Akun pemohon</Label>
+                        <RequesterAccountPicker
+                            v-model="requesterAccount"
+                            input-id="wo-requester-account"
+                            :department-id="
+                                onBehalf
+                                    ? form.requester_department_id
+                                    : (requesterCorrection?.department_id ??
+                                      null)
+                            "
+                        />
+                        <InputError :message="requesterIdError" />
+                    </div>
+
+                    <div v-else class="grid content-start gap-2">
+                        <Label for="wo-requester-name"
+                            >Nama kontak pemohon</Label
+                        >
+                        <Input
+                            id="wo-requester-name"
+                            v-model="form.requester_name"
+                            maxlength="150"
+                            autocomplete="off"
+                            placeholder="Pak Andi, Maintenance"
+                        />
+                        <InputError :message="form.errors.requester_name" />
+                    </div>
+                </div>
+            </section>
+
+            <div v-if="department" class="grid content-start gap-2">
                 <Label>Departemen pemohon</Label>
                 <p class="flex h-9 items-center gap-2 text-sm">
                     <span class="font-mono">{{ department.code }}</span>

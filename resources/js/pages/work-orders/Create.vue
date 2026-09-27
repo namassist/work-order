@@ -11,7 +11,9 @@ import type {
 } from '@/types';
 
 defineProps<{
-    department: DepartmentOption;
+    /** Null for a koordinator, who picks one of requesterDepartments. */
+    department: DepartmentOption | null;
+    requesterDepartments: DepartmentOption[] | null;
     targetDepartments: DepartmentOption[];
     categories: CategoryOption[];
     urgencies: WorkOrderUrgencyOption[];
@@ -36,6 +38,7 @@ defineOptions({
         <WorkOrderForm
             :work-order="null"
             :department="department"
+            :requester-departments="requesterDepartments"
             :target-departments="targetDepartments"
             :categories="categories"
             :urgencies="urgencies"
