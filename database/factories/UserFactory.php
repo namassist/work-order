@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\AccountStatus;
 use App\Models\Department;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -54,6 +55,30 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'is_active' => false,
+        ]);
+    }
+
+    /**
+     * A self-registered account waiting for review (FLOW.md §3).
+     */
+    public function pending(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'account_status' => AccountStatus::Pending,
+            'registered_at' => now(),
+        ]);
+    }
+
+    /**
+     * A self-registered account an admin rejected.
+     */
+    public function rejected(string $reason = 'Bukan karyawan perusahaan ini.'): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'account_status' => AccountStatus::Rejected,
+            'rejection_reason' => $reason,
+            'registered_at' => now()->subDay(),
+            'reviewed_at' => now(),
         ]);
     }
 

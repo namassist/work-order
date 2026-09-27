@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * A company whose departments use the application: a client (IC), which
@@ -52,6 +53,15 @@ class Company extends Model
     public function departments(): HasMany
     {
         return $this->hasMany(Department::class);
+    }
+
+    /**
+     * Whether the email's domain is exactly one of the company's allowed
+     * domains (case-insensitive; subdomains do not match).
+     */
+    public function allowsEmailDomain(string $email): bool
+    {
+        return in_array(Str::lower(Str::afterLast($email, '@')), array_map(Str::lower(...), $this->email_domains), true);
     }
 
     /**

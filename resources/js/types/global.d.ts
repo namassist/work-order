@@ -19,6 +19,8 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            /** Pending registrations, only for users who review them (sidebar badge). */
+            pendingRegistrations: number | null;
             displayTimezone: string;
             sidebarOpen: boolean;
             [key: string]: unknown;

@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\AccountStatus;
+use App\Models\User;
 use App\Support\DisplayDate;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -48,6 +50,10 @@ class HandleInertiaRequests extends Middleware
                 // Client company (IC) users see no internal navigation.
                 'isClient' => $user?->isClient() ?? false,
             ],
+            // The sidebar badge on Pendaftaran; null for anyone who cannot review.
+            'pendingRegistrations' => fn (): ?int => $user?->can('viewRegistrations', User::class)
+                ? User::query()->registrations()->where('account_status', AccountStatus::Pending->value)->count()
+                : null,
             'displayTimezone' => DisplayDate::timezone(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

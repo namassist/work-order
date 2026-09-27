@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Attachments\AttachmentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\RegistrationStatusController;
 use App\Http\Controllers\WorkOrders\RequesterAccountController;
 use App\Http\Controllers\WorkOrders\WorkOrderCommentController;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
@@ -12,6 +13,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn (Request $request): RedirectResponse => to_route($request->user() ? 'dashboard' : 'login'))->name('home');
+
+// Where EnsureAccountIsApproved keeps pending and rejected registrations.
+Route::get('registration/status', RegistrationStatusController::class)
+    ->middleware('auth')
+    ->name('registration.status');
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

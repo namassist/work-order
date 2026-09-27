@@ -88,18 +88,38 @@ describe('index', function () {
                     === collect(['FIN', $viewer->department->code])->sort()->values()->all()));
     });
 
+    it('marks registrations under review and filters by them', function (string $status, string $name) {
+        User::factory()->create(['name' => 'Zeta Aktif']);
+        User::factory()->inactive()->create(['name' => 'Zeta Nonaktif']);
+        User::factory()->pending()->create(['name' => 'Zeta Menunggu']);
+        User::factory()->rejected()->create(['name' => 'Zeta Ditolak']);
+
+        $this->actingAs(userWithPermissions(Permission::UsersView))
+            ->get(route('admin.users.index', ['status' => $status, 'search' => 'zeta']))
+            ->assertInertia(fn (Assert $page): Assert => $page
+                ->has('users.data', 1)
+                ->where('users.data.0.name', $name)
+                ->where('users.data.0.account_status', $status === 'pending' || $status === 'rejected' ? $status : 'approved'));
+    })->with([
+        ['active', 'Zeta Aktif'],
+        ['inactive', 'Zeta Nonaktif'],
+        ['pending', 'Zeta Menunggu'],
+        ['rejected', 'Zeta Ditolak'],
+    ]);
+
     it('counts users by status, ignoring list filters and deleted users', function () {
         $viewer = userWithPermissions(Permission::UsersView);
         User::factory()->create(['name' => 'Budi']);
         User::factory()->inactive()->create();
         User::factory()->mustChangePassword()->create();
         User::factory()->create()->delete();
+        User::factory()->pending()->create();
 
         $this->actingAs($viewer)
             ->get(route('admin.users.index', ['search' => 'budi', 'status' => 'inactive']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('stats', [
-                    'total' => 4,
+                    'total' => 5,
                     'active' => 3,
                     'inactive' => 1,
                     'must_change_password' => 1,
@@ -224,6 +244,32 @@ describe('update', function () {
             ->is_active->toBeFalse()
             ->and($user->getRoleNames()->all())->toBe(['keuangan']);
     });
+
+    it('refuses roles for an account under review, which get them on approval', function (string $state) {
+        $user = User::factory()->for(Department::factory())->{$state}()->create();
+
+        $this->actingAs(adminUser())
+            ->put(route('admin.users.update', $user), [
+                'name' => 'Nama Baru',
+                'email' => $user->email,
+                'department_id' => $user->department_id,
+                'is_active' => true,
+                'roles' => ['viewer'],
+            ])
+            ->assertSessionHasErrors(['roles' => 'Akun ini belum disetujui; berikan role lewat halaman Pendaftaran.']);
+
+        expect($user->roles()->count())->toBe(0);
+
+        $this->put(route('admin.users.update', $user), [
+            'name' => 'Nama Baru',
+            'email' => $user->email,
+            'department_id' => $user->department_id,
+            'is_active' => true,
+            'roles' => [],
+        ])->assertSessionHasNoErrors();
+
+        expect($user->refresh()->name)->toBe('Nama Baru');
+    })->with(['pending', 'rejected']);
 
     it('lets a user keep a department that was deactivated later', function () {
         $department = Department::factory()->inactive()->create();

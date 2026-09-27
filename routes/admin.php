@@ -4,6 +4,7 @@ use App\Enums\AuditSubject;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DepartmentController;
+use App\Http\Controllers\Admin\RegistrationController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WorkOrderCategoryController;
@@ -39,6 +40,10 @@ Route::middleware(['auth', 'verified', 'internal'])->prefix('admin')->name('admi
         ->name('users.restore');
 
     Route::resource('roles', RoleController::class)->except(['show']);
+
+    Route::get('registrations', [RegistrationController::class, 'index'])->name('registrations.index');
+    Route::post('registrations/{user}/approve', [RegistrationController::class, 'approve'])->name('registrations.approve');
+    Route::post('registrations/{user}/reject', [RegistrationController::class, 'reject'])->name('registrations.reject');
 
     Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log.index');
     Route::get('activity-log/{subjectType}/{subjectId}', [ActivityLogController::class, 'history'])

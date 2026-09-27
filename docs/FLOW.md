@@ -44,11 +44,15 @@ A user can hold multiple roles, but only roles that fit their company.
    from the email domain.
 3. New accounts are **pending**: after login they only see "Akun Anda sedang ditinjau admin".
 4. Admin reviews pending registrations (sidebar badge with count):
-    - **Approve:** assign role(s); may correct company and department.
+    - **Approve:** assign role(s); may correct the department within the same company (the email
+      domain fixes the company). Role management (e.g. admin) is never granted on approval.
+    - Rejected registrations can be approved later (re-review); the account sees the rejection
+      reason on its status page and cannot register again with the same email.
     - **Reject:** with a reason.
 5. No role is ever granted automatically.
 6. No forced password change (the user chose the password).
-7. Named rate limiter on registration. Registration, approval and rejection are audit-logged.
+7. Named rate limiter on registration, plus a kill switch (`REGISTRATION_ENABLED`). Registration,
+   approval and rejection are audit-logged.
 8. Admin-created accounts (existing flow with `DEFAULT_USER_PASSWORD` and forced change) remain.
 
 ## 4. Work order data

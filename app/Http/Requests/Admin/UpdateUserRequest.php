@@ -34,7 +34,8 @@ class UpdateUserRequest extends FormRequest
     }
 
     /**
-     * Guard against roles that do not fit the user's company, self-deactivation,
+     * Guard against roles that do not fit the user's company, roles for an
+     * account still under review (they come with approval), self-deactivation,
      * and locking everyone out of role management.
      *
      * @return array<int, callable(Validator): void>
@@ -43,6 +44,11 @@ class UpdateUserRequest extends FormRequest
     {
         return [
             $this->roleFitCheck($this->managedUser()),
+            function (Validator $validator): void {
+                if (! $this->managedUser()->isApproved() && (array) $this->input('roles', []) !== []) {
+                    $validator->errors()->add('roles', __('Akun ini belum disetujui; berikan role lewat halaman Pendaftaran.'));
+                }
+            },
             function (Validator $validator): void {
                 $user = $this->managedUser();
                 $deactivating = ! $this->boolean('is_active');

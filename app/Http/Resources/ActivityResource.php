@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\AccountStatus;
 use App\Enums\AuditEvent;
 use App\Enums\AuditSubject;
 use App\Enums\CompanyScope;
@@ -50,6 +51,8 @@ class ActivityResource extends JsonResource
         'email_domains' => 'Domain email',
         'company_scope' => 'Berlaku untuk',
         'must_change_password' => 'Wajib ganti password',
+        'account_status' => 'Status akun',
+        'rejection_reason' => 'Alasan penolakan',
         'roles' => 'Role',
         'permissions' => 'Izin',
         'number' => 'Nomor',
@@ -248,6 +251,7 @@ class ActivityResource extends JsonResource
             $field === 'company_scope' && is_string($value) => CompanyScope::tryFrom($value)?->label() ?? $value,
             isset(self::REFERENCE_FIELDS[$field]) => $this->referenceCodes[$field][$value] ?? '#'.$value,
             $field === 'status' && is_string($value) => WorkOrderStatus::labelFor($value),
+            $field === 'account_status' && is_string($value) => AccountStatus::tryFrom($value)?->label() ?? $value,
             $field === 'urgency' && is_string($value) => WorkOrderUrgency::tryFrom($value)?->label() ?? $value,
             $field === 'ukuran' && is_int($value) => Number::withLocale('id', fn (): string => Number::fileSize($value, maxPrecision: 1)),
             is_bool($value) => $value ? 'Ya' : 'Tidak',
