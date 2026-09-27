@@ -30,7 +30,10 @@ use Spatie\ModelStates\HasStates;
  * @property string|null $number
  * @property string $title
  * @property string|null $description
- * @property int $department_id
+ * @property int $requester_department_id
+ * @property int|null $target_department_id
+ * @property int|null $requester_id
+ * @property string|null $requester_name
  * @property int $work_order_category_id
  * @property int $created_by
  * @property WorkOrderStatus $status
@@ -39,12 +42,14 @@ use Spatie\ModelStates\HasStates;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
- * @property-read Department $department
+ * @property-read Department $requesterDepartment
+ * @property-read Department|null $targetDepartment
  * @property-read WorkOrderCategory $category
- * @property-read User $requester
+ * @property-read User|null $requester
+ * @property-read User $enteredBy
  * @property-read Collection<int, WorkOrderComment> $comments
  */
-#[Fillable(['title', 'description', 'work_order_category_id', 'urgency', 'target_date'])]
+#[Fillable(['title', 'description', 'work_order_category_id', 'target_department_id', 'urgency', 'target_date'])]
 class WorkOrder extends Model implements Attachable
 {
     /** @use HasFactory<WorkOrderFactory> */
@@ -87,13 +92,25 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * The requester's department at creation, even if it was deleted later.
+     * The department (of a client company) that requests the work, fixed at
+     * creation, even if it was deleted later.
      *
      * @return BelongsTo<Department, $this>
      */
-    public function department(): BelongsTo
+    public function requesterDepartment(): BelongsTo
     {
-        return $this->belongsTo(Department::class)->withTrashed();
+        return $this->belongsTo(Department::class, 'requester_department_id')->withTrashed();
+    }
+
+    /**
+     * The department (of the executor company) the work is addressed to;
+     * required from the first submission on (requiresTargetDepartment()).
+     *
+     * @return BelongsTo<Department, $this>
+     */
+    public function targetDepartment(): BelongsTo
+    {
+        return $this->belongsTo(Department::class, 'target_department_id')->withTrashed();
     }
 
     /**
@@ -105,13 +122,33 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * The user who created the work order.
+     * The requester's account; null when the work order was entered on behalf
+     * of someone without one (see requester_name).
      *
      * @return BelongsTo<User, $this>
      */
     public function requester(): BelongsTo
     {
+        return $this->belongsTo(User::class, 'requester_id')->withTrashed();
+    }
+
+    /**
+     * The user who entered the work order: the requester, or a koordinator
+     * entering it on their behalf.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function enteredBy(): BelongsTo
+    {
         return $this->belongsTo(User::class, 'created_by')->withTrashed();
+    }
+
+    /**
+     * The requester's name: their account's, or the contact name.
+     */
+    public function requesterName(): string
+    {
+        return $this->requester->name ?? (string) $this->requester_name;
     }
 
     /**
@@ -144,13 +181,34 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * Whether the user may see this work order: their own department's, or
-     * any with work-orders.view-all (never held by client company users).
+     * Whether the user may see this work order (FLOW.md §6). Client company
+     * (IC) users see their own department's work orders, drafts included.
+     * Executor company (Unggul) users see those they entered, and submitted
+     * ones addressed to their department, or all submitted ones with
+     * work-orders.view-all; never another user's draft. Must agree with
+     * scopeVisibleTo(), see WorkOrderVisibilityTest.
      */
     public function isVisibleTo(User $user): bool
     {
-        return $user->checkPermissionTo(Permission::WorkOrdersViewAll->value)
-            || $user->department_id === $this->department_id;
+        if ($user->isClient()) {
+            return $this->requester_department_id === $user->department_id;
+        }
+
+        if ($this->created_by === $user->id) {
+            return true;
+        }
+
+        return $this->wasSubmitted()
+            && ($user->checkPermissionTo(Permission::WorkOrdersViewAll->value) || $this->target_department_id === $user->department_id);
+    }
+
+    /**
+     * Whether the work order was ever submitted: it gets its number then and
+     * keeps it, whatever happens next.
+     */
+    public function wasSubmitted(): bool
+    {
+        return $this->number !== null;
     }
 
     /**
@@ -161,11 +219,19 @@ class WorkOrder extends Model implements Attachable
     #[Scope]
     protected function visibleTo(Builder $query, User $user): void
     {
-        if ($user->checkPermissionTo(Permission::WorkOrdersViewAll->value)) {
+        if ($user->isClient()) {
+            $query->where('requester_department_id', $user->department_id);
+
             return;
         }
 
-        $query->where('department_id', $user->department_id);
+        $seesAllSubmitted = $user->checkPermissionTo(Permission::WorkOrdersViewAll->value);
+
+        $query->where(fn (Builder $query) => $query
+            ->where('created_by', $user->id)
+            ->orWhere(fn (Builder $query) => $query
+                ->whereNotNull('number')
+                ->when(! $seesAllSubmitted, fn (Builder $query) => $query->where('target_department_id', $user->department_id))));
     }
 
     /**

@@ -17,7 +17,7 @@ use OpenSpout\Reader\XLSX\Reader;
 use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
-    $this->department = Department::factory()->create(['code' => 'IT', 'name' => 'Teknologi Informasi']);
+    $this->department = Department::factory()->client()->create(['code' => 'IT', 'name' => 'Teknologi Informasi']);
     $this->category = WorkOrderCategory::factory()->create(['code' => 'PRB', 'name' => 'Perbaikan']);
     $this->exporter = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersExport);
 });
@@ -28,7 +28,7 @@ beforeEach(function () {
 function exportableWorkOrder(array $attributes = []): WorkOrder
 {
     return WorkOrder::factory()->create([
-        'department_id' => test()->department->id,
+        'requester_department_id' => test()->department->id,
         'work_order_category_id' => test()->category->id,
         ...$attributes,
     ]);
@@ -187,14 +187,14 @@ it('never exports another department\'s work orders, even when filtering by that
     $other = WorkOrder::factory()->create(['title' => 'Milik departemen lain']);
 
     expect(exportedTitles($this->actingAs($this->exporter)->get(route('work-orders.export'))))->toBe(['Milik sendiri'])
-        ->and(exportedTitles($this->get(route('work-orders.export', ['department' => $other->department_id]))))->toBe([]);
+        ->and(exportedTitles($this->get(route('work-orders.export', ['department' => $other->requester_department_id]))))->toBe([]);
 });
 
-it('exports every department with work-orders.view-all', function () {
+it('exports every department\'s submitted work orders with work-orders.view-all', function () {
     exportableWorkOrder();
-    WorkOrder::factory()->create();
+    WorkOrder::factory()->submitted()->count(2)->create();
 
-    $user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersViewAll, Permission::WorkOrdersExport);
+    $user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersViewAll, Permission::WorkOrdersExport);
 
     expect(exportedTitles($this->actingAs($user)->get(route('work-orders.export'))))->toHaveCount(2);
 });
@@ -221,7 +221,7 @@ it('requires work-orders.export and work-orders.view', function (array $permissi
 
 it('writes dates as Excel date cells in WITA', function () {
     Carbon::setTestNow('2026-09-25 23:30:00');
-    $workOrder = exportableWorkOrder(['target_date' => '2026-10-01']);
+    $workOrder = exportableWorkOrder(['target_date' => '2026-10-01', 'target_department_id' => Department::factory()->create()->id]);
 
     Carbon::setTestNow('2026-09-26 01:05:00');
     app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $this->exporter);

@@ -22,7 +22,7 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
-    $this->department = Department::factory()->create(['code' => 'IT']);
+    $this->department = Department::factory()->client()->create(['code' => 'IT']);
     $this->user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate, Permission::WorkOrdersComment);
 });
 
@@ -59,7 +59,7 @@ function expectTouchedNow(): void
 }
 
 it('bumps the work order when a comment is posted, edited, or deleted', function () {
-    $workOrder = watchWorkOrder(WorkOrder::factory()->submitted()->create(['department_id' => $this->department->id]));
+    $workOrder = watchWorkOrder(WorkOrder::factory()->submitted()->create(['requester_department_id' => $this->department->id]));
 
     $comment = app(AddWorkOrderComment::class)->handle($workOrder, $this->user, 'Mohon dicek.');
     expectTouchedNow();
@@ -76,7 +76,7 @@ it('bumps the work order when a comment is posted, edited, or deleted', function
 });
 
 it('bumps the work order on a status change', function () {
-    $workOrder = watchWorkOrder(WorkOrder::factory()->create(['department_id' => $this->department->id]));
+    $workOrder = watchWorkOrder(WorkOrder::factory()->targeting(Department::factory()->create())->create(['requester_department_id' => $this->department->id]));
 
     app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $this->user);
 
@@ -86,7 +86,7 @@ it('bumps the work order on a status change', function () {
 
 it('bumps the work order when a document is added or removed', function () {
     Storage::fake('attachments');
-    $workOrder = watchWorkOrder(WorkOrder::factory()->create(['department_id' => $this->department->id]));
+    $workOrder = watchWorkOrder(WorkOrder::factory()->create(['requester_department_id' => $this->department->id]));
 
     $media = app(AddAttachment::class)->handle($workOrder, $workOrder->documentsCollection(), attachmentUpload('dokumen.pdf'), $this->user);
     expectTouchedNow();
@@ -99,7 +99,7 @@ it('bumps the work order when a document is added or removed', function () {
 });
 
 it('logs nothing when only the work order is touched', function () {
-    $workOrder = watchWorkOrder(WorkOrder::factory()->create(['department_id' => $this->department->id]));
+    $workOrder = watchWorkOrder(WorkOrder::factory()->create(['requester_department_id' => $this->department->id]));
 
     $workOrder->touch();
 

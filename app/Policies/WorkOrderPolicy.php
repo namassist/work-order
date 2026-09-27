@@ -11,8 +11,8 @@ use Illuminate\Auth\Access\Response;
 
 /**
  * Every check on a single work order first requires that the user can see
- * it (their department's, or work-orders.view-all). Otherwise the answer is
- * 404, so other departments' work orders are not confirmed to exist.
+ * it (WorkOrder::isVisibleTo(), FLOW.md §6). Otherwise the answer is 404, so
+ * work orders of other departments and companies are not confirmed to exist.
  */
 class WorkOrderPolicy
 {
@@ -25,7 +25,8 @@ class WorkOrderPolicy
     }
 
     /**
-     * Determine whether the user sees work orders of every department.
+     * Determine whether the user sees the submitted work orders of every
+     * department (never a client company user, see User::hasPermissionTo()).
      */
     public function viewAllDepartments(User $user): bool
     {
@@ -58,12 +59,13 @@ class WorkOrderPolicy
     }
 
     /**
-     * Determine whether the user can create work orders, which belong to
-     * their requester's department.
+     * Determine whether the user can create work orders for their own
+     * department. Only client company (IC) departments request work
+     * (FLOW.md §4); the executor enters work orders on behalf of IC instead.
      */
     public function create(User $user): bool
     {
-        return $user->checkPermissionTo(Permission::WorkOrdersCreate->value);
+        return $user->isClient() && $user->checkPermissionTo(Permission::WorkOrdersCreate->value);
     }
 
     /**

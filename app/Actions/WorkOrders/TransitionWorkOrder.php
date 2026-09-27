@@ -9,6 +9,7 @@ use App\Models\WorkOrder;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\WorkOrderNumberGenerator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Spatie\ModelStates\Exceptions\CouldNotPerformTransition;
 
 /**
@@ -24,19 +25,26 @@ class TransitionWorkOrder
 
     /**
      * @throws CouldNotPerformTransition when the transition is not allowed from the current status
+     * @throws ValidationException when the new status requires a target department and there is none
      */
     public function handle(WorkOrder $workOrder, string $to, User $user, ?string $note = null): WorkOrder
     {
         return DB::transaction(function () use ($workOrder, $to, $user, $note): WorkOrder {
             // Re-read under lock so two users acting at once see each other's change.
-            $locked = WorkOrder::query()->with('department')->lockForUpdate()->findOrFail($workOrder->id);
+            $locked = WorkOrder::query()->with('requesterDepartment')->lockForUpdate()->findOrFail($workOrder->id);
 
             $from = $locked->status->getValue();
             $oldNumber = $locked->number;
             $target = WorkOrderStatus::fromName($to);
 
+            if ($target?->requiresTargetDepartment() && $locked->target_department_id === null) {
+                throw ValidationException::withMessages([
+                    'status' => __('Pilih departemen tujuan sebelum mengajukan.'),
+                ]);
+            }
+
             if ($target?->assignsNumber() && $locked->number === null) {
-                $locked->number = $this->numbers->next($locked->department->code, now());
+                $locked->number = $this->numbers->next($locked->requesterDepartment->code, now());
             }
 
             $locked->status->transitionTo($to);

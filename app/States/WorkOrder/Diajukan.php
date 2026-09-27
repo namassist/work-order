@@ -30,4 +30,9 @@ class Diajukan extends WorkOrderStatus
     {
         return true;
     }
+
+    public function requiresTargetDepartment(): bool
+    {
+        return true;
+    }
 }

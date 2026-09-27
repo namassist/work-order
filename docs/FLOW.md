@@ -97,18 +97,24 @@ Every transition writes a status history row and an audit entry.
 
 ### Status properties
 
-| Status     | Requester can edit | Comments  | Attachments              | Overdue basis    | Final |
-| ---------- | ------------------ | --------- | ------------------------ | ---------------- | ----- |
-| Draft      | Yes                | Yes       | Requester: dokumen       | none             | No    |
-| Diajukan   | No                 | Yes       | none                     | target date      | No    |
-| Ditolak    | Yes                | Yes       | Requester: dokumen       | none             | No    |
-| Dikerjakan | No                 | Yes       | Pelaksana: BAST, dokumen | target date      | No    |
-| Penagihan  | No                 | Yes       | Keuangan: bukti bayar    | payment due date | No    |
-| Selesai    | No                 | Read-only | none                     | none             | Yes   |
-| Dibatalkan | No                 | Read-only | none                     | none             | Yes   |
+| Status     | Requester can edit                    | Comments  | Attachments              | Overdue basis    | Final |
+| ---------- | ------------------------------------- | --------- | ------------------------ | ---------------- | ----- |
+| Draft      | Yes                                   | Yes       | Requester: dokumen       | none             | No    |
+| Diajukan   | No                                    | Yes       | none                     | target date      | No    |
+| Ditolak    | Yes, including the target department¹ | Yes       | Requester: dokumen       | none             | No    |
+| Dikerjakan | No                                    | Yes       | Pelaksana: BAST, dokumen | target date      | No    |
+| Penagihan  | No                                    | Yes       | Keuangan: bukti bayar    | payment due date | No    |
+| Selesai    | No                                    | Read-only | none                     | none             | Yes   |
+| Dibatalkan | No                                    | Read-only | none                     | none             | Yes   |
+
+¹ A common rejection reason is "wrong department", so in Ditolak the requester side may pick
+another target department before resubmitting (still an executor department; it cannot be cleared).
 
 These map to the existing status flags (`isEditable`, `acceptsComments`,
-`countsAsOverdueWhenLate`) plus new ones as needed. Every new status must set all flags.
+`countsAsOverdueWhenLate`, `requiresTargetDepartment`) plus new ones as needed. Every new status
+must set all flags. `requiresTargetDepartment` is true for every status after the first submission
+(Diajukan, Ditolak, Dikerjakan, Penagihan, Selesai), so a submitted WO never loses its target;
+it is false for Draft and Dibatalkan (a draft can be cancelled before a target is chosen).
 
 ## 6. Visibility and isolation
 

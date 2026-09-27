@@ -12,9 +12,9 @@ beforeEach(function () {
     Storage::fake('attachments');
     config(['work_order.attachments.dokumen.max_files' => 100]);
 
-    $department = Department::factory()->create(['code' => 'IT']);
+    $department = Department::factory()->client()->create(['code' => 'IT']);
     $this->user = userInDepartment($department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate, Permission::WorkOrdersExport);
-    $this->workOrder = WorkOrder::factory()->create(['department_id' => $department->id]);
+    $this->workOrder = WorkOrder::factory()->create(['requester_department_id' => $department->id]);
     $this->actingAs($this->user);
 });
 

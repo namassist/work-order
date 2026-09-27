@@ -3,6 +3,7 @@
 namespace App\Concerns;
 
 use App\Enums\WorkOrderUrgency;
+use App\Models\Department;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Support\DisplayDate;
@@ -20,6 +21,7 @@ trait WorkOrderValidationRules
     protected function workOrderRules(?WorkOrder $workOrder = null): array
     {
         $currentCategoryId = $workOrder?->work_order_category_id;
+        $currentTargetId = $workOrder?->target_department_id;
         $currentTargetDate = $workOrder?->target_date?->toDateString();
 
         return [
@@ -32,6 +34,17 @@ trait WorkOrderValidationRules
                 Rule::exists(WorkOrderCategory::class, 'id')->where(fn ($query) => $query
                     ->where(fn ($query) => $query->where('is_active', true)->whereNull('deleted_at'))
                     ->when($currentCategoryId, fn ($query, int $id) => $query->orWhere('id', $id))),
+            ],
+            'target_department_id' => [
+                'nullable',
+                'integer',
+                // Departments of the executor company that are active, plus
+                // the one the work order already has (FLOW.md §2).
+                Rule::exists(Department::class, 'id')->where(fn ($query) => $query
+                    ->whereIn('company_id', fn ($companies) => $companies->select('id')->from('companies')->where('is_client', false))
+                    ->where(fn ($query) => $query
+                        ->where(fn ($query) => $query->where('is_active', true)->whereNull('deleted_at'))
+                        ->when($currentTargetId, fn ($query, int $id) => $query->orWhere('id', $id)))),
             ],
             'urgency' => ['required', Rule::enum(WorkOrderUrgency::class)],
             'target_date' => [
@@ -53,6 +66,7 @@ trait WorkOrderValidationRules
     {
         return [
             'target_date.after_or_equal' => __('Target selesai tidak boleh sebelum hari ini.'),
+            'target_department_id.exists' => __('Pilih departemen aktif dari perusahaan pelaksana.'),
         ];
     }
 }

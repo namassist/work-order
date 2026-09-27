@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { History, Pencil, Trash2 } from '@lucide/vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
 import AttachmentPanel from '@/components/attachments/AttachmentPanel.vue';
 import ActivityHistorySheet from '@/components/admin/ActivityHistorySheet.vue';
@@ -57,6 +57,13 @@ const historyOpen = ref(false);
 const deleteOpen = ref(false);
 const deleting = ref(false);
 
+// The server refuses these too; the page only explains why up front.
+const needsTarget = (transition: WorkOrderTransition) =>
+    transition.requires_target_department &&
+    props.workOrder.target_department === null;
+
+const blockedByTarget = computed(() => props.transitions.some(needsTarget));
+
 const destroy = () => {
     router.visit(WorkOrderController.destroy(props.workOrder.id), {
         onStart: () => (deleting.value = true),
@@ -93,6 +100,7 @@ const destroy = () => {
                         v-for="(transition, index) in transitions"
                         :key="transition.value"
                         :variant="index === 0 ? 'default' : 'outline'"
+                        :disabled="needsTarget(transition)"
                         @click="openTransition(transition)"
                     >
                         {{ transition.label }}
@@ -118,6 +126,12 @@ const destroy = () => {
                     >
                         <Trash2 />
                     </Button>
+                    <p
+                        v-if="blockedByTarget"
+                        class="basis-full text-xs text-muted-foreground"
+                    >
+                        Pilih departemen tujuan lewat Ubah sebelum mengajukan.
+                    </p>
                 </div>
             </template>
         </ListToolbar>
@@ -128,13 +142,23 @@ const destroy = () => {
                 class="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3"
             >
                 <div>
-                    <dt class="text-muted-foreground">Departemen</dt>
+                    <dt class="text-muted-foreground">Departemen pemohon</dt>
                     <dd>
                         <span class="font-mono">{{
-                            workOrder.department.code
+                            workOrder.requester_department.code
                         }}</span>
-                        {{ workOrder.department.name }}
+                        {{ workOrder.requester_department.name }}
                     </dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Departemen tujuan</dt>
+                    <dd v-if="workOrder.target_department">
+                        <span class="font-mono">{{
+                            workOrder.target_department.code
+                        }}</span>
+                        {{ workOrder.target_department.name }}
+                    </dd>
+                    <dd v-else class="text-muted-foreground">Belum dipilih</dd>
                 </div>
                 <div>
                     <dt class="text-muted-foreground">Kategori</dt>

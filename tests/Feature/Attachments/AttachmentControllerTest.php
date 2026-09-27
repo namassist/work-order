@@ -11,9 +11,9 @@ use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
-    $this->department = Department::factory()->create(['code' => 'IT']);
+    $this->department = Department::factory()->client()->create(['code' => 'IT']);
     $this->user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate, Permission::ActivityLogView);
-    $this->workOrder = WorkOrder::factory()->create(['department_id' => $this->department->id]);
+    $this->workOrder = WorkOrder::factory()->create(['requester_department_id' => $this->department->id]);
 });
 
 /**
@@ -113,7 +113,7 @@ describe('upload', function () {
 
     it('refuses uploads once the work order is submitted', function () {
         $disk = Storage::fake('attachments');
-        $submitted = WorkOrder::factory()->submitted()->create(['department_id' => $this->department->id]);
+        $submitted = WorkOrder::factory()->submitted()->create(['requester_department_id' => $this->department->id]);
 
         $this->actingAs($this->user)
             ->post(documentsUploadUrl($submitted), ['file' => attachmentUpload('dokumen.pdf')])
@@ -222,7 +222,7 @@ describe('download', function () {
 
     it('follows work order visibility: submitted work orders stay readable', function () {
         Storage::fake('attachments');
-        $submitted = WorkOrder::factory()->submitted()->create(['department_id' => $this->department->id]);
+        $submitted = WorkOrder::factory()->submitted()->create(['requester_department_id' => $this->department->id]);
         $media = attachDocument($submitted, 'dokumen.pdf', $this->user);
 
         $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
@@ -279,7 +279,7 @@ describe('delete', function () {
 
     it('refuses once the work order is submitted and keeps the file', function () {
         $disk = Storage::fake('attachments');
-        $submitted = WorkOrder::factory()->submitted()->create(['department_id' => $this->department->id]);
+        $submitted = WorkOrder::factory()->submitted()->create(['requester_department_id' => $this->department->id]);
         $media = attachDocument($submitted, 'dokumen.pdf', $this->user);
 
         $this->actingAs($this->user)
@@ -335,7 +335,8 @@ it('shows upload and removal with readable values in the work order history', fu
     Storage::fake('attachments');
     attachDocument($this->workOrder, 'dokumen.pdf', $this->user, 'Surat.pdf');
 
-    $this->actingAs($this->user)
+    // The activity log is internal (Unggul) only.
+    $this->actingAs(unggulUser(Permission::ActivityLogView))
         ->getJson(route('admin.activity-log.history', ['work-order', $this->workOrder->id]))
         ->assertOk()
         ->assertJsonPath('data.0.event_label', 'Lampiran ditambahkan')

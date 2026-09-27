@@ -86,11 +86,9 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * The Unggul department that handles each category. Its pelaksana
-     * discuss and cancel the work order. PENDING (FLOW.md step 1b): this
-     * becomes the work order's target department; until then those pelaksana
-     * cannot see the work orders they act on here (the actions do not
-     * authorize), only keuangan and admin can.
+     * The Unggul department that handles each category: the work order's
+     * target department, whose pelaksana discuss and cancel it. Some drafts
+     * have no target yet (see planWorkOrders()).
      *
      * @var array<string, string>
      */
@@ -486,7 +484,12 @@ Nanti saya kabari lagi.'],
 
             $createdAt = $this->creationMoment($path);
             $attributes = $this->workOrderAttributes($path, $categoryCode, $requester, $createdAt)
-                + ['work_order_category_id' => $categories[$categoryCode]->id, 'urgency' => $urgencies[$index]];
+                + [
+                    'work_order_category_id' => $categories[$categoryCode]->id,
+                    'urgency' => $urgencies[$index],
+                    // Every third draft is still missing its target, as a draft may be.
+                    'target_department_id' => $path === 'draft' && $index % 3 === 0 ? null : $pelaksana->department_id,
+                ];
 
             $events[] = ['at' => $createdAt, 'actor' => $requester, 'run' => function () use (&$created, $index, $attributes, $requester): void {
                 $created[$index] = $this->createWorkOrder->handle($attributes, $requester);
@@ -507,10 +510,12 @@ Nanti saya kabari lagi.'],
                 default => null,
             };
 
-            if ($index % 5 === 1 || $index % 5 === 3) {
-                // Comments end before a cancellation, which makes them read-only.
+            // Comments start once the work order is submitted, when the target
+            // department's pelaksana can see it, and end before a cancellation,
+            // which makes them read-only.
+            if (in_array($path, ['submitted', 'overdue', 'cancelled_submitted'], true) && in_array($index % 5, [1, 2, 3], true)) {
                 $until = $cancelledAt ?? CarbonImmutable::now()->subHour();
-                array_push($events, ...$this->planComments($created, $index, $createdAt, $until, $requester, $pelaksana, $withComments++ === 0));
+                array_push($events, ...$this->planComments($created, $index, $nextAt, $until, $requester, $pelaksana, $withComments++ === 0));
             }
 
             if ($path === 'cancelled_draft') {
@@ -540,7 +545,7 @@ Nanti saya kabari lagi.'],
     }
 
     /**
-     * One to three messages of a thread, from 20 minutes after creation until
+     * One to three messages of a thread, from 20 minutes after submission until
      * $until, each some minutes to hours after the last. Every third message
      * is corrected right after posting, within the edit window. With
      * $mistaken the requester first posts a comment and deletes it.
@@ -548,13 +553,13 @@ Nanti saya kabari lagi.'],
      * @param  array<int, WorkOrder>  $created  filled while the timeline runs
      * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
      */
-    private function planComments(array &$created, int $index, CarbonImmutable $createdAt, CarbonImmutable $until, User $requester, User $pelaksana, bool $mistaken): array
+    private function planComments(array &$created, int $index, CarbonImmutable $submittedAt, CarbonImmutable $until, User $requester, User $pelaksana, bool $mistaken): array
     {
         /** @var list<array{0: 'pelaksana'|'requester', 1: string}> $thread */
         $thread = $this->faker->randomElement(self::COMMENT_THREADS);
         $messages = array_slice($thread, 0, $this->faker->numberBetween(1, count($thread)));
         $latestAt = $until->subMinutes(10);
-        $at = $createdAt->addMinutes(20);
+        $at = $submittedAt->addMinutes(20);
         $events = [];
 
         if ($mistaken && $at->lessThan($latestAt)) {

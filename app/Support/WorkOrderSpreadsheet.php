@@ -49,7 +49,7 @@ class WorkOrderSpreadsheet
     private const string DATE_TIME_FORMAT = 'd mmm yyyy hh:mm';
 
     /**
-     * Write the work orders to $path. Load department, category, and
+     * Write the work orders to $path. Load requesterDepartment, category, and
      * requester first, and select a `submitted_at` datetime (null if never
      * submitted).
      *
@@ -80,9 +80,9 @@ class WorkOrderSpreadsheet
                 new StringCell($workOrder->displayNumber()),
                 new StringCell($workOrder->title),
                 $this->text($workOrder->description),
-                new StringCell($workOrder->department->code.' - '.$workOrder->department->name),
+                new StringCell($workOrder->requesterDepartment->code.' - '.$workOrder->requesterDepartment->name),
                 new StringCell($workOrder->category->code.' - '.$workOrder->category->name),
-                new StringCell($workOrder->requester->name),
+                new StringCell($workOrder->requesterName()),
                 new StringCell($workOrder->status->label()),
                 new StringCell($workOrder->urgency->label()),
                 $this->date($workOrder->target_date, $dateStyle),

@@ -31,7 +31,7 @@ $mode = $argv[1] ?? '';
 
 if ($mode === 'setup') {
     $workOrder = WorkOrder::factory()->submitted()->create();
-    $commenter = User::factory()->create(['department_id' => $workOrder->department_id]);
+    $commenter = User::factory()->create(['department_id' => $workOrder->requester_department_id]);
 
     echo $workOrder->id, ' ', $commenter->id, PHP_EOL;
     exit(0);
@@ -65,7 +65,7 @@ if ($mode === 'cleanup') {
         // Comments and status histories cascade.
         DB::table('work_orders')->where('id', $workOrder->id)->delete();
         DB::table('users')->whereIn('id', $users->modelKeys())->delete();
-        Department::withTrashed()->whereKey([$workOrder->department_id, ...$users->pluck('department_id')->filter()])->forceDelete();
+        Department::withTrashed()->whereKey([$workOrder->requester_department_id, ...$users->pluck('department_id')->filter()])->forceDelete();
         WorkOrderCategory::withTrashed()->whereKey($workOrder->work_order_category_id)->forceDelete();
     });
     exit(0);

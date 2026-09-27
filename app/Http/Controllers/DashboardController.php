@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\WorkOrderUrgency;
+use App\Http\Controllers\WorkOrders\WorkOrderController;
 use App\Http\Resources\ActivityResource;
 use App\Http\Resources\WorkOrderResource;
 use App\Models\User;
@@ -92,7 +93,7 @@ class DashboardController extends Controller
     /**
      * Submitted "mendesak" work orders the user may see, waiting longest first.
      *
-     * @return list<array{id: int, number: string|null, title: string, category: string, requester: array{id: int, name: string}, submitted_at: string|null}>
+     * @return list<array{id: int, number: string|null, title: string, category: string, requester: array{id: int|null, name: string}, submitted_at: string|null}>
      */
     private function urgentWorkOrders(User $user): array
     {
@@ -112,7 +113,7 @@ class DashboardController extends Controller
             'number' => $workOrder->number,
             'title' => $workOrder->title,
             'category' => $workOrder->category->name,
-            'requester' => ['id' => $workOrder->requester->id, 'name' => $workOrder->requester->name],
+            'requester' => ['id' => $workOrder->requester?->id, 'name' => $workOrder->requesterName()],
             'submitted_at' => $this->isoMoment($workOrder->getAttribute('submitted_at')),
         ])->all());
     }
@@ -128,7 +129,7 @@ class DashboardController extends Controller
     {
         $workOrders = WorkOrder::query()
             ->visibleTo($user)
-            ->with(['department', 'category', 'requester'])
+            ->with(WorkOrderController::LIST_RELATIONS)
             ->latest('updated_at')
             ->latest('id')
             ->limit(self::RECENT_WORK_ORDER_LIMIT)

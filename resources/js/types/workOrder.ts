@@ -37,9 +37,15 @@ export type WorkOrder = {
     urgency: WorkOrderUrgencyOption;
     /** Date-only (Y-m-d); format with formatCalendarDate. */
     target_date: string | null;
-    department: DepartmentOption;
+    /** The client company (IC) department that requests the work. */
+    requester_department: DepartmentOption;
+    /** The executor company department it is addressed to; null until chosen. */
+    target_department: DepartmentOption | null;
     category: CategoryOption;
-    requester: { id: number; name: string };
+    /** The requester: an account, or a contact name (id null) when entered on behalf. */
+    requester: { id: number | null; name: string };
+    /** Who entered the work order: the requester, or a koordinator on their behalf. */
+    entered_by: { name: string };
     created_at: string;
     /** Last activity: edits, comments, status changes, and attachments. */
     updated_at: string;
@@ -57,6 +63,8 @@ export type WorkOrderTransition = {
     /** Tone of the target status; destructive ones get a destructive button. */
     tone: string;
     requires_note: boolean;
+    /** The target status needs a target department (e.g. Diajukan). */
+    requires_target_department: boolean;
 };
 
 export type StatusHistoryEntry = {
@@ -105,7 +113,7 @@ export type UrgentWorkOrder = {
     number: string | null;
     title: string;
     category: string;
-    requester: { id: number; name: string };
+    requester: { id: number | null; name: string };
     /** ISO moment of the first submission. */
     submitted_at: string | null;
 };

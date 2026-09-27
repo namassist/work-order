@@ -190,8 +190,9 @@ describe('update', function () {
     })->with([
         'a user' => [fn (Department $department) => User::factory()->for($department)->create()],
         'a deleted user' => [fn (Department $department) => User::factory()->for($department)->create()->delete()],
-        'a work order' => [fn (Department $department) => WorkOrder::factory()->for($department)->create()],
-        'a deleted work order' => [fn (Department $department) => WorkOrder::factory()->for($department)->create()->delete()],
+        'a work order it requests' => [fn (Department $department) => WorkOrder::factory()->create(['requester_department_id' => $department->id])],
+        'a deleted work order' => [fn (Department $department) => WorkOrder::factory()->create(['requester_department_id' => $department->id])->delete()],
+        'a work order addressed to it' => [fn (Department $department) => WorkOrder::factory()->targeting($department)->create()],
     ]);
 });
 

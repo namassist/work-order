@@ -74,14 +74,18 @@ function adminRouteUrl(RoutingRoute $route, array $parameters): string
 
 /**
  * Text that belongs to the executor company or to another IC department. It
- * must never reach an IC user's page props.
+ * must never reach an IC user's page props. Active Unggul departments are
+ * the one exception: IC forms list them (id, code, name) as targets, see
+ * assertTargetDepartmentsOnly(); the secret ones here are inactive or
+ * deleted, so no form offers them.
  *
  * @return list<string>
  */
 function seedInternalSecrets(): array
 {
-    $unggul = Department::factory()->create(['code' => 'SECRET-UGL', 'name' => 'Rahasia Unggul Departemen']);
+    $unggul = Department::factory()->inactive()->create(['code' => 'SECRET-UGL', 'name' => 'Rahasia Unggul Departemen']);
     User::factory()->for($unggul)->create(['name' => 'Rahasia Pelaksana', 'email' => 'rahasia.pelaksana@unggul.test']);
+    Department::factory()->create(['code' => 'SECRET-DEL', 'name' => 'Rahasia Unggul Terhapus'])->delete();
 
     $otherIc = Department::factory()->client()->create(['code' => 'SECRET-IC', 'name' => 'Rahasia IC Lain']);
     $otherRequester = User::factory()->for($otherIc)->create(['name' => 'Rahasia Pemohon Lain', 'email' => 'rahasia.pemohon@ic.test']);
@@ -90,6 +94,7 @@ function seedInternalSecrets(): array
 
     return [
         'SECRET-UGL', 'Rahasia Unggul Departemen', 'Rahasia Pelaksana', 'rahasia.pelaksana@unggul.test',
+        'SECRET-DEL', 'Rahasia Unggul Terhapus',
         'SECRET-IC', 'Rahasia IC Lain', 'Rahasia Pemohon Lain', 'rahasia.pemohon@ic.test', 'Rahasia WO IC Lain',
     ];
 }
@@ -110,6 +115,25 @@ function assertNoInternalData(array $props, array $secrets, string $page): void
     }
 
     expect(array_key_exists('users', $props))->toBeFalse("{$page} gives an IC user a user list.");
+}
+
+/**
+ * The IC work order form's target list: exactly the active executor
+ * departments, and nothing about them beyond id, code, and name.
+ *
+ * @param  array<string, mixed>  $props
+ */
+function assertTargetDepartmentsOnly(array $props): void
+{
+    $targets = collect($props['targetDepartments'] ?? []);
+
+    expect($targets->every(fn (array $department): bool => array_keys($department) === ['id', 'code', 'name']))->toBeTrue()
+        ->and($targets->pluck('id')->sort()->values()->all())->toBe(Department::query()
+        ->where('is_active', true)
+        ->whereRelation('company', 'is_client', false)
+        ->orderBy('id')
+        ->pluck('id')
+        ->all());
 }
 
 dataset('IC users', [
@@ -212,17 +236,42 @@ describe('page props', function () {
     it('keeps internal data out of the pages an IC user opens', function (Closure $icUser) {
         $user = $icUser();
         $secrets = seedInternalSecrets();
+        Department::factory()->create(['code' => 'TUJUAN']);
         $own = WorkOrder::factory()->by($user)->create(['title' => 'Lampu gudang mati']);
+        // Entered for the IC user's department by an Unggul koordinator: IC
+        // users see the koordinator's name, and nothing else about them.
+        $koordinator = User::factory()->create(['name' => 'Koordinator Unggul', 'email' => 'rahasia.koordinator@unggul.test']);
+        $onBehalf = WorkOrder::factory()->onBehalf($koordinator, contactName: 'Pak Andi')->create(['requester_department_id' => $user->department_id]);
+        $secrets[] = 'rahasia.koordinator@unggul.test';
 
         $pages = [
             'Daftar WO' => route('work-orders.index'),
             'Detail WO' => route('work-orders.show', $own),
+            'Detail WO diinput koordinator' => route('work-orders.show', $onBehalf),
             'Buat WO' => route('work-orders.create'),
+            'Ubah WO' => route('work-orders.edit', $own),
         ];
 
         foreach ($pages as $name => $url) {
-            $this->actingAs($user)->get($url)->assertOk()->assertInertia(function (Assert $page) use ($secrets, $name): Assert {
-                assertNoInternalData($page->toArray()['props'], $secrets, $name);
+            $response = $this->actingAs($user)->get($url);
+
+            if ($name === 'Ubah WO' && ! $user->can('update', $own)) {
+                $response->assertForbidden();
+
+                continue;
+            }
+
+            $response->assertOk()->assertInertia(function (Assert $page) use ($secrets, $name): Assert {
+                $props = $page->toArray()['props'];
+                assertNoInternalData($props, $secrets, $name);
+
+                if (in_array($name, ['Buat WO', 'Ubah WO'], true)) {
+                    assertTargetDepartmentsOnly($props);
+                }
+
+                if ($name === 'Detail WO diinput koordinator') {
+                    expect($props['workOrder']['entered_by'])->toBe(['name' => 'Koordinator Unggul']);
+                }
 
                 return $page;
             });

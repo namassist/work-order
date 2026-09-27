@@ -17,7 +17,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class WorkOrderFactory extends Factory
 {
     /**
-     * Define the model's default state.
+     * Define the model's default state: a draft without a target, entered by
+     * its requester in a new client company (IC) department.
      *
      * @return array<string, mixed>
      */
@@ -26,33 +27,64 @@ class WorkOrderFactory extends Factory
         return [
             'title' => fake()->sentence(4),
             'description' => fake()->optional()->paragraph(),
-            'department_id' => Department::factory(),
+            'requester_department_id' => Department::factory()->client(),
+            'target_department_id' => null,
             'work_order_category_id' => WorkOrderCategory::factory(),
-            'created_by' => User::factory(),
+            'created_by' => fn (array $attributes): int => User::factory()->create(['department_id' => $attributes['requester_department_id']])->id,
+            'requester_id' => fn (array $attributes): int => $attributes['created_by'],
+            'requester_name' => null,
             'status' => Draft::class,
             'target_date' => null,
         ];
     }
 
     /**
-     * A work order created by the given user in their department.
+     * A work order entered by the given user for their own department.
      */
     public function by(User $user): static
     {
         return $this->state(fn (array $attributes): array => [
             'created_by' => $user->id,
-            'department_id' => $user->department_id ?? Department::factory(),
+            'requester_id' => $user->id,
+            'requester_name' => null,
+            'requester_department_id' => $user->department_id,
         ]);
     }
 
     /**
-     * A submitted work order with a number.
+     * A work order entered by a koordinator on behalf of an IC account, or
+     * of someone without one (a contact name).
+     */
+    public function onBehalf(User $enteredBy, ?User $account = null, string $contactName = 'Pak Andi'): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'created_by' => $enteredBy->id,
+            'requester_id' => $account?->id,
+            'requester_name' => $account instanceof User ? null : $contactName,
+            'requester_department_id' => $account->department_id ?? $attributes['requester_department_id'],
+        ]);
+    }
+
+    /**
+     * A work order addressed to the given department.
+     */
+    public function targeting(Department $department): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'target_department_id' => $department->id,
+        ]);
+    }
+
+    /**
+     * A submitted work order with a number, addressed to a new executor
+     * department unless a target is already set.
      */
     public function submitted(): static
     {
         return $this->state(fn (array $attributes): array => [
             'status' => Diajukan::class,
             'number' => fake()->unique()->numerify('WO/TEST/2026/09/####'),
+            'target_department_id' => $attributes['target_department_id'] ?? Department::factory(),
         ]);
     }
 
