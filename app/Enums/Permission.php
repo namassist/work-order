@@ -24,6 +24,10 @@ enum Permission: string
 
     case RolesManage = 'roles.manage';
 
+    case RegistrationsView = 'registrations.view';
+    case RegistrationsApprove = 'registrations.approve';
+    case RegistrationsReject = 'registrations.reject';
+
     case WorkOrdersView = 'work-orders.view';
     case WorkOrdersCreate = 'work-orders.create';
     case WorkOrdersCreateOnBehalf = 'work-orders.create-on-behalf';
@@ -58,7 +62,7 @@ enum Permission: string
 
     /**
      * Whether only users of the executor company may use this permission:
-     * master data, user and role management, the activity log, seeing every
+     * master data, user and role management, registration review, the activity log, seeing every
      * department's work orders, and entering work orders on behalf of IC. Only executor-scoped roles may include
      * it, and client company users never hold it, even through a direct
      * grant (see User::hasPermissionTo()).
@@ -69,6 +73,7 @@ enum Permission: string
             'departments',
             'users',
             'roles',
+            'registrations',
             'work-order-categories',
             'companies',
             'activity-log',

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Concerns\LogsAuditChanges;
+use App\Enums\AccountStatus;
 use App\Enums\AuditEvent;
 use App\Enums\CompanyScope;
 use App\Http\Controllers\Controller;
@@ -35,7 +36,7 @@ class UserController extends Controller
             'search' => ['nullable', 'string', 'max:100'],
             'department' => ['nullable', 'integer'],
             'role' => ['nullable', 'string', 'max:50'],
-            'status' => ['nullable', 'in:active,inactive'],
+            'status' => ['nullable', 'in:active,inactive,pending,rejected'],
             'trashed' => ['nullable', 'boolean'],
         ]);
 
@@ -50,7 +51,11 @@ class UserController extends Controller
             ->search($filters['search'] ?? null)
             ->when($filters['department'] ?? null, fn ($query, int $departmentId) => $query->where('department_id', $departmentId))
             ->when($filters['role'] ?? null, fn ($query, string $role) => $query->whereRelation('roles', 'name', $role))
-            ->when($filters['status'] ?? null, fn ($query, string $status) => $query->where('is_active', $status === 'active'))
+            ->when($filters['status'] ?? null, fn ($query, string $status) => match ($status) {
+                'pending' => $query->where('account_status', AccountStatus::Pending->value),
+                'rejected' => $query->where('account_status', AccountStatus::Rejected->value),
+                default => $query->where('account_status', AccountStatus::Approved->value)->where('is_active', $status === 'active'),
+            })
             ->when($showTrashed, fn ($query) => $query->onlyTrashed())
             ->orderBy('name')
             ->paginate(15)
@@ -60,6 +65,7 @@ class UserController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'is_active' => $user->is_active,
+                'account_status' => $user->account_status->value,
                 'deleted_at' => $user->deleted_at?->toIso8601String(),
                 'department' => $user->department->only(['id', 'code', 'name']),
                 'roles' => $user->roles->pluck('name')->all(),
@@ -278,26 +284,27 @@ class UserController extends Controller
 
     /**
      * User counts for the list's statistics strip. Ignores the list filters
-     * and deleted users.
+     * and deleted users. Active and inactive count approved accounts only, so
+     * registrations under review are in neither (the Pendaftaran page counts them).
      *
      * @return array{total: int, active: int, inactive: int, must_change_password: int}
      */
     private function statusCounts(): array
     {
+        $approved = AccountStatus::Approved->value;
+
         $counts = User::query()
             ->toBase()
             ->selectRaw('count(*) as total')
-            ->selectRaw('coalesce(sum(case when is_active then 1 else 0 end), 0) as active')
+            ->selectRaw("coalesce(sum(case when account_status = '{$approved}' and is_active then 1 else 0 end), 0) as active")
+            ->selectRaw("coalesce(sum(case when account_status = '{$approved}' and not is_active then 1 else 0 end), 0) as inactive")
             ->selectRaw('coalesce(sum(case when must_change_password then 1 else 0 end), 0) as must_change_password')
             ->first();
 
-        $total = (int) $counts?->total;
-        $active = (int) $counts?->active;
-
         return [
-            'total' => $total,
-            'active' => $active,
-            'inactive' => $total - $active,
+            'total' => (int) $counts?->total,
+            'active' => (int) $counts?->active,
+            'inactive' => (int) $counts?->inactive,
             'must_change_password' => (int) $counts?->must_change_password,
         ];
     }

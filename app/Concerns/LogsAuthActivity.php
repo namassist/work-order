@@ -32,7 +32,7 @@ trait LogsAuthActivity
     protected function logFailedLogin(mixed $email, ?string $reason = null): void
     {
         $email = is_string($email) ? Str::limit($email, 255, '') : '';
-        $user = User::where('email', $email)->first();
+        $user = User::query()->withEmail($email)->first();
 
         $logger = activity('auth')
             ->event(AuditEvent::LoginFailed->value)

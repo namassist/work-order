@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\AccountStatus;
 use App\Enums\AuditEvent;
 use App\Enums\CompanyScope;
 use App\Enums\SystemRole;
@@ -311,4 +312,22 @@ it('does not duplicate data or remove files when run again', function () {
 
     expect($counts())->toBe($before);
     Media::all()->each(fn (Media $item) => Storage::disk('attachments')->assertExists($item->getPathRelativeToRoot()));
+});
+
+it('seeds pending registrations from both companies and one rejected, through the real actions', function () {
+    $this->seed(DemoSeeder::class);
+
+    $registrations = User::query()->registrations()->with(['roles', 'department.company'])->get();
+    $pending = $registrations->where('account_status', AccountStatus::Pending);
+    $rejected = $registrations->where('account_status', AccountStatus::Rejected);
+
+    expect($pending)->toHaveCount(3)
+        ->and($pending->map(fn (User $user): bool => $user->isClient())->unique()->sort()->values()->all())->toBe([false, true])
+        ->and($rejected)->toHaveCount(1)
+        ->and($rejected->sole()->rejection_reason)->not->toBeEmpty()
+        ->and($registrations->every(fn (User $user): bool => $user->roles->isEmpty()))->toBeTrue()
+        ->and($registrations->every(fn (User $user): bool => $user->department->company->allowsEmailDomain($user->email)))->toBeTrue()
+        ->and(Activity::where('event', AuditEvent::Registered->value)->count())->toBe(4)
+        ->and(Activity::where('event', AuditEvent::RegistrationRejected->value)->sole()->causer_id)
+        ->toBe(User::where('email', 'admin@worder.test')->value('id'));
 });

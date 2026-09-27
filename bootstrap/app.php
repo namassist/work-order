@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAccountIsApproved;
 use App\Http\Middleware\EnsureInternalUser;
 use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\EnsureUserIsActive;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleAppearance::class,
             EnsureUserIsActive::class,
+            EnsureAccountIsApproved::class,
             EnsurePasswordIsChanged::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

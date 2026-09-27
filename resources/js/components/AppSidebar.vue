@@ -8,12 +8,14 @@ import {
     LayoutGrid,
     ShieldCheck,
     Tags,
+    UserPlus,
     Users,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
 import CompanyController from '@/actions/App/Http/Controllers/Admin/CompanyController';
 import DepartmentController from '@/actions/App/Http/Controllers/Admin/DepartmentController';
+import RegistrationController from '@/actions/App/Http/Controllers/Admin/RegistrationController';
 import RoleController from '@/actions/App/Http/Controllers/Admin/RoleController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import WorkOrderCategoryController from '@/actions/App/Http/Controllers/Admin/WorkOrderCategoryController';
@@ -33,13 +35,16 @@ import { visibleNavGroups } from '@/lib/navigation';
 import { dashboard } from '@/routes';
 import type { NavGroup } from '@/types';
 
+const page = usePage();
+
 /**
  * Sidebar sections in display order. Each item names the permission that
  * shows it (a UI hint only; the server authorizes every request), and a
  * group whose items are all hidden disappears with its heading. Internal
- * groups are never shown to client company (IC) users.
+ * groups are never shown to client company (IC) users. Computed, because
+ * the Pendaftaran badge follows the shared pending count.
  */
-const navGroups: NavGroup[] = [
+const navGroups = computed<NavGroup[]>(() => [
     {
         items: [{ title: 'Dashboard', href: dashboard(), icon: LayoutGrid }],
     },
@@ -89,6 +94,13 @@ const navGroups: NavGroup[] = [
                 permission: 'users.view',
             },
             {
+                title: 'Pendaftaran',
+                href: RegistrationController.index(),
+                icon: UserPlus,
+                permission: 'registrations.view',
+                badge: page.props.pendingRegistrations,
+            },
+            {
                 title: 'Role & Hak Akses',
                 href: RoleController.index(),
                 icon: ShieldCheck,
@@ -102,12 +114,11 @@ const navGroups: NavGroup[] = [
             },
         ],
     },
-];
+]);
 
 const can = useCan();
-const page = usePage();
 const visibleGroups = computed(() =>
-    visibleNavGroups(navGroups, can, page.props.auth.isClient),
+    visibleNavGroups(navGroups.value, can, page.props.auth.isClient),
 );
 </script>
 

@@ -78,11 +78,15 @@ export type WorkOrderCategory = {
     deleted_at: string | null;
 };
 
+/** Review state of an account, see App\Enums\AccountStatus. */
+export type AccountStatus = 'pending' | 'approved' | 'rejected';
+
 export type ManagedUser = {
     id: number;
     name: string;
     email: string;
     is_active: boolean;
+    account_status: AccountStatus;
     deleted_at: string | null;
     department: DepartmentOption | null;
     roles: string[];
@@ -95,6 +99,27 @@ export type EditableUser = {
     department_id: number | null;
     is_active: boolean;
     roles: string[];
+};
+
+/** A self-registered account on the Pendaftaran page. */
+export type Registration = {
+    id: number;
+    name: string;
+    email: string;
+    account_status: AccountStatus;
+    is_active: boolean;
+    department: DepartmentOption;
+    company: { id: number; name: string; scope: CompanyScope };
+    roles: string[];
+    registered_at: string | null;
+    reviewed_at: string | null;
+    reviewer: string | null;
+    rejection_reason: string | null;
+};
+
+/** A department the approval dialog may move a registration to. */
+export type RegistrationDepartment = DepartmentOption & {
+    company_id: number;
 };
 
 export type RoleSummary = {

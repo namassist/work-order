@@ -4,12 +4,14 @@ namespace App\Models;
 
 use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
+use App\Enums\AccountStatus;
 use App\Enums\Permission;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -17,6 +19,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Permission\Contracts\Permission as PermissionContract;
 use Spatie\Permission\Traits\HasRoles;
@@ -27,6 +30,11 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $email
  * @property int $department_id
  * @property bool $is_active
+ * @property AccountStatus $account_status
+ * @property string|null $rejection_reason
+ * @property Carbon|null $registered_at
+ * @property int|null $reviewed_by
+ * @property Carbon|null $reviewed_at
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property bool $must_change_password
@@ -38,6 +46,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property-read Department $department
+ * @property-read User|null $reviewer
  */
 #[Fillable(['name', 'email', 'password', 'must_change_password', 'department_id', 'is_active'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
@@ -52,6 +61,46 @@ class User extends Authenticatable
     }
 
     /**
+     * The model's default values for attributes, matching the columns' defaults.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'account_status' => 'approved',
+    ];
+
+    /**
+     * The form every email is stored and compared in: trimmed and lowercase.
+     * Emails are case-insensitive; the unique index is on lower(email).
+     */
+    public static function normalizeEmail(string $email): string
+    {
+        return Str::lower(trim($email));
+    }
+
+    /**
+     * Every write (registration, admin forms, profile, seeders) stores the
+     * normalized email, so two casings of one address cannot coexist.
+     *
+     * @return Attribute<string, string>
+     */
+    protected function email(): Attribute
+    {
+        return Attribute::make(set: fn (string $value): string => self::normalizeEmail($value));
+    }
+
+    /**
+     * The user with the email, whatever its casing (uses the lower(email) index).
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function withEmail(Builder $query, string $email): void
+    {
+        $query->whereRaw('lower(email) = ?', [self::normalizeEmail($email)]);
+    }
+
+    /**
      * The department the user belongs to, even if it was deleted later.
      *
      * @return BelongsTo<Department, $this>
@@ -59,6 +108,24 @@ class User extends Authenticatable
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class)->withTrashed();
+    }
+
+    /**
+     * The admin who last approved or rejected the registration.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by')->withTrashed();
+    }
+
+    /**
+     * Whether an admin approved the account (admin-created accounts always are).
+     */
+    public function isApproved(): bool
+    {
+        return $this->account_status === AccountStatus::Approved;
     }
 
     /**
@@ -109,15 +176,30 @@ class User extends Authenticatable
 
     /**
      * Accounts that can be the requester of an on-behalf work order in the
-     * department: active and not deleted. The same rule backs the picker and
-     * the validation of the chosen account.
+     * department: approved, active, and not deleted. The same rule backs the
+     * picker and the validation of the chosen account
+     * (WorkOrderRequesterRules), so pending and rejected registrations never
+     * pass either.
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
     protected function activeRequesterIn(Builder $query, int $departmentId): void
     {
-        $query->where('department_id', $departmentId)->where('is_active', true);
+        $query->where('department_id', $departmentId)
+            ->where('is_active', true)
+            ->where('account_status', AccountStatus::Approved->value);
+    }
+
+    /**
+     * Self-registered accounts (FLOW.md §3), the ones the Pendaftaran page reviews.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function registrations(Builder $query): void
+    {
+        $query->whereNotNull('registered_at');
     }
 
     /**
@@ -169,6 +251,9 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'account_status' => AccountStatus::class,
+            'registered_at' => 'datetime',
+            'reviewed_at' => 'datetime',
             'must_change_password' => 'boolean',
         ];
     }

@@ -21,6 +21,17 @@ class UpdateUserRequest extends FormRequest
     }
 
     /**
+     * Compare the email the way it is stored (User::normalizeEmail()), so the
+     * unique rules catch another casing of a taken address.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('email'))) {
+            $this->merge(['email' => User::normalizeEmail($this->input('email'))]);
+        }
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -34,7 +45,8 @@ class UpdateUserRequest extends FormRequest
     }
 
     /**
-     * Guard against roles that do not fit the user's company, self-deactivation,
+     * Guard against roles that do not fit the user's company, roles for an
+     * account still under review (they come with approval), self-deactivation,
      * and locking everyone out of role management.
      *
      * @return array<int, callable(Validator): void>
@@ -43,6 +55,11 @@ class UpdateUserRequest extends FormRequest
     {
         return [
             $this->roleFitCheck($this->managedUser()),
+            function (Validator $validator): void {
+                if (! $this->managedUser()->isApproved() && (array) $this->input('roles', []) !== []) {
+                    $validator->errors()->add('roles', __('Akun ini belum disetujui; berikan role lewat halaman Pendaftaran.'));
+                }
+            },
             function (Validator $validator): void {
                 $user = $this->managedUser();
                 $deactivating = ! $this->boolean('is_active');

@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use App\Actions\Attachments\AddAttachment;
+use App\Actions\Fortify\CreateNewUser;
+use App\Actions\Registrations\RejectRegistration;
 use App\Actions\WorkOrders\AddWorkOrderComment;
 use App\Actions\WorkOrders\CreateWorkOrder;
 use App\Actions\WorkOrders\DeleteWorkOrderComment;
@@ -144,6 +146,20 @@ class DemoSeeder extends Seeder
         ['Dimas Prasetyo', 'MTC', 'pemohon', false],
         ['Yoga Firmansyah', 'MTC', 'pemohon', true],
         ['Teguh Wibowo', 'MTC', 'pemohon', false],
+    ];
+
+    /**
+     * Self-registrations (FLOW.md §3) as [name, department code, days ago,
+     * rejection reason or null]: three pending from both companies and one
+     * rejected, for the Pendaftaran page and its sidebar badge.
+     *
+     * @var list<array{0: string, 1: string, 2: int, 3: string|null}>
+     */
+    private const array REGISTRATIONS = [
+        ['Galih Saputra', 'PRD', 2, null],
+        ['Siti Marlina', 'LOG', 1, null],
+        ['Yusuf Maulana', 'ENG', 3, null],
+        ['Tono Sugiarto', 'HRD', 6, 'Tidak terdaftar sebagai karyawan HRD. Hubungi atasan Anda untuk konfirmasi.'],
     ];
 
     /**
@@ -309,6 +325,8 @@ Nanti saya kabari lagi.'],
     private Generator $faker;
 
     public function __construct(
+        private readonly CreateNewUser $createNewUser,
+        private readonly RejectRegistration $rejectRegistration,
         private readonly CreateWorkOrder $createWorkOrder,
         private readonly TransitionWorkOrder $transitionWorkOrder,
         private readonly AddAttachment $addAttachment,
@@ -343,6 +361,13 @@ Nanti saya kabari lagi.'],
         $departments = $this->seedDepartments($this->seedCompanies());
         $categories = $this->seedCategories();
         $users = $this->seedUsers($departments, $password);
+
+        try {
+            $this->seedRegistrations($departments, $password, $users->sole(fn (User $user): bool => $user->hasRole('admin')));
+        } finally {
+            Date::setTestNow();
+            Auth::forgetUser();
+        }
 
         if (WorkOrder::withTrashed()->whereIn('created_by', $users->pluck('id'))->exists()) {
             $this->command->info('Demo work orders already exist, skipped. Use migrate:fresh --seeder=DemoSeeder for a clean refresh.');
@@ -456,6 +481,44 @@ Nanti saya kabari lagi.'],
 
             return $user;
         });
+    }
+
+    /**
+     * Registers the demo self-registrations through the real action (pending,
+     * "registered" logged), then rejects one as the admin. Skipped for an
+     * email that already exists.
+     *
+     * @param  Collection<string, Department>  $departments
+     */
+    private function seedRegistrations(Collection $departments, string $password, User $admin): void
+    {
+        foreach (self::REGISTRATIONS as [$name, $departmentCode, $daysAgo, $rejectionReason]) {
+            $department = $departments[$departmentCode];
+            $email = self::emailFor($name, 'pemohon', self::COMPANIES[self::DEPARTMENTS[$departmentCode][1]][2]);
+
+            if (User::withTrashed()->withEmail($email)->exists()) {
+                continue;
+            }
+
+            $registeredAt = now()->subDays($daysAgo)->setTime(8 + $daysAgo, 15);
+            Date::setTestNow($registeredAt);
+            Auth::forgetUser();
+
+            $user = $this->createNewUser->create([
+                'name' => $name,
+                'email' => $email,
+                'password' => $password,
+                'password_confirmation' => $password,
+                'company_id' => $department->company_id,
+                'department_id' => $department->id,
+            ]);
+
+            if ($rejectionReason !== null) {
+                Date::setTestNow($registeredAt->addHours(3));
+                Auth::setUser($admin);
+                $this->rejectRegistration->handle($user, $admin, $rejectionReason);
+            }
+        }
     }
 
     /**

@@ -2,13 +2,17 @@
 
 namespace App\Providers;
 
+use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Concerns\LogsAuthActivity;
+use App\Http\Middleware\EnsureRegistrationIsEnabled;
 use App\Models\User;
+use App\Support\RegistrationOptions;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -43,6 +47,7 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureAuthentication();
         $this->configureViews();
         $this->configureRateLimiting();
+        $this->configureRegistrationRoutes();
     }
 
     /**
@@ -50,6 +55,7 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureActions(): void
     {
+        Fortify::createUsersUsing(CreateNewUser::class);
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
     }
 
@@ -61,7 +67,7 @@ class FortifyServiceProvider extends ServiceProvider
     private function configureAuthentication(): void
     {
         Fortify::authenticateUsing(function (Request $request): ?User {
-            $user = User::where('email', $request->string(Fortify::username()))->first();
+            $user = User::query()->withEmail($request->string(Fortify::username())->toString())->first();
 
             if ($user === null || ! Hash::check($request->string('password')->toString(), $user->password)) {
                 return null;
@@ -86,7 +92,13 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/Login', [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
+            'canRegister' => (bool) config('registration.enabled'),
             'status' => $request->session()->get('status'),
+        ]));
+
+        Fortify::registerView(fn () => Inertia::render('auth/Register', [
+            ...RegistrationOptions::forRegisterPage(),
+            'passwordRules' => Password::defaults()->toPasswordRulesString(),
         ]));
 
         Fortify::resetPasswordView(fn (Request $request) => Inertia::render('auth/ResetPassword', [
@@ -100,6 +112,23 @@ class FortifyServiceProvider extends ServiceProvider
         ]));
 
         Fortify::confirmPasswordView(fn () => Inertia::render('auth/ConfirmPassword'));
+    }
+
+    /**
+     * Fortify's registration routes get the kill switch and, on the form,
+     * the named `registration` limiter (AppServiceProvider). Fortify has no
+     * limiter setting for registration, so the middleware is added to its
+     * routes once every provider has registered them; a route cache keeps it.
+     */
+    private function configureRegistrationRoutes(): void
+    {
+        $this->app->booted(function (): void {
+            $routes = Route::getRoutes();
+            $routes->refreshNameLookups();
+
+            $routes->getByName('register')?->middleware(EnsureRegistrationIsEnabled::class);
+            $routes->getByName('register.store')?->middleware([EnsureRegistrationIsEnabled::class, 'throttle:registration']);
+        });
     }
 
     /**

@@ -56,7 +56,8 @@ function adminRouteParameters(): array
         'company' => $company->id,
         'department' => Department::factory()->for($company)->create()->id,
         'category' => WorkOrderCategory::factory()->create()->id,
-        'user' => User::factory()->create()->id,
+        // A registration under review, so the Pendaftaran actions would reach it too.
+        'user' => User::factory()->pending()->create()->id,
         'role' => Role::findByName('viewer')->id,
         'subjectType' => 'company',
         'subjectId' => $company->id,
@@ -161,9 +162,9 @@ describe('internal routes', function () {
         expect(Route::getRoutes()->getByName('work-orders.requester-accounts')?->gatherMiddleware())->toContain('internal');
     });
 
-    it('covers users, roles, departments, categories, companies, and the activity log', function () {
+    it('covers users, roles, registrations, departments, categories, companies, and the activity log', function () {
         expect(collect(adminRoutes())->pluck('name')->map(fn (string $name): string => explode('.', $name)[1])->unique()->sort()->values()->all())
-            ->toBe(['activity-log', 'companies', 'departments', 'roles', 'users', 'work-order-categories']);
+            ->toBe(['activity-log', 'companies', 'departments', 'registrations', 'roles', 'users', 'work-order-categories']);
     });
 
     it('answers 404 to an IC user on every admin route, whatever they hold', function (Closure $icUser) {

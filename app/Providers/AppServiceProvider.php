@@ -28,6 +28,13 @@ use Spatie\Permission\Models\Role;
 class AppServiceProvider extends ServiceProvider
 {
     /**
+     * Registrations one IP may submit per minute and per hour.
+     */
+    private const int REGISTRATIONS_PER_IP_PER_MINUTE = 5;
+
+    private const int REGISTRATIONS_PER_IP_PER_HOUR = 20;
+
+    /**
      * Register any application services.
      */
     public function register(): void
@@ -84,6 +91,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('wo-comment-change', $perUserPerMinute(10));
         RateLimiter::for('attachment-upload', $perUserPerMinute(30));
         RateLimiter::for('wo-requester-search', $perUserPerMinute(30));
+
+        // Public, so per IP. Offices share an IP, hence the hourly headroom.
+        RateLimiter::for('registration', fn (Request $request): array => [
+            Limit::perMinute(self::REGISTRATIONS_PER_IP_PER_MINUTE)->by('minute|'.$request->ip()),
+            Limit::perHour(self::REGISTRATIONS_PER_IP_PER_HOUR)->by('hour|'.$request->ip()),
+        ]);
     }
 
     /**

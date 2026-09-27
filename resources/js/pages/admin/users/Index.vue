@@ -222,7 +222,7 @@ const openHistory = (user: ManagedUser) => {
             </Select>
             <Select v-model="filters.status">
                 <SelectTrigger
-                    class="w-full sm:w-40"
+                    class="w-full sm:w-44"
                     aria-label="Filter status"
                 >
                     <SelectValue />
@@ -231,6 +231,8 @@ const openHistory = (user: ManagedUser) => {
                     <SelectItem :value="ALL">Semua status</SelectItem>
                     <SelectItem value="active">Aktif</SelectItem>
                     <SelectItem value="inactive">Nonaktif</SelectItem>
+                    <SelectItem value="pending">Menunggu review</SelectItem>
+                    <SelectItem value="rejected">Ditolak</SelectItem>
                 </SelectContent>
             </Select>
             <div v-if="can.restore" class="flex items-center gap-2">
@@ -300,6 +302,7 @@ const openHistory = (user: ManagedUser) => {
                         <StatusBadge
                             :is-active="user.is_active"
                             :deleted="user.deleted_at !== null"
+                            :account-status="user.account_status"
                         />
                     </TableCell>
                     <TableCell class="text-right">

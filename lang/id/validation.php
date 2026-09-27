@@ -189,6 +189,7 @@ return [
         'urgency' => 'urgensi',
         'status' => 'status',
         'note' => 'catatan',
+        'reason' => 'alasan',
         'body' => 'komentar',
         'file' => 'berkas',
         'attachments' => 'lampiran',

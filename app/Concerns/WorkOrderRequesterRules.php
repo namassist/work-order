@@ -2,6 +2,7 @@
 
 namespace App\Concerns;
 
+use App\Enums\AccountStatus;
 use App\Models\Department;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -9,7 +10,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 
 /**
- * The requester of an on-behalf work order (FLOW.md §4): an active account
+ * The requester of an on-behalf work order (FLOW.md §4): an approved, active account
  * of the requester department, or a contact name. Exactly one, chosen by
  * `requester_mode`.
  */
@@ -39,6 +40,7 @@ trait WorkOrderRequesterRules
                 Rule::exists(User::class, 'id')
                     ->where('department_id', $departmentId ?? $this->integer('requester_department_id'))
                     ->where('is_active', true)
+                    ->where('account_status', AccountStatus::Approved->value)
                     ->whereNull('deleted_at'),
             ],
             'requester_name' => [

@@ -14,6 +14,8 @@ export type NavItem = {
     isActive?: boolean;
     /** Permission required to see the item; omitted means always visible. */
     permission?: string;
+    /** A count shown beside the title (e.g. pending registrations); hidden when 0 or null. */
+    badge?: number | null;
 };
 
 export type NavGroup = {

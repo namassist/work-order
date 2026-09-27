@@ -94,6 +94,8 @@ describe('create', function () {
         'an account of another department' => [fn (): array => ['requester_id' => User::factory()->for(Department::factory()->client())->create()->id], 'requester_id'],
         'an inactive account' => [fn (): array => ['requester_id' => User::factory()->for(test()->requesterDepartment)->inactive()->create()->id], 'requester_id'],
         'a deleted account' => [fn (): array => ['requester_id' => tap(User::factory()->for(test()->requesterDepartment)->create())->delete()->id], 'requester_id'],
+        'a pending registration' => [fn (): array => ['requester_id' => User::factory()->for(test()->requesterDepartment)->pending()->create()->id], 'requester_id'],
+        'a rejected registration' => [fn (): array => ['requester_id' => User::factory()->for(test()->requesterDepartment)->rejected()->create()->id], 'requester_id'],
         'an account and a contact' => [fn (): array => ['requester_name' => 'Pak Andi'], 'requester_name'],
         'a contact without a name' => [fn (): array => ['requester_mode' => 'contact', 'requester_id' => null, 'requester_name' => '   '], 'requester_name'],
         'a contact and an account' => [fn (): array => ['requester_mode' => 'contact', 'requester_name' => 'Pak Andi'], 'requester_id'],
@@ -150,11 +152,13 @@ describe('create', function () {
 });
 
 describe('requester accounts picker', function () {
-    it('lists the active accounts of the IC department, by name or email', function () {
+    it('lists the approved, active accounts of the IC department, by name or email', function () {
         User::factory()->for($this->requesterDepartment)->create(['name' => 'Andi Saputra', 'email' => 'andi@ic.test']);
         User::factory()->for($this->requesterDepartment)->create(['name' => 'Budi', 'email' => 'budi.andi@ic.test']);
         User::factory()->for($this->requesterDepartment)->inactive()->create(['name' => 'Andi Nonaktif']);
         User::factory()->for($this->requesterDepartment)->create(['name' => 'Andi Terhapus'])->delete();
+        User::factory()->for($this->requesterDepartment)->pending()->create(['name' => 'Andi Menunggu']);
+        User::factory()->for($this->requesterDepartment)->rejected()->create(['name' => 'Andi Ditolak']);
         User::factory()->for(Department::factory()->client())->create(['name' => 'Andi Lain']);
 
         $response = $this->actingAs($this->koordinatorUser)
