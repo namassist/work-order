@@ -496,7 +496,7 @@ Nanti saya kabari lagi.'],
             $department = $departments[$departmentCode];
             $email = self::emailFor($name, 'pemohon', self::COMPANIES[self::DEPARTMENTS[$departmentCode][1]][2]);
 
-            if (User::withTrashed()->where('email', $email)->exists()) {
+            if (User::withTrashed()->withEmail($email)->exists()) {
                 continue;
             }
 

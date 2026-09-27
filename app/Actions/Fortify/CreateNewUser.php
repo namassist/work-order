@@ -11,7 +11,6 @@ use App\Models\Department;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator as ValidatorInstance;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
@@ -34,7 +33,7 @@ class CreateNewUser implements CreatesNewUsers
     public function create(array $input): User
     {
         if (is_string($input['email'] ?? null)) {
-            $input['email'] = Str::lower(trim($input['email']));
+            $input['email'] = User::normalizeEmail($input['email']);
         }
 
         $validated = Validator::make($input, [

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -18,6 +19,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Permission\Contracts\Permission as PermissionContract;
 use Spatie\Permission\Traits\HasRoles;
@@ -66,6 +68,37 @@ class User extends Authenticatable
     protected $attributes = [
         'account_status' => 'approved',
     ];
+
+    /**
+     * The form every email is stored and compared in: trimmed and lowercase.
+     * Emails are case-insensitive; the unique index is on lower(email).
+     */
+    public static function normalizeEmail(string $email): string
+    {
+        return Str::lower(trim($email));
+    }
+
+    /**
+     * Every write (registration, admin forms, profile, seeders) stores the
+     * normalized email, so two casings of one address cannot coexist.
+     *
+     * @return Attribute<string, string>
+     */
+    protected function email(): Attribute
+    {
+        return Attribute::make(set: fn (string $value): string => self::normalizeEmail($value));
+    }
+
+    /**
+     * The user with the email, whatever its casing (uses the lower(email) index).
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function withEmail(Builder $query, string $email): void
+    {
+        $query->whereRaw('lower(email) = ?', [self::normalizeEmail($email)]);
+    }
 
     /**
      * The department the user belongs to, even if it was deleted later.
