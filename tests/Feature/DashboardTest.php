@@ -135,7 +135,7 @@ test('the request overview counts visible work orders per WITA day and current s
     // 23:59 WITA on 18 Sep, the day before the period.
     WorkOrder::factory()->create([...$inDepartment, 'created_at' => Carbon::parse('2026-09-18 15:59', 'UTC')]);
 
-    $none = ['draft' => 0, 'diajukan' => 0, 'ditolak' => 0, 'dikerjakan' => 0, 'dibatalkan' => 0];
+    $none = ['draft' => 0, 'diajukan' => 0, 'ditolak' => 0, 'dikerjakan' => 0, 'penagihan' => 0, 'selesai' => 0, 'dibatalkan' => 0];
 
     $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
         ->get(route('dashboard'))
@@ -167,7 +167,7 @@ test('the request overview covers the last 30 days when asked', function () {
                 ->where('requestOverview.days', 30)
                 ->count('requestOverview.series', 30)
                 ->where('requestOverview.series.0.date', '2026-08-27')
-                ->where('requestOverview.series.9', ['date' => '2026-09-05', 'counts' => ['draft' => 1, 'diajukan' => 0, 'ditolak' => 0, 'dikerjakan' => 0, 'dibatalkan' => 0]])));
+                ->where('requestOverview.series.9', ['date' => '2026-09-05', 'counts' => ['draft' => 1, 'diajukan' => 0, 'ditolak' => 0, 'dikerjakan' => 0, 'penagihan' => 0, 'selesai' => 0, 'dibatalkan' => 0]])));
 });
 
 test('the request overview falls back to 7 days for an unknown period', function (string $period) {

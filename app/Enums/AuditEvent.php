@@ -21,6 +21,9 @@ enum AuditEvent: string
     case CommentAdded = 'comment_added';
     case CommentEdited = 'comment_edited';
     case CommentDeleted = 'comment_deleted';
+    case InvoiceIssued = 'invoice_issued';
+    case InvoiceCorrected = 'invoice_corrected';
+    case PaymentConfirmed = 'payment_confirmed';
     case Registered = 'registered';
     case RegistrationApproved = 'registration_approved';
     case RegistrationRejected = 'registration_rejected';
@@ -52,6 +55,9 @@ enum AuditEvent: string
             self::CommentAdded => 'Komentar ditambahkan',
             self::CommentEdited => 'Komentar diubah',
             self::CommentDeleted => 'Komentar dihapus',
+            self::InvoiceIssued => 'Invoice diterbitkan',
+            self::InvoiceCorrected => 'Invoice dikoreksi',
+            self::PaymentConfirmed => 'Pembayaran dikonfirmasi',
             self::Registered => 'Mendaftar',
             self::RegistrationApproved => 'Pendaftaran disetujui',
             self::RegistrationRejected => 'Pendaftaran ditolak',

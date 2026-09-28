@@ -154,5 +154,5 @@ it('still cancels a draft without a target department', function () {
 it('requires a target department for exactly the statuses after the first submission', function () {
     expect(collect(WorkOrderStatus::options())->mapWithKeys(fn (array $option): array => [
         $option['value'] => WorkOrderStatus::fromName($option['value'])?->requiresTargetDepartment(),
-    ])->all())->toBe(['draft' => false, 'diajukan' => true, 'ditolak' => true, 'dikerjakan' => true, 'dibatalkan' => false]);
+    ])->all())->toBe(['draft' => false, 'diajukan' => true, 'ditolak' => true, 'dikerjakan' => true, 'penagihan' => true, 'selesai' => true, 'dibatalkan' => false]);
 });

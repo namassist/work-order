@@ -2,12 +2,13 @@
 
 namespace App\States\WorkOrder;
 
+use App\Enums\WorkOrderDeadline;
 use App\Enums\WorkOrderSide;
 use App\Models\WorkOrder;
 
 /**
  * Accepted and being carried out by the target department, which may add
- * documents meanwhile.
+ * documents and the BAST meanwhile, then invoices it (Penagihan).
  */
 class Dikerjakan extends WorkOrderStatus
 {
@@ -28,9 +29,9 @@ class Dikerjakan extends WorkOrderStatus
         return 'Kerjakan';
     }
 
-    public function countsAsOverdueWhenLate(): bool
+    public function deadline(): WorkOrderDeadline
     {
-        return true;
+        return WorkOrderDeadline::TargetDate;
     }
 
     public function requiresTargetDepartment(): bool
@@ -43,9 +44,15 @@ class Dikerjakan extends WorkOrderStatus
         return WorkOrderSide::Executor;
     }
 
-    public function attachmentSide(): WorkOrderSide
+    /**
+     * The target department adds documents and the BAST while it works.
+     */
+    public function attachmentSides(): array
     {
-        return WorkOrderSide::Executor;
+        return [
+            WorkOrder::DOCUMENTS => WorkOrderSide::Executor,
+            WorkOrder::BAST => WorkOrderSide::Executor,
+        ];
     }
 
     public function waitsOn(): WorkOrderSide

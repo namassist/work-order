@@ -6,6 +6,8 @@ use App\Concerns\LogsAuditChanges;
 use App\Enums\AuditEvent;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\States\WorkOrder\Penagihan;
+use App\States\WorkOrder\Selesai;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\WorkOrderNumberGenerator;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +27,7 @@ class TransitionWorkOrder
 
     /**
      * @throws CouldNotPerformTransition when the transition is not allowed from the current status
-     * @throws ValidationException when the new status requires a target department and there is none
+     * @throws ValidationException when the new status requires a target department and there is none, or an invoice (Penagihan) or its payment (Selesai)
      */
     public function handle(WorkOrder $workOrder, string $to, User $user, ?string $note = null): WorkOrder
     {
@@ -42,6 +44,8 @@ class TransitionWorkOrder
                     'status' => __('Pilih departemen tujuan sebelum mengajukan.'),
                 ]);
             }
+
+            $this->ensureInvoiced($locked, $to);
 
             if ($target?->assignsNumber() && $locked->number === null) {
                 $locked->number = $this->numbers->next($locked->requesterDepartment->code, now());
@@ -65,5 +69,32 @@ class TransitionWorkOrder
 
             return $locked;
         });
+    }
+
+    /**
+     * A work order enters Penagihan only with an invoice and its file, and
+     * Selesai only with the invoice paid (FLOW.md §8). BillWorkOrder and
+     * ConfirmWorkOrderPayment write them first; any other caller is refused.
+     *
+     * @throws ValidationException
+     */
+    private function ensureInvoiced(WorkOrder $workOrder, string $to): void
+    {
+        $invoice = $workOrder->invoice;
+
+        $missing = match ($to) {
+            Penagihan::$name => $invoice === null
+                || $workOrder->media()->where('collection_name', WorkOrder::INVOICE)->count() < $workOrder->attachmentCollections()[WorkOrder::INVOICE]->minFiles,
+            Selesai::$name => $invoice?->isPaid() !== true,
+            default => false,
+        };
+
+        if ($missing) {
+            throw ValidationException::withMessages([
+                'status' => $to === Penagihan::$name
+                    ? __('Lengkapi data invoice dan berkasnya sebelum menagihkan.')
+                    : __('Isi tanggal pembayaran sebelum menyelesaikan.'),
+            ]);
+        }
     }
 }

@@ -6,11 +6,14 @@ use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
+use App\Models\WorkOrderInvoice;
 use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\Dibatalkan;
 use App\States\WorkOrder\Dikerjakan;
 use App\States\WorkOrder\Ditolak;
 use App\States\WorkOrder\Draft;
+use App\States\WorkOrder\Penagihan;
+use App\States\WorkOrder\Selesai;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -108,6 +111,32 @@ class WorkOrderFactory extends Factory
         return $this->submitted()->state(fn (array $attributes): array => [
             'status' => Dikerjakan::class,
         ]);
+    }
+
+    /**
+     * A work order its target department invoiced (Penagihan), with an
+     * unpaid invoice (no files) issued by a new user unless the given
+     * attributes say otherwise.
+     *
+     * @param  array<string, mixed>  $invoice
+     */
+    public function billed(array $invoice = []): static
+    {
+        return $this->submitted()
+            ->state(fn (array $attributes): array => ['status' => Penagihan::class])
+            ->afterCreating(fn (WorkOrder $workOrder) => WorkOrderInvoice::factory()->for($workOrder)->create($invoice));
+    }
+
+    /**
+     * A work order whose invoice was paid (Selesai), confirmed by a new user.
+     *
+     * @param  array<string, mixed>  $invoice
+     */
+    public function paid(array $invoice = []): static
+    {
+        return $this->submitted()
+            ->state(fn (array $attributes): array => ['status' => Selesai::class])
+            ->afterCreating(fn (WorkOrder $workOrder) => WorkOrderInvoice::factory()->for($workOrder)->paid()->create($invoice));
     }
 
     /**

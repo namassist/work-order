@@ -31,6 +31,9 @@ Warna status konsisten di badge, tabel, timeline, dan grafik:
 - Draft → `secondary`
 - Diajukan (menunggu diproses) → `warning`
 - Dikerjakan → `info`
+- Penagihan (menunggu pembayaran) → `billing`: ungu redup (`--billing`, terang `#7a5a92` dengan teks
+  `--billing-foreground` terang 5,57:1; gelap `#bea2d4` dengan teks gelap 8,17:1). Badge berisi,
+  seperti Diajukan dan Dikerjakan: masih berjalan, menunggu keuangan.
 - Selesai / Lunas / Closed → `success`
 - Ditolak → `destructive`: masih hidup, menunggu pemohon merevisi dan mengajukan ulang.
 - Dibatalkan → `muted`: sudah berakhir, tidak ada lagi yang perlu dilakukan. Badge garis tipis
@@ -45,7 +48,9 @@ Di grafik, seri status memakai token badge-nya, asal kontrasnya minimal 3:1 terh
 di mode terang dan gelap. Jika kurang, seri memakai token `--chart-*` khusus grafik dari keluarga
 warna yang sama; token badge tidak diubah. Saat ini: Draft `--chart-5` (abu netral, 4,96:1
 terang), Diajukan `--chart-submitted` (emas `--warning` yang digelapkan, 3,21:1 terang; di mode
-gelap sama dengan `--warning`), Dikerjakan `--info` (5,32:1 terang, 7,70:1 gelap), Ditolak
+gelap sama dengan `--warning`), Dikerjakan `--info` (5,32:1 terang, 7,70:1 gelap), Penagihan
+`--billing` (5,57:1 terang, 7,55:1 gelap; jarak warna ΔE 26–27 dari `--info`, seri status terdekat,
+dan lebih jauh dari seri lain), Selesai `--success` (4,91:1 terang, 7,58:1 gelap), Ditolak
 `--destructive` (6,46:1 terang, 6,16:1 gelap), Dibatalkan `--chart-cancelled` (netral gelap:
 12,46:1 terang, 3,18:1 gelap; di kedua mode lebih gelap dari `--chart-5`, beda 2,51:1 terang dan
 2,11:1 gelap, supaya tidak tertukar dengan Draft). Warna grafik dipilih per status, dengan tone
@@ -174,8 +179,8 @@ milik server, jadi URL lama, ekspor, dan tautan dashboard tetap berlaku.
 
 - Di bawah 1024px sidebar menjadi drawer.
 - Strip statistik: 4 kolom → 2×2 → 1 kolom. Strip dengan lebih dari 4 sel (Daftar WO: total plus
-  setiap status, 6 sel): 6 kolom mulai `xl` → 3 kolom mulai `lg` → 2 kolom → 1 kolom, supaya tidak
-  ada baris dengan sel kosong.
+  setiap status, 8 sel): 4 kolom mulai `lg` (dua baris) → 2 kolom, juga di ponsel, supaya tidak
+  menjadi satu kolom yang panjang dan tidak ada baris dengan sel kosong.
 - Tabel: kolom sekunder (orang, tanggal) disembunyikan di mobile, sisanya tetap terbaca
   tanpa scroll horizontal jika memungkinkan.
 

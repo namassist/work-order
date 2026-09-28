@@ -5,6 +5,7 @@ export type StatusTone =
     | 'secondary'
     | 'warning'
     | 'info'
+    | 'billing'
     | 'success'
     | 'destructive'
     | 'muted';
@@ -71,6 +72,26 @@ export type WorkOrderTransition = {
     note_label: string;
     /** The target status needs a target department (e.g. Diajukan). */
     requires_target_department: boolean;
+    /** Entered through its own form instead of the note dialog. */
+    form: 'invoice' | 'payment' | null;
+    /** Why this user may not make the change (segregation of duties). */
+    blocked_reason: string | null;
+};
+
+/** The invoice of a work order (FLOW.md §8), from Penagihan on. */
+export type WorkOrderInvoice = {
+    number: string;
+    /** Date-only values (Y-m-d); format with formatCalendarDate. */
+    invoice_date: string;
+    /** Decimal string, e.g. "1500000.00"; format with formatRupiah. */
+    amount: string | null;
+    due_date: string | null;
+    paid_on: string | null;
+    /** Unpaid and past its due date (WITA). */
+    is_overdue: boolean;
+    issued_by: { name: string };
+    corrected_by: { name: string } | null;
+    paid_by: { name: string } | null;
 };
 
 /** The reason given when the work order was rejected or cancelled. */

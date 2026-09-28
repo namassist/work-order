@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
+use App\Models\WorkOrderInvoice;
 use App\Models\WorkOrderStatusHistory;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\DisplayDate;
@@ -35,8 +36,26 @@ it('refuses to run in production and writes nothing', function () {
     expect(fn () => app(DemoSeeder::class)->run())->toThrow(RuntimeException::class);
 
     expect(User::count())->toBe(0)
+        ->and(User::withTrashed()->whereIn('email', array_keys(DemoSeeder::VISUAL_CHECK_ACCOUNTS))->exists())->toBeFalse()
         ->and(Department::count())->toBe(0)
         ->and(WorkOrder::count())->toBe(0);
+});
+
+it('creates the visual-check accounts with their fixed password, outside the demo timeline', function () {
+    $this->seed(DemoSeeder::class);
+
+    $admin = User::withEmail('visual@worder.test')->sole();
+    $keuangan = User::withEmail('visual.keuangan@worder.test')->sole();
+
+    expect($admin->hasRole(SystemRole::Admin->value))->toBeTrue()
+        ->and($keuangan->hasRole('keuangan'))->toBeTrue()
+        ->and($keuangan->department->code)->toBe('KEU')
+        ->and(collect([$admin, $keuangan])->every(fn (User $user): bool => Hash::check(DemoSeeder::VISUAL_CHECK_PASSWORD, $user->password)
+            && ! $user->must_change_password
+            && ! $user->isClient()))->toBeTrue()
+        // They never act in the seeded history.
+        ->and(WorkOrderStatusHistory::query()->whereIn('user_id', [$admin->id, $keuangan->id])->exists())->toBeFalse()
+        ->and(Activity::query()->whereIn('causer_id', [$admin->id, $keuangan->id])->exists())->toBeFalse();
 });
 
 it('refuses to run without a default user password', function () {
@@ -67,7 +86,7 @@ it('creates categories and accounts for every role, each fitting its company', f
 
     expect(WorkOrderCategory::count())->toBeGreaterThanOrEqual(4);
 
-    $users = User::query()->with(['roles', 'department.company'])->get();
+    $users = User::query()->whereNotIn('email', array_keys(DemoSeeder::VISUAL_CHECK_ACCOUNTS))->with(['roles', 'department.company'])->get();
 
     expect($users->pluck('roles')->flatten()->pluck('name')->unique()->sort()->values()->all())
         ->toBe(['admin', 'keuangan', 'koordinator', 'pelaksana', 'pemohon', 'viewer'])
@@ -190,8 +209,12 @@ it('rejects, resubmits under the same number, and carries out work orders', func
         'draft → diajukan → ditolak → diajukan',
         'draft → diajukan → ditolak → dibatalkan',
         'draft → diajukan → dikerjakan',
+        'draft → diajukan → dikerjakan → penagihan',
+        'draft → diajukan → dikerjakan → penagihan → selesai',
     ])->sortKeys()->all())->toBe([
         'draft → diajukan → dikerjakan' => 8,
+        'draft → diajukan → dikerjakan → penagihan' => 6,
+        'draft → diajukan → dikerjakan → penagihan → selesai' => 4,
         'draft → diajukan → ditolak' => 5,
         'draft → diajukan → ditolak → diajukan' => 4,
         'draft → diajukan → ditolak → dibatalkan' => 2,
@@ -207,7 +230,7 @@ it('creates work orders in every status over the last three months', function ()
 
     $workOrders = WorkOrder::query()->with('statusHistories')->get();
 
-    expect($workOrders->count())->toBeBetween(50, 70)
+    expect($workOrders->count())->toBeBetween(60, 80)
         ->and($workOrders->map(fn (WorkOrder $workOrder): string => $workOrder->status->getValue())->unique()->sort()->values()->all())
         ->toBe(collect(WorkOrderStatus::options())->pluck('value')->sort()->values()->all())
         ->and($workOrders->min('created_at')->greaterThanOrEqualTo(now()->subMonths(3)->startOfDay()))->toBeTrue()
@@ -218,14 +241,45 @@ it('creates work orders in every status over the last three months', function ()
     );
     expect($cancelledAfterSubmission)->not->toBeEmpty();
 
-    $today = DisplayDate::local(now())->toDateString();
-    $overdue = $workOrders->filter(
-        fn (WorkOrder $workOrder): bool => $workOrder->status->countsAsOverdueWhenLate()
-            && $workOrder->target_date !== null
-            && $workOrder->target_date->toDateString() < $today,
-    );
+    $overdue = $workOrders->load('invoice')->filter(fn (WorkOrder $workOrder): bool => $workOrder->isOverdue());
     expect($overdue->countBy(fn (WorkOrder $workOrder): string => $workOrder->status->getValue())->sortKeys()->all())
-        ->toBe(['diajukan' => 4, 'dikerjakan' => 2]);
+        ->toBe(['diajukan' => 4, 'dikerjakan' => 2, 'penagihan' => 2])
+        ->and(WorkOrder::query()->overdue()->pluck('id')->sort()->values()->all())->toBe($overdue->pluck('id')->sort()->values()->all());
+});
+
+it('invoices finished work orders and confirms payments through the real actions', function () {
+    $this->seed(DemoSeeder::class);
+
+    $invoices = WorkOrderInvoice::query()->with(['workOrder.statusHistories', 'workOrder.media', 'issuer', 'corrector', 'payer'])->get();
+    $paid = $invoices->filter(fn (WorkOrderInvoice $invoice): bool => $invoice->isPaid());
+
+    expect($invoices)->toHaveCount(10)
+        ->and($paid)->toHaveCount(4)
+        ->and($invoices->pluck('number')->map(fn (string $number): string => mb_strtolower($number))->duplicates())->toBeEmpty()
+        ->and($invoices->whereNull('amount')->count())->toBe(1)
+        ->and($invoices->whereNotNull('corrected_by')->count())->toBe(1)
+        ->and(Activity::query()->where('event', AuditEvent::InvoiceIssued->value)->count())->toBe(10)
+        ->and(Activity::query()->where('event', AuditEvent::InvoiceCorrected->value)->count())->toBe(1)
+        ->and(Activity::query()->where('event', AuditEvent::PaymentConfirmed->value)->count())->toBe(4)
+        ->and($paid->filter(fn (WorkOrderInvoice $invoice): bool => $invoice->workOrder->media->contains('collection_name', WorkOrder::PAYMENT_PROOF))->count())->toBe(2);
+
+    $invoices->each(function (WorkOrderInvoice $invoice): void {
+        $workOrder = $invoice->workOrder;
+        $billing = $workOrder->statusHistories->firstWhere('to_status', 'penagihan');
+
+        // Issued by the pelaksana who accepted the work, with at least one invoice file.
+        expect($invoice->issued_by)->toBe($workOrder->statusHistories->firstWhere('to_status', 'dikerjakan')->user_id)
+            ->and($invoice->issued_by)->toBe($billing->user_id)
+            ->and($invoice->invoice_date->toDateString())->toBe(DisplayDate::local($billing->created_at)->toDateString())
+            ->and($workOrder->media->where('collection_name', WorkOrder::INVOICE))->not->toBeEmpty();
+
+        if ($invoice->isPaid()) {
+            // Confirmed by keuangan, never by whoever prepared the invoice.
+            expect($invoice->payer->hasRole('keuangan'))->toBeTrue()
+                ->and($invoice->wasPreparedBy($invoice->payer))->toBeFalse()
+                ->and($invoice->paid_on?->toDateString())->toBe(DisplayDate::local($workOrder->statusHistories->firstWhere('to_status', 'selesai')->created_at)->toDateString());
+        }
+    });
 });
 
 it('mixes urgencies realistically: about 10% rendah, 60% normal, 20% tinggi, 10% mendesak', function () {
@@ -315,7 +369,8 @@ it('adds comments from the requester side and pelaksana while the work order sti
         ->and($comments->whereNotNull('deleted_at'))->not->toBeEmpty();
 
     $comments->each(function (WorkOrderComment $comment): void {
-        $cancelledAt = $comment->workOrder->statusHistories->firstWhere('to_status', 'dibatalkan')?->created_at;
+        // Dibatalkan and Selesai make comments read-only.
+        $cancelledAt = $comment->workOrder->statusHistories->first(fn (WorkOrderStatusHistory $history): bool => in_array($history->to_status, ['dibatalkan', 'selesai'], true))?->created_at;
 
         // The pelaksana of the target department, or the requester side: an
         // account of the requester department or the koordinator who entered it.

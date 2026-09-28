@@ -5,7 +5,9 @@ namespace App\Models;
 use App\Concerns\HasAttachments;
 use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
+use App\Enums\AttachmentType;
 use App\Enums\Permission;
+use App\Enums\WorkOrderDeadline;
 use App\Enums\WorkOrderSide;
 use App\Enums\WorkOrderUrgency;
 use App\States\WorkOrder\Diajukan;
@@ -22,6 +24,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Spatie\Activitylog\Support\LogOptions;
@@ -50,6 +53,7 @@ use Spatie\ModelStates\HasStates;
  * @property-read User|null $requester
  * @property-read User $enteredBy
  * @property-read Collection<int, WorkOrderComment> $comments
+ * @property-read WorkOrderInvoice|null $invoice
  */
 #[Fillable(['title', 'description', 'work_order_category_id', 'target_department_id', 'urgency', 'target_date'])]
 class WorkOrder extends Model implements Attachable
@@ -58,9 +62,30 @@ class WorkOrder extends Model implements Attachable
     use HasAttachments, HasFactory, HasStates, LogsModelActivity, SearchesColumns, SoftDeletes;
 
     /**
-     * Supporting documents. Later stages (BAST, invoice) add their own collections.
+     * Supporting documents: the requester's with the request, the target
+     * department's while it works.
      */
     public const string DOCUMENTS = 'dokumen';
+
+    /**
+     * The invoice itself (FLOW.md §8): at least one file from Penagihan on.
+     */
+    public const string INVOICE = 'invoice';
+
+    /**
+     * The handover report (berita acara serah terima) of the finished work.
+     */
+    public const string BAST = 'bast';
+
+    /**
+     * Proof of payment, added by the finance side.
+     */
+    public const string PAYMENT_PROOF = 'bukti_bayar';
+
+    /**
+     * Types accepted for invoices and proof of payment: documents and scans.
+     */
+    private const array SCAN_TYPES = [AttachmentType::Pdf, AttachmentType::Jpeg, AttachmentType::Png, AttachmentType::Webp];
 
     /**
      * The model's default values for attributes, matching the columns' defaults.
@@ -86,12 +111,27 @@ class WorkOrder extends Model implements Attachable
     public function attachmentCollections(): array
     {
         return [
-            self::DOCUMENTS => new AttachmentCollection(
-                self::DOCUMENTS,
-                maxFiles: (int) config('work_order.attachments.dokumen.max_files'),
-                maxSizeKb: (int) config('work_order.attachments.dokumen.max_size_kb'),
-            ),
+            self::DOCUMENTS => $this->configuredCollection(self::DOCUMENTS),
+            self::INVOICE => $this->configuredCollection(self::INVOICE, self::SCAN_TYPES, minFiles: 1),
+            self::BAST => $this->configuredCollection(self::BAST),
+            self::PAYMENT_PROOF => $this->configuredCollection(self::PAYMENT_PROOF, self::SCAN_TYPES),
         ];
+    }
+
+    /**
+     * A collection with its limits from config/work_order.php.
+     *
+     * @param  list<AttachmentType>|null  $types
+     */
+    private function configuredCollection(string $name, ?array $types = null, int $minFiles = 0): AttachmentCollection
+    {
+        return new AttachmentCollection(
+            $name,
+            maxFiles: (int) config("work_order.attachments.{$name}.max_files"),
+            maxSizeKb: (int) config("work_order.attachments.{$name}.max_size_kb"),
+            types: $types,
+            minFiles: $minFiles,
+        );
     }
 
     /**
@@ -193,6 +233,17 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
+     * The invoice, from Penagihan on (FLOW.md §8). One per work order for
+     * now; instalments would make this a HasMany (FLOW.md §11).
+     *
+     * @return HasOne<WorkOrderInvoice, $this>
+     */
+    public function invoice(): HasOne
+    {
+        return $this->hasOne(WorkOrderInvoice::class);
+    }
+
+    /**
      * The number, or "Draft" until the work order is submitted.
      */
     public function displayNumber(): string
@@ -227,7 +278,9 @@ class WorkOrder extends Model implements Attachable
      * §5). The requester side is a client company user of the requester
      * department with work-orders.update, or the koordinator who entered it
      * on their behalf; the executor side is a user of the target department
-     * with work-orders.process (internal-only, so never an IC user).
+     * with work-orders.process (internal-only, so never an IC user); the
+     * finance side is an executor company user with
+     * work-orders.confirm-payment (keuangan, also internal-only).
      */
     public function isOnSide(User $user, WorkOrderSide $side): bool
     {
@@ -240,6 +293,8 @@ class WorkOrder extends Model implements Attachable
             WorkOrderSide::Executor => $this->target_department_id !== null
                 && $this->target_department_id === $user->department_id
                 && $user->checkPermissionTo(Permission::WorkOrdersProcess->value),
+            WorkOrderSide::Finance => ! $user->isClient()
+                && $user->checkPermissionTo(Permission::WorkOrdersConfirmPayment->value),
         };
     }
 
@@ -287,18 +342,39 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * Late work orders (the dashboard's "Terlambat"): in a status that
-     * countsAsOverdueWhenLate() with a target date before today in the display
-     * timezone. Work orders without a target date are never late.
+     * Whether the work order is late (FLOW.md §7): its status has a
+     * deadline() and that date is before today in the display timezone.
+     * Must agree with scopeOverdue().
+     */
+    public function isOverdue(): bool
+    {
+        $date = $this->status->deadline()?->dateOf($this);
+
+        return $date !== null && $date < DisplayDate::today();
+    }
+
+    /**
+     * Late work orders (the dashboard's "Terlambat"): in a status with a
+     * deadline() whose date is before today in the display timezone, e.g.
+     * the target date while Diajukan or Dikerjakan and the payment due date
+     * while Penagihan. Work orders without that date are never late.
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
     protected function overdue(Builder $query): void
     {
-        $query->whereIn('status', WorkOrderStatus::overdueWhenLateNames())
-            ->whereNotNull('target_date')
-            ->where('target_date', '<', DisplayDate::today());
+        $today = DisplayDate::today();
+        $groups = WorkOrderStatus::namesByDeadline();
+
+        $query->where(function (Builder $query) use ($groups, $today): void {
+            foreach ($groups as $deadline => $statuses) {
+                $query->orWhere(function (Builder $query) use ($deadline, $statuses, $today): void {
+                    $query->whereIn('status', $statuses);
+                    WorkOrderDeadline::from($deadline)->constrainPast($query, $today);
+                });
+            }
+        });
     }
 
     /**

@@ -15,9 +15,10 @@ export type StatItem = {
 /**
  * Statistics strip under a page panel's header: big number above its label,
  * a small monochrome icon top-right, cells split by 1px lines. Four columns
- * on desktop, 2×2 on tablets, one column on phones; more than four items
- * (the WO list: total plus every status) take six columns on wide screens
- * and three below that, so no row is left with empty cells.
+ * on desktop, 2×2 on tablets, one column on phones. More than four items
+ * (the WO list: total plus every status, 8) stay in two columns on phones
+ * instead of one tall column, and take four columns from lg (two rows of
+ * four), so no row is left with empty cells.
  */
 const props = defineProps<{
     items: StatItem[];
@@ -25,13 +26,13 @@ const props = defineProps<{
 
 const columns = computed(() =>
     props.items.length > 4
-        ? 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'
-        : 'sm:grid-cols-2 lg:grid-cols-4',
+        ? 'grid-cols-2 lg:grid-cols-4'
+        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
 );
 </script>
 
 <template>
-    <dl :class="['grid grid-cols-1 gap-px border-b bg-border', columns]">
+    <dl :class="['grid gap-px border-b bg-border', columns]">
         <div
             v-for="item in items"
             :key="item.label"

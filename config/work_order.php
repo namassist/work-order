@@ -24,7 +24,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | Limits per attachment collection. File types are PDF, JPG, PNG, WEBP,
-    | DOCX, and XLSX (App\Enums\AttachmentType). The size limit also needs
+    | DOCX, and XLSX (App\Enums\AttachmentType); invoices and proof of
+    | payment take PDF and images only (WorkOrder::attachmentCollections()). The size limit also needs
     | PHP's upload_max_filesize/post_max_size and the web server's body limit
     | (nginx client_max_body_size) to be at least as large.
     |
@@ -33,6 +34,18 @@ return [
     'attachments' => [
         'dokumen' => [
             'max_files' => (int) env('WO_ATTACHMENT_MAX_FILES', 10),
+            'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
+        ],
+        'invoice' => [
+            'max_files' => (int) env('WO_INVOICE_MAX_FILES', 5),
+            'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
+        ],
+        'bast' => [
+            'max_files' => (int) env('WO_BAST_MAX_FILES', 5),
+            'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
+        ],
+        'bukti_bayar' => [
+            'max_files' => (int) env('WO_PAYMENT_PROOF_MAX_FILES', 5),
             'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
         ],
     ],

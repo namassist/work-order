@@ -29,9 +29,9 @@ class Draft extends WorkOrderStatus
         return true;
     }
 
-    public function attachmentSide(): WorkOrderSide
+    public function attachmentSides(): array
     {
-        return WorkOrderSide::Requester;
+        return [WorkOrder::DOCUMENTS => WorkOrderSide::Requester];
     }
 
     public function waitsOn(): WorkOrderSide

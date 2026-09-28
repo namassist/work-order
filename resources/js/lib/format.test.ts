@@ -7,6 +7,8 @@ import {
     formatDateTime,
     formatFileSize,
     formatRelative,
+    formatRupiah,
+    parseRupiahInput,
     formatShortCalendarDate,
 } from '@/lib/format';
 
@@ -116,5 +118,45 @@ describe('formatCalendarDateRange', () => {
 
     it('is empty without either end', () => {
         expect(formatCalendarDateRange('', '')).toBe('');
+    });
+});
+
+describe('formatRupiah', () => {
+    it('groups thousands with dots and drops zero cents', () => {
+        expect(formatRupiah('1500000.00')).toBe('Rp 1.500.000');
+        expect(formatRupiah('950')).toBe('Rp 950');
+    });
+
+    it('keeps cents after a comma', () => {
+        expect(formatRupiah('1750000.50')).toBe('Rp 1.750.000,50');
+        expect(formatRupiah('1750000.5')).toBe('Rp 1.750.000,50');
+    });
+
+    it('handles the largest amount without float rounding in the cents', () => {
+        expect(formatRupiah('9999999999999.99')).toBe(
+            'Rp 9.999.999.999.999,99',
+        );
+    });
+});
+
+describe('parseRupiahInput', () => {
+    it('reads dots in groups of three as thousands and a comma as cents', () => {
+        expect(parseRupiahInput('1.500.000')).toBe('1500000');
+        expect(parseRupiahInput('1.500.000,50')).toBe('1500000.50');
+        expect(parseRupiahInput('Rp 1.500.000')).toBe('1500000');
+    });
+
+    it('takes plain digits with a dot or comma for cents', () => {
+        expect(parseRupiahInput('1500000')).toBe('1500000');
+        expect(parseRupiahInput('1500000.5')).toBe('1500000.5');
+        expect(parseRupiahInput('1500000,50')).toBe('1500000.50');
+    });
+
+    it('refuses anything else', () => {
+        expect(parseRupiahInput('')).toBeNull();
+        expect(parseRupiahInput('abc')).toBeNull();
+        expect(parseRupiahInput('1.50.000')).toBeNull();
+        expect(parseRupiahInput('-5')).toBeNull();
+        expect(parseRupiahInput('1500.125')).toBeNull();
     });
 });

@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\States\WorkOrder\WorkOrderStatus;
+use App\Support\Rupiah;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -63,6 +64,11 @@ class ActivityResource extends JsonResource
         'status' => 'Status',
         'lampiran' => 'Lampiran',
         'ukuran' => 'Ukuran',
+        'no_invoice' => 'No. invoice',
+        'tanggal_invoice' => 'Tanggal invoice',
+        'jumlah' => 'Jumlah tagihan',
+        'jatuh_tempo' => 'Jatuh tempo',
+        'tanggal_bayar' => 'Tanggal pembayaran',
     ];
 
     /**
@@ -253,6 +259,7 @@ class ActivityResource extends JsonResource
             $field === 'status' && is_string($value) => WorkOrderStatus::labelFor($value),
             $field === 'account_status' && is_string($value) => AccountStatus::tryFrom($value)?->label() ?? $value,
             $field === 'urgency' && is_string($value) => WorkOrderUrgency::tryFrom($value)?->label() ?? $value,
+            $field === 'jumlah' && is_string($value) => Rupiah::format($value),
             $field === 'ukuran' && is_int($value) => Number::withLocale('id', fn (): string => Number::fileSize($value, maxPrecision: 1)),
             is_bool($value) => $value ? 'Ya' : 'Tidak',
             default => $value,

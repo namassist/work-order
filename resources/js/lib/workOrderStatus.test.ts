@@ -9,6 +9,9 @@ describe('statusToneClass', () => {
         expect(statusToneClass('destructive')).toBe(
             'bg-destructive/10 text-destructive',
         );
+        expect(statusToneClass('billing')).toBe(
+            'bg-billing text-billing-foreground',
+        );
         expect(statusToneClass('muted')).toBe(
             'border-border bg-transparent text-muted-foreground',
         );
@@ -30,6 +33,12 @@ describe('statusChartColor', () => {
         );
         expect(statusChartColor(status('dikerjakan', 'info'))).toBe(
             'var(--info)',
+        );
+        expect(statusChartColor(status('penagihan', 'billing'))).toBe(
+            'var(--billing)',
+        );
+        expect(statusChartColor(status('selesai', 'success'))).toBe(
+            'var(--success)',
         );
     });
 

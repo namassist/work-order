@@ -70,6 +70,8 @@
     --color-warning-foreground: var(--warning-foreground);
     --color-info: var(--info);
     --color-info-foreground: var(--info-foreground);
+    --color-billing: var(--billing);
+    --color-billing-foreground: var(--billing-foreground);
 }
 
 /*
@@ -143,6 +145,10 @@
     --warning-foreground: #1a1a1a;
     --info: #2b6cb0;
     --info-foreground: #fdfdfc;
+    /* Penagihan: muted violet. Text 5.57:1; as a chart series 5.57:1 on --card,
+       ΔE 27 from the nearest status series (Dikerjakan's --info). */
+    --billing: #7a5a92;
+    --billing-foreground: #fdfdfc;
 
     --chart-1: #1c322d;
     --chart-2: #ebb552;
@@ -204,6 +210,9 @@
     --warning-foreground: #141414;
     --info: #7db3e8;
     --info-foreground: #141414;
+    /* Text 8.17:1; as a chart series 7.55:1 on --card, ΔE 26 from --info. */
+    --billing: #bea2d4;
+    --billing-foreground: #141414;
 
     --chart-1: #ebb552;
     --chart-2: #5fbf8f;

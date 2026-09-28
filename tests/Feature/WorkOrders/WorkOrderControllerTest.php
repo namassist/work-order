@@ -174,7 +174,7 @@ describe('index', function () {
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('stats', [
                     'total' => 4,
-                    'statuses' => ['draft' => 2, 'diajukan' => 1, 'ditolak' => 0, 'dikerjakan' => 0, 'dibatalkan' => 1],
+                    'statuses' => ['draft' => 2, 'diajukan' => 1, 'ditolak' => 0, 'dikerjakan' => 0, 'penagihan' => 0, 'selesai' => 0, 'dibatalkan' => 1],
                 ]));
     });
 
@@ -328,8 +328,8 @@ describe('show', function () {
                 ->where('timeline.0.to', ['value' => 'draft', 'label' => 'Draft'])
                 ->where('timeline.0.user.name', $user->name)
                 ->where('transitions', [
-                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'requires_target_department' => true],
-                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan', 'requires_target_department' => false],
+                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'requires_target_department' => true, 'form' => null, 'blocked_reason' => null],
+                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan', 'requires_target_department' => false, 'form' => null, 'blocked_reason' => null],
                 ])
                 ->where('waitingFor', null)
                 ->where('statusNote', null)

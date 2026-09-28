@@ -145,10 +145,23 @@ Deadlines are optional.
 
 ## 8. Invoicing
 
-- Invoice data: number and date (required), amount and due date (optional).
-- Attachment collections: `invoice` (required, at least one), `bast` (optional),
-  `bukti_bayar` (optional, added by keuangan).
-- Keuangan confirms payment received with a payment date; the WO becomes Selesai.
+- Invoice data: number and date (required), amount and due date (optional). The number is unique
+  across all invoices, whatever its casing. The invoice date is not in the future; the due date is
+  not before the invoice date (WITA). Amounts are rupiah with at most two decimals.
+- Attachment collections: `invoice` (required, at least one), `bast` (optional, may also be added
+  while Dikerjakan), `bukti_bayar` (optional, added by keuangan).
+- The invoice, its files and the move to Penagihan are saved together: a failed upload leaves no
+  invoice and no status change.
+- Keuangan confirms payment received with a payment date (not before the invoice date and not in
+  the future, WITA); the WO becomes Selesai.
+- **Correcting a wrong invoice:** while Penagihan (not yet paid), the pelaksana side corrects the
+  invoice in place: its data, and invoice or BAST files added or removed (one invoice file always
+  stays). Every correction is audit-logged with the values before and after. There is no "return to
+  pelaksana" status: whoever notices the mistake (IC or keuangan) says so in a comment.
+- **Segregation of duties:** the user who confirms the payment must not be the user who issued the
+  invoice or last corrected it. This holds for users on both sides too (e.g. an admin of the target
+  department). The rule is enforced by the server and the database, and the detail page shows the
+  reason instead of a usable button.
 
 ## 9. Comments
 
@@ -179,6 +192,10 @@ Email notifications depend on the mail setup (see open points).
 - **Sign in with Microsoft (SSO):** possible later through Microsoft Entra ID; could replace
   passwords and simplify registration.
 - Cancelling after Dikerjakan: allowed? By whom?
+- **Instalments (termin):** one invoice per WO for now. Should a WO be invoiced in several termin,
+  each with its own number, amount, due date and payment, and become Selesai only when all are
+  paid? The invoice data already lives in its own table with the payment on the invoice row, so
+  termin would add a sequence per WO rather than reshape the data.
 - Internal notes visible only to Unggul.
 - Whether pelaksana may change urgency or target date.
 - Which roles may export.
