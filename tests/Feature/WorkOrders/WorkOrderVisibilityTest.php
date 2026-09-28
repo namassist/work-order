@@ -27,12 +27,20 @@ use OpenSpout\Reader\XLSX\Reader;
 |   cancelled draft      cancelled before submission, target T
 |   other IC dept        requested by IC department B, submitted, target T
 |   other target         submitted, target U
+|   rejected             submitted by pemohon A, rejected by T (Ditolak)
+|   in progress          submitted by pemohon A, accepted by T (Dikerjakan)
 */
 
-const MATRIX_WORK_ORDERS = ['own draft', 'on-behalf draft', 'submitted', 'on-behalf submitted', 'cancelled draft', 'other IC dept', 'other target'];
+const MATRIX_WORK_ORDERS = ['own draft', 'on-behalf draft', 'submitted', 'on-behalf submitted', 'cancelled draft', 'other IC dept', 'other target', 'rejected', 'in progress'];
 
-/** The submitted ones, which count as pending (Diajukan) and are overdue. */
-const MATRIX_SUBMITTED = ['submitted', 'on-behalf submitted', 'other IC dept', 'other target'];
+/** Submitted at least once, so seen by view-all. */
+const MATRIX_SUBMITTED = ['submitted', 'on-behalf submitted', 'other IC dept', 'other target', 'rejected', 'in progress'];
+
+/** Diajukan, which counts as pending. */
+const MATRIX_PENDING = ['submitted', 'on-behalf submitted', 'other IC dept', 'other target'];
+
+/** Past their target date in a status that counts as overdue (Diajukan, Dikerjakan); rejected is past it too, but does not count. */
+const MATRIX_OVERDUE = [...MATRIX_PENDING, 'in progress'];
 
 /**
  * Builds the departments, users, and work orders of the matrix, and returns
@@ -80,6 +88,8 @@ function visibilityWorld(string $userKey): array
         'cancelled draft' => WorkOrder::factory()->by($pemohonA)->targeting($t)->cancelled()->create(),
         'other IC dept' => WorkOrder::factory()->by($pemohonB)->targeting($t)->submitted()->create($overdue),
         'other target' => WorkOrder::factory()->by($pemohonA)->targeting($u)->submitted()->create($overdue),
+        'rejected' => WorkOrder::factory()->by($pemohonA)->targeting($t)->rejected()->create($overdue),
+        'in progress' => WorkOrder::factory()->by($pemohonA)->targeting($t)->inProgress()->create($overdue),
     ];
 
     foreach ($workOrders as $key => $workOrder) {
@@ -140,8 +150,8 @@ function inMatrixOrder(array $visible): array
     return array_values(array_intersect(MATRIX_WORK_ORDERS, $visible));
 }
 
-$ownDepartment = ['own draft', 'on-behalf draft', 'submitted', 'on-behalf submitted', 'cancelled draft', 'other target'];
-$addressedToT = ['submitted', 'on-behalf submitted', 'other IC dept'];
+$ownDepartment = ['own draft', 'on-behalf draft', 'submitted', 'on-behalf submitted', 'cancelled draft', 'other target', 'rejected', 'in progress'];
+$addressedToT = ['submitted', 'on-behalf submitted', 'other IC dept', 'rejected', 'in progress'];
 
 dataset('visibility matrix', [
     'IC pemohon A' => ['IC pemohon A', $ownDepartment],
@@ -208,11 +218,12 @@ it('downloads attachments only of visible work orders', function (string $userKe
 
 it('counts and lists only visible work orders on the dashboard', function (string $userKey, array $visible) {
     ['user' => $user, 'workOrders' => $workOrders] = visibilityWorld($userKey);
-    $submitted = array_values(array_intersect($visible, MATRIX_SUBMITTED));
+    $pending = array_intersect($visible, MATRIX_PENDING);
+    $overdue = array_intersect($visible, MATRIX_OVERDUE);
 
     $this->actingAs($user)->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page): Assert => $page
         ->loadDeferredProps(fn (Assert $reload): Assert => $reload
-            ->where('workOrderCounts', ['total' => count($visible), 'pending' => count($submitted), 'overdue' => count($submitted)])
+            ->where('workOrderCounts', ['total' => count($visible), 'pending' => count($pending), 'overdue' => count($overdue)])
             ->where('recentWorkOrders', fn ($rows): bool => matrixKeys($workOrders, collect($rows)->pluck('id')) === inMatrixOrder($visible))));
 })->with('visibility matrix');
 

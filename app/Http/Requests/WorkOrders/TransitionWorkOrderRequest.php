@@ -17,8 +17,15 @@ class TransitionWorkOrderRequest extends FormRequest
      */
     public function authorize(): Response
     {
+        $workOrder = $this->workOrder();
+        $to = (string) $this->input('status');
+
         // The policy's response keeps its 404 for work orders the user cannot see.
-        return Gate::inspect('transition', $this->workOrder());
+        // A status the work order cannot move to is refused by validation, with a
+        // message, for users who may change its status at all.
+        return in_array($to, $workOrder->status->transitionableStates(), true)
+            ? Gate::inspect('transition', [$workOrder, $to])
+            : Gate::inspect('changeStatus', $workOrder);
     }
 
     /**

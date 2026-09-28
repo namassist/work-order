@@ -43,22 +43,31 @@ it('limits the visibleTo scope to the same work orders as the policy', function 
         ->and(WorkOrder::visibleTo(unggulUser(Permission::WorkOrdersViewAll))->pluck('id')->all())->toBe([$submitted->id]);
 });
 
-it('answers 404 rather than 403 for another department\'s work order', function (string $ability) {
+it('answers 404 rather than 403 for another department\'s work order', function (string $ability, array $arguments) {
     $user = userInDepartment(Department::factory()->client()->create(), ...Permission::cases());
     $user->revokePermissionTo(Permission::WorkOrdersViewAll->value);
 
-    $response = Gate::forUser($user)->inspect($ability, WorkOrder::factory()->create());
+    $response = Gate::forUser($user)->inspect($ability, [WorkOrder::factory()->create(), ...$arguments]);
 
     expect($response->allowed())->toBeFalse()
         ->and($response->status())->toBe(404);
-})->with(['view', 'update', 'transition', 'delete', 'restore']);
+})->with([
+    'view' => ['view', []],
+    'update' => ['update', []],
+    'transition' => ['transition', ['diajukan']],
+    'changeStatus' => ['changeStatus', []],
+    'delete' => ['delete', []],
+    'restore' => ['restore', []],
+]);
 
-it('allows editing only while the work order is a draft', function () {
+it('allows editing only while the work order is editable (Draft and Ditolak)', function () {
     $department = Department::factory()->client()->create();
     $user = userInDepartment($department, Permission::WorkOrdersUpdate);
 
     expect($user->can('update', WorkOrder::factory()->create(['requester_department_id' => $department->id])))->toBeTrue()
+        ->and($user->can('update', WorkOrder::factory()->rejected()->create(['requester_department_id' => $department->id])))->toBeTrue()
         ->and($user->can('update', WorkOrder::factory()->submitted()->create(['requester_department_id' => $department->id])))->toBeFalse()
+        ->and($user->can('update', WorkOrder::factory()->inProgress()->create(['requester_department_id' => $department->id])))->toBeFalse()
         ->and($user->can('update', WorkOrder::factory()->cancelled()->create(['requester_department_id' => $department->id])))->toBeFalse();
 });
 
@@ -70,7 +79,7 @@ it('allows changing attachments only on drafts, with work-orders.update', functi
     $others = array_filter(Permission::cases(), fn (Permission $case): bool => $case !== Permission::WorkOrdersUpdate);
     $viewer = userInDepartment($department, ...$others);
 
-    foreach (['addAttachment' => 'dokumen', 'deleteAttachment' => new Media] as $ability => $argument) {
+    foreach (['addAttachment' => 'dokumen', 'deleteAttachment' => new Media()->forceFill(['collection_name' => WorkOrder::DOCUMENTS])] as $ability => $argument) {
         expect($updater->can($ability, [$draft, $argument]))->toBeTrue()
             ->and($updater->can($ability, [$submitted, $argument]))->toBeFalse()
             ->and($viewer->can($ability, [$draft, $argument]))->toBeFalse();
@@ -88,17 +97,17 @@ it('answers 404 for attachment changes on another department\'s work order', fun
     'deleteAttachment' => ['deleteAttachment', fn (): Media => new Media],
 ]);
 
-it('grants each action only with its permission', function (string $ability, Permission $permission) {
+it('grants each action only with its permission', function (string $ability, Permission $permission, array $arguments = []) {
     $department = Department::factory()->client()->create();
     $workOrder = WorkOrder::factory()->create(['requester_department_id' => $department->id]);
     $others = array_filter(Permission::cases(), fn (Permission $case): bool => $case !== $permission);
 
-    expect(userInDepartment($department, $permission)->can($ability, $workOrder))->toBeTrue()
-        ->and(userInDepartment($department, ...$others)->can($ability, $workOrder))->toBeFalse();
+    expect(userInDepartment($department, $permission)->can($ability, [$workOrder, ...$arguments]))->toBeTrue()
+        ->and(userInDepartment($department, ...$others)->can($ability, [$workOrder, ...$arguments]))->toBeFalse();
 })->with([
     'view' => ['view', Permission::WorkOrdersView],
     'update' => ['update', Permission::WorkOrdersUpdate],
-    'transition' => ['transition', Permission::WorkOrdersUpdate],
+    'transition' => ['transition', Permission::WorkOrdersUpdate, ['diajukan']],
     'delete' => ['delete', Permission::WorkOrdersDelete],
     'restore' => ['restore', Permission::WorkOrdersRestore],
 ]);

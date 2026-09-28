@@ -50,6 +50,7 @@
     --color-chart-4: var(--chart-4);
     --color-chart-5: var(--chart-5);
     --color-chart-submitted: var(--chart-submitted);
+    --color-chart-cancelled: var(--chart-cancelled);
 
     --color-sidebar: var(--sidebar);
     --color-sidebar-foreground: var(--sidebar-foreground);
@@ -151,6 +152,8 @@
     --chart-5: #6f6f6a;
     /* Diajukan series: --warning's hue, darkened to 3.21:1 on --card. */
     --chart-submitted: #b9851f;
+    /* Dibatalkan series: dark neutral, 12.46:1 on --card, 2.51:1 against --chart-5 (Draft). */
+    --chart-cancelled: #33332f;
 
     /* Sidebar hijau brand */
     --sidebar: #1c322d;
@@ -208,6 +211,8 @@
     --chart-4: #c9a04a;
     --chart-5: #a3a39e;
     --chart-submitted: #ebb552;
+    /* Darker than Draft's --chart-5 here too: 3.18:1 on --card, 2.11:1 against --chart-5. */
+    --chart-cancelled: #6b6b66;
 
     --sidebar: #1c322d;
     --sidebar-foreground: #ededea;

@@ -3,10 +3,12 @@
 namespace App\Policies;
 
 use App\Enums\Permission;
+use App\Enums\WorkOrderSide;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderComment;
+use App\States\WorkOrder\WorkOrderStatus;
 use Illuminate\Auth\Access\Response;
 
 /**
@@ -83,8 +85,8 @@ class WorkOrderPolicy
     /**
      * Determine whether the user can correct the requester (account or
      * contact name, within the same department) of a work order: only the
-     * koordinator who entered it on behalf of someone else, while it is a
-     * draft. See the open point in FLOW.md §11.
+     * koordinator who entered it on behalf of someone else, while it is
+     * editable (Draft and Ditolak). See the open point in FLOW.md §11.
      */
     public function updateRequester(User $user, WorkOrder $workOrder): Response
     {
@@ -99,43 +101,75 @@ class WorkOrderPolicy
     }
 
     /**
-     * Determine whether the user can edit the work order (drafts only).
+     * Determine whether the user can edit the work order: the requester side,
+     * while its status isEditable() (Draft and Ditolak).
      */
     public function update(User $user, WorkOrder $workOrder): Response
     {
         return $this->ifVisible(
             $user,
             $workOrder,
-            $user->checkPermissionTo(Permission::WorkOrdersUpdate->value) && $workOrder->status->isEditable(),
+            $workOrder->status->isEditable() && $workOrder->isOnSide($user, WorkOrderSide::Requester),
         );
     }
 
     /**
-     * Determine whether the user can change the work order's status.
-     * PROVISIONAL: anyone who may update work orders, until the real flow
-     * assigns transitions to roles.
+     * Determine whether the user can move the work order to the given status:
+     * the side that status names in performedBy() (FLOW.md §5). Whether the
+     * current status allows it is checked by the request and, under a lock,
+     * by TransitionWorkOrder.
      */
-    public function transition(User $user, WorkOrder $workOrder): Response
+    public function transition(User $user, WorkOrder $workOrder, string $to): Response
     {
-        return $this->ifVisible($user, $workOrder, $user->checkPermissionTo(Permission::WorkOrdersUpdate->value));
+        $side = WorkOrderStatus::fromName($to)?->performedBy();
+
+        return $this->ifVisible($user, $workOrder, $side instanceof WorkOrderSide && $workOrder->isOnSide($user, $side));
     }
 
     /**
-     * Determine whether the user can attach a file to the work order.
-     * PROVISIONAL: drafts only, by anyone who may update work orders.
+     * Determine whether the user acts for either side of the work order, so
+     * a status change it cannot make (e.g. from a page loaded before someone
+     * else changed the status) is answered with a validation message rather
+     * than a 403.
+     */
+    public function changeStatus(User $user, WorkOrder $workOrder): Response
+    {
+        return $this->ifVisible(
+            $user,
+            $workOrder,
+            $workOrder->isOnSide($user, WorkOrderSide::Requester) || $workOrder->isOnSide($user, WorkOrderSide::Executor),
+        );
+    }
+
+    /**
+     * Determine whether the user can attach a file to the work order: the
+     * side the status names in attachmentSide() (FLOW.md §5), to the
+     * documents collection.
      */
     public function addAttachment(User $user, WorkOrder $workOrder, string $collection): Response
     {
-        return $this->ifVisible($user, $workOrder, $this->mayChangeAttachments($user, $workOrder));
+        return $this->ifVisible(
+            $user,
+            $workOrder,
+            $collection === WorkOrder::DOCUMENTS && $this->mayChangeAttachments($user, $workOrder),
+        );
     }
 
     /**
      * Determine whether the user can remove an attachment from the work
-     * order. PROVISIONAL: same rule as adding.
+     * order: same rule as adding. The executor side removes only the files
+     * its user uploaded, since the requester's documents are part of the
+     * request it accepted.
      */
     public function deleteAttachment(User $user, WorkOrder $workOrder, Media $media): Response
     {
-        return $this->ifVisible($user, $workOrder, $this->mayChangeAttachments($user, $workOrder));
+        return $this->ifVisible(
+            $user,
+            $workOrder,
+            $media->collection_name === WorkOrder::DOCUMENTS
+                && $this->mayChangeAttachments($user, $workOrder)
+                && ($workOrder->status->attachmentSide() !== WorkOrderSide::Executor || $media->uploaded_by === $user->id),
+        );
     }
 
     /**
@@ -193,7 +227,9 @@ class WorkOrderPolicy
 
     private function mayChangeAttachments(User $user, WorkOrder $workOrder): bool
     {
-        return $user->checkPermissionTo(Permission::WorkOrdersUpdate->value) && $workOrder->status->isEditable();
+        $side = $workOrder->status->attachmentSide();
+
+        return $side !== null && $workOrder->isOnSide($user, $side);
     }
 
     private function isCommentAuthor(User $user, WorkOrder $workOrder, WorkOrderComment $comment): bool

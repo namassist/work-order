@@ -26,7 +26,7 @@ class UpdateWorkOrderRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request. The requester
      * department never changes; the koordinator who entered an on-behalf
-     * draft may correct its requester within that department.
+     * work order (Draft or Ditolak) may correct its requester within that department.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */

@@ -19,6 +19,8 @@ use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
 use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\Dibatalkan;
+use App\States\WorkOrder\Dikerjakan;
+use App\States\WorkOrder\Ditolak;
 use App\Support\DisplayDate;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -237,6 +239,50 @@ class DemoSeeder extends Seeder
     ];
 
     /**
+     * Reasons the target department rejects a work order that the requester
+     * then revises and resubmits, or leaves waiting.
+     *
+     * @var list<string>
+     */
+    private const array REJECT_NOTES = [
+        'Deskripsi kurang jelas. Mohon lengkapi lokasi persis dan foto kondisi saat ini.',
+        'Mohon lampirkan penawaran harga dari vendor sebelum diajukan.',
+        'Target selesai tidak realistis untuk lingkup pekerjaan ini, mohon disesuaikan.',
+    ];
+
+    /**
+     * The rejection when a work order went to the wrong department; :department
+     * is the department it belongs to.
+     */
+    private const string WRONG_DEPARTMENT_NOTE = 'Bukan lingkup departemen kami. Mohon ajukan ke departemen :department.';
+
+    /**
+     * What the requester adds to the description before resubmitting a work
+     * order rejected for another reason.
+     */
+    private const string REVISION = ' Revisi: lokasi dan foto kondisi sudah dilengkapi.';
+
+    /**
+     * @var list<string>
+     */
+    private const array REJECTED_CANCEL_NOTES = [
+        'Tidak jadi, pekerjaan ditangani langsung oleh vendor.',
+        'Kebutuhan sudah tidak ada setelah evaluasi ulang.',
+    ];
+
+    /**
+     * Optional notes when the target department accepts a work order.
+     *
+     * @var list<string|null>
+     */
+    private const array ACCEPT_NOTES = [
+        'Dijadwalkan minggu ini.',
+        null,
+        'Teknisi berangkat besok pagi.',
+        null,
+    ];
+
+    /**
      * Comment threads between the handling pelaksana and the requester,
      * in order. A work order gets the first one to three messages of one.
      *
@@ -286,17 +332,35 @@ Nanti saya kabari lagi.'],
     private const string MISTAKEN_COMMENT = 'Maaf, komentar ini untuk WO lain.';
 
     /**
-     * How many work orders take each path through the current flow. Overdue
-     * ones are submitted with a target date that has passed.
+     * How many work orders take each path through the flow (FLOW.md §5).
+     * Overdue ones have a target date that has passed. Resubmitted ones were
+     * rejected and submitted again under the same number.
      *
      * @var array<string, int>
      */
     private const array PATHS = [
         'draft' => 15,
-        'submitted' => 20,
-        'overdue' => 5,
-        'cancelled_draft' => 6,
-        'cancelled_submitted' => 4,
+        'submitted' => 14,
+        'overdue' => 4,
+        'resubmitted' => 4,
+        'in_progress' => 6,
+        'in_progress_overdue' => 2,
+        'rejected' => 5,
+        'rejected_cancelled' => 2,
+        'cancelled_draft' => 5,
+        'cancelled_submitted' => 3,
+    ];
+
+    /**
+     * How many of the resubmitted and of the rejected work orders first went
+     * to the wrong department. Resubmitted ones are then moved to the right
+     * one; rejected ones still wait for the requester to do so.
+     *
+     * @var array<string, int>
+     */
+    private const array WRONG_DEPARTMENT = [
+        'resubmitted' => 2,
+        'rejected' => 1,
     ];
 
     /**
@@ -306,10 +370,10 @@ Nanti saya kabari lagi.'],
      * @var array<string, int>
      */
     private const array URGENCIES = [
-        'rendah' => 5,
-        'normal' => 30,
-        'tinggi' => 10,
-        'mendesak' => 5,
+        'rendah' => 6,
+        'normal' => 36,
+        'tinggi' => 12,
+        'mendesak' => 6,
     ];
 
     /**
@@ -543,6 +607,7 @@ Nanti saya kabari lagi.'],
         $created = [];
         $events = [];
         $withComments = 0;
+        $wrongDepartmentLeft = self::WRONG_DEPARTMENT;
 
         $koordinator = $users->first(fn (User $user): bool => $user->hasRole('koordinator'));
 
@@ -561,6 +626,15 @@ Nanti saya kabari lagi.'],
             $categoryCode = $this->faker->randomElement(array_keys(self::TEMPLATES));
             /** @var User $pelaksana */
             $pelaksana = $this->faker->randomElement($pelaksanaByDepartment[self::CATEGORY_DEPARTMENTS[$categoryCode]]->all());
+            // A work order sent to the wrong department is handled (rejected) by a
+            // pelaksana there.
+            $wrongDepartment = ($wrongDepartmentLeft[$path] ?? 0) > 0;
+            if ($wrongDepartment) {
+                $wrongDepartmentLeft[$path]--;
+            }
+            $handler = $wrongDepartment
+                ? $this->faker->randomElement($pelaksanaByDepartment->except(self::CATEGORY_DEPARTMENTS[$categoryCode])->flatten()->all())
+                : $pelaksana;
 
             $createdAt = $this->creationMoment($path);
             $attributes = $this->workOrderAttributes($path, $categoryCode, $requester, $createdAt)
@@ -568,7 +642,7 @@ Nanti saya kabari lagi.'],
                     'work_order_category_id' => $categories[$categoryCode]->id,
                     'urgency' => $urgencies[$index],
                     // Every third draft is still missing its target, as a draft may be.
-                    'target_department_id' => $path === 'draft' && $index % 3 === 0 ? null : $pelaksana->department_id,
+                    'target_department_id' => $path === 'draft' && $index % 3 === 0 ? null : $handler->department_id,
                 ];
 
             $events[] = ['at' => $createdAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $attributes, $requester, $actor, $onBehalf, $contactName): void {
@@ -585,43 +659,97 @@ Nanti saya kabari lagi.'],
                 }
             }
 
-            $nextAt = $createdAt->addMinutes($this->faker->numberBetween(30, 3 * 24 * 60));
-            $cancelledAt = match ($path) {
-                'cancelled_draft' => $nextAt,
-                'cancelled_submitted' => $nextAt->addMinutes($this->faker->numberBetween(60, 4 * 24 * 60)),
-                default => null,
-            };
+            // Each step some minutes to days after the one before: at most
+            // 3 + 2 + 2 days after creation, within creationMoment()'s margin.
+            $submittedAt = $createdAt->addMinutes($this->faker->numberBetween(30, 3 * 24 * 60));
+            $decidedAt = $submittedAt->addMinutes($this->faker->numberBetween(60, 2 * 24 * 60));
+            $revisedAt = $decidedAt->addMinutes($this->faker->numberBetween(60, 2 * 24 * 60));
+
+            if ($path === 'cancelled_draft') {
+                $events[] = $this->transitionEvent($created, $index, $submittedAt, $actor, Dibatalkan::getMorphClass(), $this->faker->randomElement(self::DRAFT_CANCEL_NOTES));
+
+                continue;
+            }
+
+            if ($path === 'draft') {
+                continue;
+            }
+
+            $events[] = $this->transitionEvent($created, $index, $submittedAt, $actor, Diajukan::getMorphClass());
 
             // Comments start once the work order is submitted, when the target
             // department's pelaksana can see it, and end before a cancellation,
             // which makes them read-only.
-            if (in_array($path, ['submitted', 'overdue', 'cancelled_submitted'], true) && in_array($index % 5, [1, 2, 3], true)) {
-                $until = $cancelledAt ?? CarbonImmutable::now()->subHour();
-                array_push($events, ...$this->planComments($created, $index, $nextAt, $until, $actor, $pelaksana, $withComments++ === 0));
-            }
-
-            if ($path === 'cancelled_draft') {
-                $note = $this->faker->randomElement(self::DRAFT_CANCEL_NOTES);
-                $events[] = ['at' => $nextAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $actor, $note): void {
-                    $this->transitionWorkOrder->handle($created[$index], Dibatalkan::getMorphClass(), $actor, $note);
-                }];
-            }
-
-            if (in_array($path, ['submitted', 'overdue', 'cancelled_submitted'], true)) {
-                $events[] = ['at' => $nextAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $actor): void {
-                    $this->transitionWorkOrder->handle($created[$index], Diajukan::getMorphClass(), $actor);
-                }];
+            if (in_array($path, ['submitted', 'overdue', 'in_progress', 'in_progress_overdue', 'cancelled_submitted'], true) && in_array($index % 5, [1, 2, 3], true)) {
+                $until = $path === 'cancelled_submitted' ? $decidedAt : CarbonImmutable::now()->subHour();
+                array_push($events, ...$this->planComments($created, $index, $submittedAt, $until, $actor, $pelaksana, $withComments++ === 0));
             }
 
             if ($path === 'cancelled_submitted') {
-                $note = $this->faker->randomElement(self::SUBMITTED_CANCEL_NOTES);
-                $events[] = ['at' => $cancelledAt, 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana, $note): void {
-                    $this->transitionWorkOrder->handle($created[$index], Dibatalkan::getMorphClass(), $pelaksana, $note);
+                $events[] = $this->transitionEvent($created, $index, $decidedAt, $actor, Dibatalkan::getMorphClass(), $this->faker->randomElement(self::SUBMITTED_CANCEL_NOTES));
+            }
+
+            if (in_array($path, ['in_progress', 'in_progress_overdue'], true)) {
+                array_push($events, ...$this->planAcceptance($created, $index, $decidedAt, $pelaksana));
+            }
+
+            if (in_array($path, ['rejected', 'resubmitted', 'rejected_cancelled'], true)) {
+                $note = $wrongDepartment
+                    ? __(self::WRONG_DEPARTMENT_NOTE, ['department' => self::CATEGORY_DEPARTMENTS[$categoryCode]])
+                    : $this->faker->randomElement(self::REJECT_NOTES);
+                $events[] = $this->transitionEvent($created, $index, $decidedAt, $handler, Ditolak::getMorphClass(), $note);
+            }
+
+            if ($path === 'resubmitted') {
+                $events[] = ['at' => $revisedAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $wrongDepartment, $pelaksana): void {
+                    $workOrder = $created[$index]->refresh();
+                    $workOrder->update($wrongDepartment
+                        ? ['target_department_id' => $pelaksana->department_id]
+                        : ['description' => $workOrder->description.self::REVISION]);
                 }];
+                $events[] = $this->transitionEvent($created, $index, $revisedAt->addMinutes(2), $actor, Diajukan::getMorphClass());
+            }
+
+            if ($path === 'rejected_cancelled') {
+                $events[] = $this->transitionEvent($created, $index, $revisedAt, $actor, Dibatalkan::getMorphClass(), $this->faker->randomElement(self::REJECTED_CANCEL_NOTES));
             }
         }
 
         usort($events, fn (array $a, array $b): int => $a['at']->getTimestamp() <=> $b['at']->getTimestamp());
+
+        return $events;
+    }
+
+    /**
+     * A status change of the work order created at $index, by $actor at $at.
+     *
+     * @param  array<int, WorkOrder>  $created  filled while the timeline runs
+     * @return array{at: CarbonImmutable, actor: User, run: Closure(): void}
+     */
+    private function transitionEvent(array &$created, int $index, CarbonImmutable $at, User $actor, string $to, ?string $note = null): array
+    {
+        return ['at' => $at, 'actor' => $actor, 'run' => function () use (&$created, $index, $actor, $to, $note): void {
+            $this->transitionWorkOrder->handle($created[$index], $to, $actor, $note);
+        }];
+    }
+
+    /**
+     * The target department's pelaksana accepts the work order, sometimes
+     * with a note, and on every other one uploads a progress photo a day
+     * later (FLOW.md §5: the pelaksana adds documents while Dikerjakan).
+     *
+     * @param  array<int, WorkOrder>  $created  filled while the timeline runs
+     * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
+     */
+    private function planAcceptance(array &$created, int $index, CarbonImmutable $at, User $pelaksana): array
+    {
+        $events = [$this->transitionEvent($created, $index, $at, $pelaksana, Dikerjakan::getMorphClass(), self::ACCEPT_NOTES[$index % count(self::ACCEPT_NOTES)])];
+
+        if ($index % 2 === 0) {
+            $events[] = ['at' => $at->addDay(), 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana): void {
+                $this->attachSample($created[$index], ['foto.jpg', 'Foto_Progres.jpg'], $pelaksana);
+            }];
+        }
 
         return $events;
     }
@@ -707,13 +835,13 @@ Nanti saya kabari lagi.'],
     /**
      * A moment in WITA working hours. Work orders that move on are created at
      * least 8 days ago so every later step is in the past (at most 7 days
-     * later); overdue ones at least 30 days ago so their target has passed.
+     * later, plus a day for a progress photo); overdue ones at least 30 days ago so their target has passed.
      */
     private function creationMoment(string $path): CarbonImmutable
     {
         $minDaysAgo = match ($path) {
             'draft' => 1,
-            'overdue' => 30,
+            'overdue', 'in_progress_overdue' => 30,
             default => 8,
         };
 
@@ -754,7 +882,7 @@ Nanti saya kabari lagi.'],
      */
     private function targetDate(string $path, CarbonImmutable $createdAt): ?string
     {
-        if ($path === 'overdue') {
+        if (in_array($path, ['overdue', 'in_progress_overdue'], true)) {
             return DisplayDate::local($createdAt)->addDays($this->faker->numberBetween(5, 14))->toDateString();
         }
 

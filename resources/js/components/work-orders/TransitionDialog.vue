@@ -65,7 +65,7 @@ const submit = () => {
 
                 <div class="grid gap-2">
                     <Label for="transition-note">
-                        Catatan
+                        {{ transition?.note_label ?? 'Catatan' }}
                         <span
                             v-if="!transition?.requires_note"
                             class="font-normal text-muted-foreground"
@@ -90,9 +90,7 @@ const submit = () => {
                     <Button
                         type="submit"
                         :variant="
-                            transition?.tone === 'destructive'
-                                ? 'destructive'
-                                : 'default'
+                            transition?.destructive ? 'destructive' : 'default'
                         "
                         :disabled="form.processing"
                     >

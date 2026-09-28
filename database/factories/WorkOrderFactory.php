@@ -8,6 +8,8 @@ use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\Dibatalkan;
+use App\States\WorkOrder\Dikerjakan;
+use App\States\WorkOrder\Ditolak;
 use App\States\WorkOrder\Draft;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -85,6 +87,26 @@ class WorkOrderFactory extends Factory
             'status' => Diajukan::class,
             'number' => fake()->unique()->numerify('WO/TEST/2026/09/####'),
             'target_department_id' => $attributes['target_department_id'] ?? Department::factory(),
+        ]);
+    }
+
+    /**
+     * A submitted work order its target department rejected.
+     */
+    public function rejected(): static
+    {
+        return $this->submitted()->state(fn (array $attributes): array => [
+            'status' => Ditolak::class,
+        ]);
+    }
+
+    /**
+     * A submitted work order its target department is carrying out.
+     */
+    public function inProgress(): static
+    {
+        return $this->submitted()->state(fn (array $attributes): array => [
+            'status' => Dikerjakan::class,
         ]);
     }
 

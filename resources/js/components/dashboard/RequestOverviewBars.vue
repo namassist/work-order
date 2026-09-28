@@ -8,7 +8,7 @@ import {
     componentToString,
 } from '@/components/ui/chart';
 import { formatShortCalendarDate } from '@/lib/format';
-import { statusToneChartColor } from '@/lib/workOrderStatus';
+import { statusChartColor } from '@/lib/workOrderStatus';
 import type { RequestOverview } from '@/types';
 import RequestOverviewTooltip from './RequestOverviewTooltip.vue';
 
@@ -34,7 +34,7 @@ const rows: Row[] = props.overview.series.map((day) => ({
 const config: ChartConfig = Object.fromEntries(
     statuses.map((status) => [
         status.value,
-        { label: status.label, color: statusToneChartColor(status.tone) },
+        { label: status.label, color: statusChartColor(status) },
     ]),
 );
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { LucideIcon } from '@lucide/vue';
+import { computed } from 'vue';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export type StatItem = {
@@ -14,17 +15,23 @@ export type StatItem = {
 /**
  * Statistics strip under a page panel's header: big number above its label,
  * a small monochrome icon top-right, cells split by 1px lines. Four columns
- * on desktop, 2×2 on tablets, one column on phones.
+ * on desktop, 2×2 on tablets, one column on phones; more than four items
+ * (the WO list: total plus every status) take six columns on wide screens
+ * and three below that, so no row is left with empty cells.
  */
-defineProps<{
+const props = defineProps<{
     items: StatItem[];
 }>();
+
+const columns = computed(() =>
+    props.items.length > 4
+        ? 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'
+        : 'sm:grid-cols-2 lg:grid-cols-4',
+);
 </script>
 
 <template>
-    <dl
-        class="grid grid-cols-1 gap-px border-b bg-border sm:grid-cols-2 lg:grid-cols-4"
-    >
+    <dl :class="['grid grid-cols-1 gap-px border-b bg-border', columns]">
         <div
             v-for="item in items"
             :key="item.label"
