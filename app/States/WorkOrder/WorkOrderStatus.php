@@ -2,6 +2,7 @@
 
 namespace App\States\WorkOrder;
 
+use App\Enums\WorkOrderDeadline;
 use App\Enums\WorkOrderSide;
 use App\Models\WorkOrder;
 use Spatie\ModelStates\State;
@@ -24,7 +25,7 @@ abstract class WorkOrderStatus extends State
 
     /**
      * The badge colour token from docs/DESIGN.md: secondary, warning, info,
-     * success, destructive, or muted.
+     * billing, success, destructive, or muted.
      */
     abstract public function tone(): string;
 
@@ -123,10 +124,34 @@ abstract class WorkOrderStatus extends State
     }
 
     /**
-     * The side that may add and remove documents in this status (FLOW.md
-     * §5 status properties), or null when nobody may.
+     * Which side may add and remove files in which attachment collection
+     * while a work order is in this status (FLOW.md §5 status properties).
+     * A collection that is not listed cannot be changed by anyone.
+     *
+     * @return array<string, WorkOrderSide>
      */
-    public function attachmentSide(): ?WorkOrderSide
+    public function attachmentSides(): array
+    {
+        return [];
+    }
+
+    /**
+     * The side that may change the collection's files in this status, or
+     * null when nobody may.
+     */
+    public function attachmentSideFor(string $collection): ?WorkOrderSide
+    {
+        return $this->attachmentSides()[$collection] ?? null;
+    }
+
+    /**
+     * The form that collects what moving into this status needs, when the
+     * plain transition (a note at most) is not enough: 'invoice' for
+     * Penagihan (BillWorkOrder), 'payment' for Selesai
+     * (ConfirmWorkOrderPayment). Such a status is never entered through
+     * the plain transition endpoint.
+     */
+    public function transitionForm(): ?string
     {
         return null;
     }
@@ -141,13 +166,15 @@ abstract class WorkOrderStatus extends State
     }
 
     /**
-     * Whether a work order in this status is late once its target date has
-     * passed (the dashboard's "Terlambat"): submitted and not yet final.
-     * Every new status must decide this; draft and final statuses never are.
+     * The date a work order in this status is late against once it has
+     * passed (FLOW.md §7, the dashboard's "Terlambat"), or null when it is
+     * never late in this status. Every new status must decide this: only
+     * submitted, non-final statuses have one; draft and final statuses never
+     * do.
      */
-    public function countsAsOverdueWhenLate(): bool
+    public function deadline(): ?WorkOrderDeadline
     {
-        return false;
+        return null;
     }
 
     /**
@@ -168,6 +195,8 @@ abstract class WorkOrderStatus extends State
             ->allowTransition(Diajukan::class, Dikerjakan::class)
             ->allowTransition(Diajukan::class, Ditolak::class)
             ->allowTransition(Ditolak::class, Diajukan::class)
+            ->allowTransition(Dikerjakan::class, Penagihan::class)
+            ->allowTransition(Penagihan::class, Selesai::class)
             ->allowTransition([Draft::class, Diajukan::class, Ditolak::class], Dibatalkan::class);
     }
 
@@ -195,17 +224,19 @@ abstract class WorkOrderStatus extends State
     }
 
     /**
-     * The stored names of every status that countsAsOverdueWhenLate().
+     * The stored names of every status that has a deadline(), per deadline.
      *
-     * @return list<string>
+     * @return array<string, list<string>> keyed by WorkOrderDeadline value
      */
-    public static function overdueWhenLateNames(): array
+    public static function namesByDeadline(): array
     {
         $names = [];
 
         foreach (self::getStateMapping()->keys() as $name) {
-            if (self::fromName((string) $name)?->countsAsOverdueWhenLate()) {
-                $names[] = (string) $name;
+            $deadline = self::fromName((string) $name)?->deadline();
+
+            if ($deadline instanceof WorkOrderDeadline) {
+                $names[$deadline->value][] = (string) $name;
             }
         }
 
@@ -224,6 +255,8 @@ abstract class WorkOrderStatus extends State
             Diajukan::class,
             Ditolak::class,
             Dikerjakan::class,
+            Penagihan::class,
+            Selesai::class,
             Dibatalkan::class,
         ]);
     }

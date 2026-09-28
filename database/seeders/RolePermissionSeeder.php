@@ -70,6 +70,7 @@ class RolePermissionSeeder extends Seeder
                 Permission::WorkOrdersViewAll,
                 Permission::WorkOrdersExport,
                 Permission::WorkOrdersComment,
+                Permission::WorkOrdersConfirmPayment,
             ],
         ],
         'viewer' => [

@@ -2,6 +2,7 @@
 
 namespace App\States\WorkOrder;
 
+use App\Enums\WorkOrderDeadline;
 use App\Enums\WorkOrderSide;
 use App\Models\WorkOrder;
 
@@ -37,9 +38,9 @@ class Diajukan extends WorkOrderStatus
         return true;
     }
 
-    public function countsAsOverdueWhenLate(): bool
+    public function deadline(): WorkOrderDeadline
     {
-        return true;
+        return WorkOrderDeadline::TargetDate;
     }
 
     public function requiresTargetDepartment(): bool

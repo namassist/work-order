@@ -4,17 +4,20 @@ namespace App\Http\Controllers\WorkOrders;
 
 use App\Actions\Attachments\AddAttachment;
 use App\Actions\WorkOrders\CreateWorkOrder;
+use App\Actions\WorkOrders\InvoiceNotAllowed;
 use App\Enums\WorkOrderUrgency;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WorkOrders\ListWorkOrdersRequest;
 use App\Http\Requests\WorkOrders\StoreWorkOrderRequest;
 use App\Http\Requests\WorkOrders\UpdateWorkOrderRequest;
+use App\Http\Resources\WorkOrderInvoiceResource;
 use App\Http\Resources\WorkOrderResource;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
+use App\States\WorkOrder\Selesai;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\Attachments\AttachmentPanel;
 use App\Support\WorkOrderTimeline;
@@ -157,17 +160,18 @@ class WorkOrderController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $workOrder->load(self::LIST_RELATIONS);
+        $workOrder->load([...self::LIST_RELATIONS, 'invoice.issuer', 'invoice.corrector', 'invoice.payer']);
 
         $status = $workOrder->status;
         $waitsOn = $status->waitsOn();
+        $invoice = $workOrder->invoice;
 
         return Inertia::render('work-orders/Show', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
             'timeline' => WorkOrderTimeline::for($workOrder, $user),
             // Only the transitions this user may perform (FLOW.md §5).
             'transitions' => array_values(array_map(
-                fn (string $to): array => $this->transitionOption($workOrder, $to),
+                fn (string $to): array => $this->transitionOption($workOrder, $to, $user),
                 array_filter($status->transitionableStates(), fn (string $to): bool => $user->can('transition', [$workOrder, $to])),
             )),
             // Tells everyone not on the side whose turn it is who the work order waits for.
@@ -177,13 +181,38 @@ class WorkOrderController extends Controller
                 'update' => $user->can('update', $workOrder),
                 'delete' => $user->can('delete', $workOrder) && $workOrder->status->isDeletable(),
                 'comment' => $user->can('addComment', $workOrder) && $workOrder->status->acceptsComments(),
+                'correctInvoice' => $invoice !== null && ! $invoice->isPaid() && $user->can('correctInvoice', $workOrder),
             ],
             'comments' => [
                 'max_length' => WorkOrderComment::MAX_BODY_LENGTH,
                 'read_only' => ! $workOrder->status->acceptsComments(),
             ],
             'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
+            'invoice' => $invoice ? new WorkOrderInvoiceResource($invoice->setRelation('workOrder', $workOrder))->resolve($request) : null,
+            'invoiceAttachments' => $this->invoiceAttachments($workOrder, $user, $request),
+            // For the invoice and payment forms, which upload with their data.
+            'invoiceRules' => collect([WorkOrder::INVOICE, WorkOrder::BAST, WorkOrder::PAYMENT_PROOF])
+                ->mapWithKeys(fn (string $collection): array => [$collection => $workOrder->attachmentCollections()[$collection]->toFrontend()])
+                ->all(),
         ]);
+    }
+
+    /**
+     * The invoice's file panels (FLOW.md §8): the BAST from Dikerjakan on,
+     * since the target department may add it while it works; the invoice
+     * and proof of payment once there is an invoice.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function invoiceAttachments(WorkOrder $workOrder, User $user, Request $request): array
+    {
+        $collections = $workOrder->invoice !== null
+            ? [WorkOrder::INVOICE, WorkOrder::BAST, WorkOrder::PAYMENT_PROOF]
+            : ($workOrder->status->attachmentSideFor(WorkOrder::BAST) !== null ? [WorkOrder::BAST] : []);
+
+        return collect($collections)
+            ->mapWithKeys(fn (string $collection): array => [$collection => AttachmentPanel::props($workOrder, $collection, $user, $request)])
+            ->all();
     }
 
     /**
@@ -346,9 +375,9 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string, requires_target_department: bool}
+     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string, requires_target_department: bool, form: string|null, blocked_reason: string|null}
      */
-    private function transitionOption(WorkOrder $workOrder, string $name): array
+    private function transitionOption(WorkOrder $workOrder, string $name, User $user): array
     {
         $state = WorkOrderStatus::fromName($name);
 
@@ -359,6 +388,11 @@ class WorkOrderController extends Controller
             'requires_note' => $state?->requiresNote() ?? false,
             'note_label' => $state?->noteLabel() ?? 'Catatan',
             'requires_target_department' => $state?->requiresTargetDepartment() ?? false,
+            'form' => $state?->transitionForm(),
+            // Shown instead of letting the user try (ConfirmWorkOrderPayment refuses it too).
+            'blocked_reason' => $name === Selesai::$name && $workOrder->invoice?->wasPreparedBy($user)
+                ? InvoiceNotAllowed::preparedByPayer()->getMessage()
+                : null,
         ];
     }
 

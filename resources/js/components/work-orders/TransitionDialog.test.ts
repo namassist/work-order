@@ -10,6 +10,8 @@ const reject: WorkOrderTransition = {
     requires_note: true,
     note_label: 'Alasan penolakan',
     requires_target_department: true,
+    form: null,
+    blocked_reason: null,
 };
 
 const accept: WorkOrderTransition = {
@@ -19,6 +21,8 @@ const accept: WorkOrderTransition = {
     requires_note: false,
     note_label: 'Catatan',
     requires_target_department: true,
+    form: null,
+    blocked_reason: null,
 };
 
 async function render(transition: WorkOrderTransition) {

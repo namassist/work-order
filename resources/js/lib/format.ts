@@ -164,3 +164,41 @@ export function formatFileSize(bytes: number): string {
 
     return `${fileSizeNumber.format(value)} ${FILE_SIZE_UNITS[unit]}`;
 }
+
+const rupiahWhole = new Intl.NumberFormat('id-ID', {
+    maximumFractionDigits: 0,
+});
+
+/**
+ * A rupiah amount from the server's decimal string ("1500000.50") as
+ * "Rp 1.500.000,50", or "Rp 1.500.000" when it has no cents. Matches
+ * App\Support\Rupiah; the decimals are read from the string, never through
+ * a float.
+ */
+export function formatRupiah(amount: string): string {
+    const [whole, cents = ''] = amount.trim().split('.');
+    const fraction = cents.slice(0, 2).padEnd(2, '0');
+
+    return `Rp ${rupiahWhole.format(Number(whole))}${fraction === '00' ? '' : `,${fraction}`}`;
+}
+
+/**
+ * What a user typed as a rupiah amount, as the decimal string the server
+ * takes ("1500000.50"), or null when it is not an amount. Accepts the
+ * Indonesian way ("1.500.000", "1.500.000,50", "Rp 1.500.000") and plain
+ * digits with a dot for cents ("1500000.50"). Dots in groups of three are
+ * thousands separators.
+ */
+export function parseRupiahInput(text: string): string | null {
+    const value = text.replace(/^\s*rp\.?\s*/i, '').replace(/\s/g, '');
+
+    if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(value)) {
+        return value.replace(/\./g, '').replace(',', '.');
+    }
+
+    if (/^\d+([.,]\d{1,2})?$/.test(value)) {
+        return value.replace(',', '.');
+    }
+
+    return null;
+}

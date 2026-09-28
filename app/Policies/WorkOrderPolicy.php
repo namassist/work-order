@@ -127,8 +127,8 @@ class WorkOrderPolicy
     }
 
     /**
-     * Determine whether the user acts for either side of the work order, so
-     * a status change it cannot make (e.g. from a page loaded before someone
+     * Determine whether the user acts for any side of the work order, so a
+     * status change it cannot make (e.g. from a page loaded before someone
      * else changed the status) is answered with a validation message rather
      * than a 403.
      */
@@ -137,38 +137,44 @@ class WorkOrderPolicy
         return $this->ifVisible(
             $user,
             $workOrder,
-            $workOrder->isOnSide($user, WorkOrderSide::Requester) || $workOrder->isOnSide($user, WorkOrderSide::Executor),
+            array_any(WorkOrderSide::cases(), fn (WorkOrderSide $side): bool => $workOrder->isOnSide($user, $side)),
         );
     }
 
     /**
-     * Determine whether the user can attach a file to the work order: the
-     * side the status names in attachmentSide() (FLOW.md §5), to the
-     * documents collection.
+     * Determine whether the user can correct the invoice (FLOW.md §8): the
+     * executor side. Whether the work order still waits for payment
+     * (Penagihan) is checked by CorrectInvoice under a lock, which refuses
+     * with a message, since an open page can go stale.
+     */
+    public function correctInvoice(User $user, WorkOrder $workOrder): Response
+    {
+        return $this->ifVisible($user, $workOrder, $workOrder->isOnSide($user, WorkOrderSide::Executor));
+    }
+
+    /**
+     * Determine whether the user can attach a file to the collection: the
+     * side the status names for it in attachmentSides() (FLOW.md §5).
      */
     public function addAttachment(User $user, WorkOrder $workOrder, string $collection): Response
     {
-        return $this->ifVisible(
-            $user,
-            $workOrder,
-            $collection === WorkOrder::DOCUMENTS && $this->mayChangeAttachments($user, $workOrder),
-        );
+        return $this->ifVisible($user, $workOrder, $this->mayChangeAttachments($user, $workOrder, $collection));
     }
 
     /**
      * Determine whether the user can remove an attachment from the work
-     * order: same rule as adding. The executor side removes only the files
-     * its user uploaded, since the requester's documents are part of the
-     * request it accepted.
+     * order: same rule as adding. Only the requester side removes files
+     * someone else uploaded (its own documents in Draft and Ditolak); the
+     * executor and finance sides remove only their user's own uploads, since
+     * the requester's documents are part of the request it accepted.
      */
     public function deleteAttachment(User $user, WorkOrder $workOrder, Media $media): Response
     {
         return $this->ifVisible(
             $user,
             $workOrder,
-            $media->collection_name === WorkOrder::DOCUMENTS
-                && $this->mayChangeAttachments($user, $workOrder)
-                && ($workOrder->status->attachmentSide() !== WorkOrderSide::Executor || $media->uploaded_by === $user->id),
+            $this->mayChangeAttachments($user, $workOrder, (string) $media->collection_name)
+                && ($workOrder->status->attachmentSideFor((string) $media->collection_name) === WorkOrderSide::Requester || $media->uploaded_by === $user->id),
         );
     }
 
@@ -225,9 +231,9 @@ class WorkOrderPolicy
         return false;
     }
 
-    private function mayChangeAttachments(User $user, WorkOrder $workOrder): bool
+    private function mayChangeAttachments(User $user, WorkOrder $workOrder, string $collection): bool
     {
-        $side = $workOrder->status->attachmentSide();
+        $side = $workOrder->status->attachmentSideFor($collection);
 
         return $side !== null && $workOrder->isOnSide($user, $side);
     }

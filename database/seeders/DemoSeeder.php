@@ -6,6 +6,9 @@ use App\Actions\Attachments\AddAttachment;
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Registrations\RejectRegistration;
 use App\Actions\WorkOrders\AddWorkOrderComment;
+use App\Actions\WorkOrders\BillWorkOrder;
+use App\Actions\WorkOrders\ConfirmWorkOrderPayment;
+use App\Actions\WorkOrders\CorrectInvoice;
 use App\Actions\WorkOrders\CreateWorkOrder;
 use App\Actions\WorkOrders\DeleteWorkOrderComment;
 use App\Actions\WorkOrders\TransitionWorkOrder;
@@ -124,6 +127,24 @@ class DemoSeeder extends Seeder
      *
      * @var list<array{0: string, 1: string, 2: string, 3: bool}>
      */
+    /**
+     * Accounts for local visual checks (Playwright): signed in with a fixed
+     * password written here, never DEFAULT_USER_PASSWORD, so no secret has to
+     * be read from .env. Demo data only: the seeder refuses production. Kept
+     * out of the demo timeline, so they act only when someone signs in.
+     *
+     * @var array<string, array{0: string, 1: string, 2: string}> email => [name, department, role]
+     */
+    public const array VISUAL_CHECK_ACCOUNTS = [
+        'visual@worder.test' => ['Visual Check Admin', 'IT', 'admin'],
+        'visual.keuangan@worder.test' => ['Visual Check Keuangan', 'KEU', 'keuangan'],
+    ];
+
+    /**
+     * The password of VISUAL_CHECK_ACCOUNTS. Not a secret: local demo data only.
+     */
+    public const string VISUAL_CHECK_PASSWORD = 'visual-check-local';
+
     private const array USERS = [
         ['Administrator', 'IT', 'admin', false],
         ['Rizky Pratama', 'IT', 'pelaksana', false],
@@ -345,11 +366,24 @@ Nanti saya kabari lagi.'],
         'resubmitted' => 4,
         'in_progress' => 6,
         'in_progress_overdue' => 2,
+        'billed' => 4,
+        'billed_overdue' => 2,
+        'paid' => 4,
         'rejected' => 5,
         'rejected_cancelled' => 2,
         'cancelled_draft' => 5,
         'cancelled_submitted' => 3,
     ];
+
+    /**
+     * Paths through Dikerjakan: accepted by the target department's pelaksana.
+     */
+    private const array ACCEPTED_PATHS = ['in_progress', 'in_progress_overdue', 'billed', 'billed_overdue', 'paid'];
+
+    /**
+     * Paths through Penagihan: invoiced by the pelaksana who accepted it.
+     */
+    private const array BILLED_PATHS = ['billed', 'billed_overdue', 'paid'];
 
     /**
      * How many of the resubmitted and of the rejected work orders first went
@@ -370,10 +404,10 @@ Nanti saya kabari lagi.'],
      * @var array<string, int>
      */
     private const array URGENCIES = [
-        'rendah' => 6,
-        'normal' => 36,
-        'tinggi' => 12,
-        'mendesak' => 6,
+        'rendah' => 7,
+        'normal' => 42,
+        'tinggi' => 14,
+        'mendesak' => 7,
     ];
 
     /**
@@ -388,11 +422,22 @@ Nanti saya kabari lagi.'],
 
     private Generator $faker;
 
+    /**
+     * The last invoice number given, per department and year, so numbers
+     * follow the billing order of the timeline.
+     *
+     * @var array<string, int>
+     */
+    private array $invoiceSequences = [];
+
     public function __construct(
         private readonly CreateNewUser $createNewUser,
         private readonly RejectRegistration $rejectRegistration,
         private readonly CreateWorkOrder $createWorkOrder,
         private readonly TransitionWorkOrder $transitionWorkOrder,
+        private readonly BillWorkOrder $billWorkOrder,
+        private readonly CorrectInvoice $correctInvoice,
+        private readonly ConfirmWorkOrderPayment $confirmPayment,
         private readonly AddAttachment $addAttachment,
         private readonly AddWorkOrderComment $addComment,
         private readonly UpdateWorkOrderComment $updateComment,
@@ -425,6 +470,7 @@ Nanti saya kabari lagi.'],
         $departments = $this->seedDepartments($this->seedCompanies());
         $categories = $this->seedCategories();
         $users = $this->seedUsers($departments, $password);
+        $this->seedVisualCheckAccounts($departments);
 
         try {
             $this->seedRegistrations($departments, $password, $users->sole(fn (User $user): bool => $user->hasRole('admin')));
@@ -548,6 +594,28 @@ Nanti saya kabari lagi.'],
     }
 
     /**
+     * The visual-check accounts, created when missing (an existing one keeps
+     * its password), without a forced password change.
+     *
+     * @param  Collection<string, Department>  $departments
+     */
+    private function seedVisualCheckAccounts(Collection $departments): void
+    {
+        foreach (self::VISUAL_CHECK_ACCOUNTS as $email => [$name, $departmentCode, $role]) {
+            $user = User::query()->firstOrCreate(['email' => $email], [
+                'name' => $name,
+                'password' => self::VISUAL_CHECK_PASSWORD,
+                'must_change_password' => false,
+                'department_id' => $departments[$departmentCode]->id,
+            ]);
+
+            if (! $user->hasRole($role)) {
+                $user->assignRole($role);
+            }
+        }
+    }
+
+    /**
      * Registers the demo self-registrations through the real action (pending,
      * "registered" logged), then rejects one as the admin. Skipped for an
      * email that already exists.
@@ -610,6 +678,9 @@ Nanti saya kabari lagi.'],
         $wrongDepartmentLeft = self::WRONG_DEPARTMENT;
 
         $koordinator = $users->first(fn (User $user): bool => $user->hasRole('koordinator'));
+        $keuangan = $users->filter(fn (User $user): bool => $user->hasRole('keuangan'))->values()->all();
+        /** @var array<string, int> $billedPerPath */
+        $billedPerPath = [];
 
         foreach ($paths as $index => $path) {
             /** @var User $requester */
@@ -660,10 +731,14 @@ Nanti saya kabari lagi.'],
             }
 
             // Each step some minutes to days after the one before: at most
-            // 3 + 2 + 2 days after creation, within creationMoment()'s margin.
+            // 3 + 2 + 2 days after creation, or 3 + 2 + 5 + 4 when invoiced
+            // and paid, within creationMoment()'s margin.
             $submittedAt = $createdAt->addMinutes($this->faker->numberBetween(30, 3 * 24 * 60));
             $decidedAt = $submittedAt->addMinutes($this->faker->numberBetween(60, 2 * 24 * 60));
             $revisedAt = $decidedAt->addMinutes($this->faker->numberBetween(60, 2 * 24 * 60));
+            // After the progress photo a day into the work.
+            $billedAt = $decidedAt->addMinutes($this->faker->numberBetween(2 * 24 * 60, 5 * 24 * 60));
+            $paidAt = $billedAt->addMinutes($this->faker->numberBetween(24 * 60, 4 * 24 * 60));
 
             if ($path === 'cancelled_draft') {
                 $events[] = $this->transitionEvent($created, $index, $submittedAt, $actor, Dibatalkan::getMorphClass(), $this->faker->randomElement(self::DRAFT_CANCEL_NOTES));
@@ -680,8 +755,13 @@ Nanti saya kabari lagi.'],
             // Comments start once the work order is submitted, when the target
             // department's pelaksana can see it, and end before a cancellation,
             // which makes them read-only.
-            if (in_array($path, ['submitted', 'overdue', 'in_progress', 'in_progress_overdue', 'cancelled_submitted'], true) && in_array($index % 5, [1, 2, 3], true)) {
-                $until = $path === 'cancelled_submitted' ? $decidedAt : CarbonImmutable::now()->subHour();
+            if (in_array($path, ['submitted', 'overdue', 'in_progress', 'in_progress_overdue', 'billed', 'billed_overdue', 'paid', 'cancelled_submitted'], true) && in_array($index % 5, [1, 2, 3], true)) {
+                // Selesai, like a cancellation, makes them read-only.
+                $until = match ($path) {
+                    'cancelled_submitted' => $decidedAt,
+                    'paid' => $paidAt,
+                    default => CarbonImmutable::now()->subHour(),
+                };
                 array_push($events, ...$this->planComments($created, $index, $submittedAt, $until, $actor, $pelaksana, $withComments++ === 0));
             }
 
@@ -689,8 +769,23 @@ Nanti saya kabari lagi.'],
                 $events[] = $this->transitionEvent($created, $index, $decidedAt, $actor, Dibatalkan::getMorphClass(), $this->faker->randomElement(self::SUBMITTED_CANCEL_NOTES));
             }
 
-            if (in_array($path, ['in_progress', 'in_progress_overdue'], true)) {
+            if (in_array($path, self::ACCEPTED_PATHS, true)) {
                 array_push($events, ...$this->planAcceptance($created, $index, $decidedAt, $pelaksana));
+            }
+
+            if (in_array($path, self::BILLED_PATHS, true)) {
+                $billedPerPath[$path] = ($billedPerPath[$path] ?? 0) + 1;
+                array_push($events, ...$this->planBilling($created, $index, $path, $billedPerPath[$path], $billedAt, $pelaksana));
+            }
+
+            if ($path === 'paid') {
+                /** @var User $confirmer */
+                $confirmer = $this->faker->randomElement($keuangan);
+                $events[] = ['at' => $paidAt, 'actor' => $confirmer, 'run' => function () use (&$created, $index, $confirmer, $paidAt): void {
+                    // Every other payment comes with the transfer receipt.
+                    $proof = $index % 2 === 0 ? [$this->sampleUpload(['foto.jpg', 'Bukti_Transfer.jpg'])] : [];
+                    $this->confirmPayment->handle($created[$index], $confirmer, DisplayDate::local($paidAt)->toDateString(), $proof);
+                }];
             }
 
             if (in_array($path, ['rejected', 'resubmitted', 'rejected_cancelled'], true)) {
@@ -748,6 +843,64 @@ Nanti saya kabari lagi.'],
         if ($index % 2 === 0) {
             $events[] = ['at' => $at->addDay(), 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana): void {
                 $this->attachSample($created[$index], ['foto.jpg', 'Foto_Progres.jpg'], $pelaksana);
+            }];
+        }
+
+        return $events;
+    }
+
+    /**
+     * The pelaksana who carried the work out invoices it (FLOW.md §8): an
+     * invoice file always, a BAST on every other one, an amount, and a due
+     * date 30 days on (14 when it is meant to be past by now). Of the ones
+     * still waiting for payment, the first has neither amount nor due date,
+     * and the second gets its amount corrected a few hours later.
+     *
+     * @param  array<int, WorkOrder>  $created  filled while the timeline runs
+     * @param  int  $nth  this work order's place among those of its path, from 1
+     * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
+     */
+    private function planBilling(array &$created, int $index, string $path, int $nth, CarbonImmutable $at, User $pelaksana): array
+    {
+        $bare = $path === 'billed' && $nth === 1;
+        $invoiceDate = DisplayDate::local($at)->toDateString();
+        $amount = $bare ? null : (string) ($this->faker->numberBetween(5, 250) * 50_000);
+        $dueDate = match (true) {
+            $bare => null,
+            $path === 'billed_overdue' => DisplayDate::local($at)->addDays(14)->toDateString(),
+            default => DisplayDate::local($at)->addDays(30)->toDateString(),
+        };
+
+        $events = [['at' => $at, 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana, $invoiceDate, $amount, $dueDate): void {
+            $workOrder = $created[$index];
+            $department = (string) $workOrder->targetDepartment?->code;
+            $year = substr($invoiceDate, 0, 4);
+            $sequence = $this->invoiceSequences[$department.$year] = ($this->invoiceSequences[$department.$year] ?? 0) + 1;
+
+            $created[$index] = $this->billWorkOrder->handle(
+                $workOrder,
+                $pelaksana,
+                [
+                    'number' => sprintf('INV/UGL/%s/%s/%03d', $department, $year, $sequence),
+                    'invoice_date' => $invoiceDate,
+                    'amount' => $amount,
+                    'due_date' => $dueDate,
+                ],
+                [$this->sampleUpload(['dokumen.pdf', "Invoice_{$department}_{$sequence}.pdf"])],
+                $index % 2 === 0 ? [$this->sampleUpload(['dokumen.pdf', 'BAST.pdf'])] : [],
+            );
+        }]];
+
+        if ($path === 'billed' && $nth === 2 && $amount !== null) {
+            $events[] = ['at' => $at->addHours(3), 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana, $amount): void {
+                $invoice = $created[$index]->invoice()->sole();
+
+                $this->correctInvoice->handle($created[$index], $pelaksana, [
+                    'number' => $invoice->number,
+                    'invoice_date' => $invoice->invoice_date->toDateString(),
+                    'amount' => (string) ((int) $amount + 250_000),
+                    'due_date' => $invoice->due_date?->toDateString(),
+                ]);
             }];
         }
 
@@ -834,20 +987,26 @@ Nanti saya kabari lagi.'],
 
     /**
      * A moment in WITA working hours. Work orders that move on are created at
-     * least 8 days ago so every later step is in the past (at most 7 days
+     * least 8 days ago (16 when invoiced) so every later step is in the past (at most 7 days
      * later, plus a day for a progress photo); overdue ones at least 30 days ago so their target has passed.
      */
     private function creationMoment(string $path): CarbonImmutable
     {
-        $minDaysAgo = match ($path) {
-            'draft' => 1,
-            'overdue', 'in_progress_overdue' => 30,
-            default => 8,
+        // Invoiced ones at least 16 days ago (14 days of steps). Their due date
+        // is 30 days after the invoice, so ones meant to be still due are at
+        // most 30 days old; ones meant to be past due (14 days) at least 40.
+        [$minDaysAgo, $maxDaysAgo] = match ($path) {
+            'draft' => [1, self::HISTORY_DAYS],
+            'overdue', 'in_progress_overdue' => [30, self::HISTORY_DAYS],
+            'billed' => [16, 30],
+            'billed_overdue' => [40, self::HISTORY_DAYS],
+            'paid' => [16, self::HISTORY_DAYS],
+            default => [8, self::HISTORY_DAYS],
         };
 
         return CarbonImmutable::now(DisplayDate::timezone())
             ->startOfDay()
-            ->subDays($this->faker->numberBetween($minDaysAgo, self::HISTORY_DAYS))
+            ->subDays($this->faker->numberBetween($minDaysAgo, $maxDaysAgo))
             ->setTime($this->faker->numberBetween(8, 15), $this->faker->numberBetween(0, 59), $this->faker->numberBetween(0, 59))
             ->utc();
     }
@@ -908,18 +1067,28 @@ Nanti saya kabari lagi.'],
     }
 
     /**
-     * Uploads a copy of the fixture, because media-library moves the file it
-     * is given.
+     * Uploads a sample to the work order's documents.
      *
      * @param  array{0: string, 1: string}  $sample
      */
     private function attachSample(WorkOrder $workOrder, array $sample, User $uploader): void
+    {
+        $this->addAttachment->handle($workOrder, $workOrder->documentsCollection(), $this->sampleUpload($sample), $uploader);
+    }
+
+    /**
+     * A copy of the fixture as an upload, because media-library moves the
+     * file it is given.
+     *
+     * @param  array{0: string, 1: string}  $sample  fixture in tests/Fixtures/attachments, name shown
+     */
+    private function sampleUpload(array $sample): UploadedFile
     {
         [$fixture, $clientName] = $sample;
 
         $copy = (string) tempnam(sys_get_temp_dir(), 'demo-attachment');
         copy(base_path('tests/Fixtures/attachments/'.$fixture), $copy);
 
-        $this->addAttachment->handle($workOrder, $workOrder->documentsCollection(), new UploadedFile($copy, $clientName, null, null, true), $uploader);
+        return new UploadedFile($copy, $clientName, null, null, true);
     }
 }

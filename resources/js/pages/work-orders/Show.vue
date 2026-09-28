@@ -9,7 +9,10 @@ import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import ListToolbar from '@/components/ListToolbar.vue';
 import PagePanel from '@/components/PagePanel.vue';
 import { Button } from '@/components/ui/button';
+import InvoiceDialog from '@/components/work-orders/InvoiceDialog.vue';
+import PaymentDialog from '@/components/work-orders/PaymentDialog.vue';
 import TransitionDialog from '@/components/work-orders/TransitionDialog.vue';
+import WorkOrderInvoiceSection from '@/components/work-orders/WorkOrderInvoiceSection.vue';
 import WorkOrderStatusBadge from '@/components/work-orders/WorkOrderStatusBadge.vue';
 import WorkOrderTimeline from '@/components/work-orders/WorkOrderTimeline.vue';
 import WorkOrderUrgency from '@/components/work-orders/WorkOrderUrgency.vue';
@@ -17,9 +20,11 @@ import { useCan } from '@/composables/useCan';
 import { useFormatDate } from '@/composables/useFormatDate';
 import type {
     AttachmentPanelData,
+    AttachmentRules,
     TimelineEntry,
     WorkOrder,
     WorkOrderCommentSettings,
+    WorkOrderInvoice,
     WorkOrderStatusNote,
     WorkOrderTransition,
 } from '@/types';
@@ -32,9 +37,22 @@ const props = defineProps<{
     /** Who the work order waits for, when it is not this user's turn. */
     waitingFor: string | null;
     statusNote: WorkOrderStatusNote | null;
-    can: { update: boolean; delete: boolean; comment: boolean };
+    can: {
+        update: boolean;
+        delete: boolean;
+        comment: boolean;
+        correctInvoice: boolean;
+    };
     comments: WorkOrderCommentSettings;
     attachments: AttachmentPanelData;
+    /** From Penagihan on (FLOW.md §8). */
+    invoice: WorkOrderInvoice | null;
+    /** The BAST from Dikerjakan on; invoice and proof of payment once invoiced. */
+    invoiceAttachments: Partial<
+        Record<'invoice' | 'bast' | 'bukti_bayar', AttachmentPanelData>
+    >;
+    /** Upload rules for the invoice and payment forms. */
+    invoiceRules: Record<'invoice' | 'bast' | 'bukti_bayar', AttachmentRules>;
 }>();
 
 defineOptions({
@@ -53,10 +71,39 @@ const hasPermission = useCan();
 const transitionOpen = ref(false);
 const selectedTransition = ref<WorkOrderTransition | null>(null);
 
+const invoiceOpen = ref(false);
+const correcting = ref(false);
+const paymentOpen = ref(false);
+
 const openTransition = (transition: WorkOrderTransition) => {
+    if (transition.form === 'invoice') {
+        correcting.value = false;
+        invoiceOpen.value = true;
+
+        return;
+    }
+
+    if (transition.form === 'payment') {
+        paymentOpen.value = true;
+
+        return;
+    }
+
     selectedTransition.value = transition;
     transitionOpen.value = true;
 };
+
+const openCorrection = () => {
+    correcting.value = true;
+    invoiceOpen.value = true;
+};
+
+/** Reasons a status change is not open to this user (segregation of duties). */
+const blockedReasons = computed(() =>
+    props.transitions.flatMap((transition) =>
+        transition.blocked_reason ? [transition.blocked_reason] : [],
+    ),
+);
 
 const historyOpen = ref(false);
 const deleteOpen = ref(false);
@@ -116,7 +163,10 @@ const destroy = () => {
                                 ? 'default'
                                 : 'outline'
                         "
-                        :disabled="needsTarget(transition)"
+                        :disabled="
+                            needsTarget(transition) ||
+                            transition.blocked_reason !== null
+                        "
                         @click="openTransition(transition)"
                     >
                         {{ transition.label }}
@@ -147,6 +197,13 @@ const destroy = () => {
                         class="basis-full text-xs text-muted-foreground"
                     >
                         Pilih departemen tujuan lewat Ubah sebelum mengajukan.
+                    </p>
+                    <p
+                        v-for="reason in blockedReasons"
+                        :key="reason"
+                        class="basis-full text-xs text-muted-foreground"
+                    >
+                        {{ reason }}
                     </p>
                     <p
                         v-if="waitingFor"
@@ -269,6 +326,14 @@ const destroy = () => {
             />
         </section>
 
+        <WorkOrderInvoiceSection
+            v-if="invoice || invoiceAttachments.bast"
+            :invoice="invoice"
+            :attachments="invoiceAttachments"
+            :can-correct="can.correctInvoice"
+            @correct="openCorrection"
+        />
+
         <section
             class="border-t px-4 py-6 sm:px-6"
             aria-labelledby="wo-activity-heading"
@@ -290,6 +355,27 @@ const destroy = () => {
         :work-order-id="workOrder.id"
         :display-number="workOrder.display_number"
         :transition="selectedTransition"
+    />
+
+    <InvoiceDialog
+        v-model:open="invoiceOpen"
+        :work-order-id="workOrder.id"
+        :display-number="workOrder.display_number"
+        :invoice="correcting ? invoice : null"
+        :rules="invoiceRules"
+        :files="{
+            invoice: invoiceAttachments.invoice?.items ?? [],
+            bast: invoiceAttachments.bast?.items ?? [],
+        }"
+    />
+
+    <PaymentDialog
+        v-if="invoice"
+        v-model:open="paymentOpen"
+        :work-order-id="workOrder.id"
+        :display-number="workOrder.display_number"
+        :invoice="invoice"
+        :rules="invoiceRules.bukti_bayar"
     />
 
     <ActivityHistorySheet

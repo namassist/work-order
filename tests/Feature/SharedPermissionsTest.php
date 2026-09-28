@@ -18,6 +18,7 @@ it('shares the permissions granted through roles with the frontend', function ()
             Permission::WorkOrdersViewAll->value,
             Permission::WorkOrdersExport->value,
             Permission::WorkOrdersComment->value,
+            Permission::WorkOrdersConfirmPayment->value,
         ]));
 });
 

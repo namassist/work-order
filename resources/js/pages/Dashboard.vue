@@ -65,7 +65,8 @@ const title = computed(
 /**
  * Work order metrics over the WO the user may see. "Menunggu Persetujuan"
  * counts submitted WOs in the provisional flow; "Terlambat" counts WOs past
- * their target date in a status that countsAsOverdueWhenLate(). "Dalam
+ * the date their status is late against (WorkOrderStatus::deadline(): the
+ * target date, or the invoice's payment due date in Penagihan). "Dalam
  * Pengerjaan" waits for the execution stages.
  */
 const metrics = computed<StatItem[]>(() => {

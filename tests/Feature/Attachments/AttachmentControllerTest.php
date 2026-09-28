@@ -147,7 +147,7 @@ describe('upload', function () {
             ->post(route('attachments.store', $parameters), ['file' => attachmentUpload('dokumen.pdf')])
             ->assertNotFound();
     })->with([
-        'unknown collection' => [['work-order', 'WO', 'bast']],
+        'unknown collection' => [['work-order', 'WO', 'kuitansi']],
         'model without attachments' => [['department', 1, 'dokumen']],
         'unknown alias' => [['nope', 1, 'dokumen']],
     ]);

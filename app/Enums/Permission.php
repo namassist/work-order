@@ -38,6 +38,7 @@ enum Permission: string
     case WorkOrdersViewAll = 'work-orders.view-all';
     case WorkOrdersExport = 'work-orders.export';
     case WorkOrdersComment = 'work-orders.comment';
+    case WorkOrdersConfirmPayment = 'work-orders.confirm-payment';
 
     case WorkOrderCategoriesView = 'work-order-categories.view';
     case WorkOrderCategoriesCreate = 'work-order-categories.create';
@@ -64,14 +65,14 @@ enum Permission: string
     /**
      * Whether only users of the executor company may use this permission:
      * master data, user and role management, registration review, the activity log, seeing every
-     * department's work orders, entering work orders on behalf of IC, and processing work orders
-     * as the executor. Only executor-scoped roles may include
+     * department's work orders, entering work orders on behalf of IC, processing work orders
+     * as the executor, and confirming their payment. Only executor-scoped roles may include
      * it, and client company users never hold it, even through a direct
      * grant (see User::hasPermissionTo()).
      */
     public function isInternalOnly(): bool
     {
-        return in_array($this, [self::WorkOrdersViewAll, self::WorkOrdersCreateOnBehalf, self::WorkOrdersProcess], true) || in_array($this->resource(), [
+        return in_array($this, [self::WorkOrdersViewAll, self::WorkOrdersCreateOnBehalf, self::WorkOrdersProcess, self::WorkOrdersConfirmPayment], true) || in_array($this->resource(), [
             'departments',
             'users',
             'roles',

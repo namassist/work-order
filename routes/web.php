@@ -7,6 +7,8 @@ use App\Http\Controllers\WorkOrders\RequesterAccountController;
 use App\Http\Controllers\WorkOrders\WorkOrderCommentController;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
 use App\Http\Controllers\WorkOrders\WorkOrderExportController;
+use App\Http\Controllers\WorkOrders\WorkOrderInvoiceController;
+use App\Http\Controllers\WorkOrders\WorkOrderPaymentController;
 use App\Http\Controllers\WorkOrders\WorkOrderTransitionController;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,6 +38,15 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         ->name('work-orders.restore');
     Route::post('work-orders/{workOrder}/transitions', [WorkOrderTransitionController::class, 'store'])
         ->name('work-orders.transitions.store');
+    // Invoicing (FLOW.md §8): with uploads, so throttled like them.
+    Route::middleware('throttle:wo-invoice')->group(function (): void {
+        Route::post('work-orders/{workOrder}/invoice', [WorkOrderInvoiceController::class, 'store'])
+            ->name('work-orders.invoice.store');
+        Route::patch('work-orders/{workOrder}/invoice', [WorkOrderInvoiceController::class, 'update'])
+            ->name('work-orders.invoice.update');
+        Route::post('work-orders/{workOrder}/payment', [WorkOrderPaymentController::class, 'store'])
+            ->name('work-orders.payment.store');
+    });
     Route::post('work-orders/{workOrder}/comments', [WorkOrderCommentController::class, 'store'])
         ->middleware('throttle:wo-comment-post')
         ->name('work-orders.comments.store');

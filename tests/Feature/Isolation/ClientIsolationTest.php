@@ -249,11 +249,19 @@ describe('page props', function () {
         $koordinator = User::factory()->create(['name' => 'Koordinator Unggul', 'email' => 'rahasia.koordinator@unggul.test']);
         $onBehalf = WorkOrder::factory()->onBehalf($koordinator, contactName: 'Pak Andi')->create(['requester_department_id' => $user->department_id]);
         $secrets[] = 'rahasia.koordinator@unggul.test';
+        // Invoiced and paid by Unggul users: IC users see the invoice (they
+        // pay it) and those users' names, nothing else about them.
+        $pelaksana = User::factory()->create(['name' => 'Pelaksana Unggul', 'email' => 'penagih.rahasia@unggul.test']);
+        $keuangan = User::factory()->create(['name' => 'Keuangan Unggul', 'email' => 'rahasia.keuangan@unggul.test']);
+        $paid = WorkOrder::factory()->by($user)->paid(['issued_by' => $pelaksana->id, 'paid_by' => $keuangan->id])->create();
+        $secrets[] = 'penagih.rahasia@unggul.test';
+        $secrets[] = 'rahasia.keuangan@unggul.test';
 
         $pages = [
             'Daftar WO' => route('work-orders.index'),
             'Detail WO' => route('work-orders.show', $own),
             'Detail WO diinput koordinator' => route('work-orders.show', $onBehalf),
+            'Detail WO lunas' => route('work-orders.show', $paid),
             'Buat WO' => route('work-orders.create'),
             'Ubah WO' => route('work-orders.edit', $own),
         ];
@@ -276,6 +284,11 @@ describe('page props', function () {
                     // The koordinator's requester choices never reach IC users.
                     expect($props['requesterDepartments'] ?? null)->toBeNull()
                         ->and($props['requesterCorrection'] ?? null)->toBeNull();
+                }
+
+                if ($name === 'Detail WO lunas') {
+                    expect($props['invoice']['issued_by'])->toBe(['name' => 'Pelaksana Unggul'])
+                        ->and($props['invoice']['paid_by'])->toBe(['name' => 'Keuangan Unggul']);
                 }
 
                 if ($name === 'Detail WO diinput koordinator') {

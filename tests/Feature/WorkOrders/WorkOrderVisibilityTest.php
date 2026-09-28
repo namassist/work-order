@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
 use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
@@ -29,18 +30,20 @@ use OpenSpout\Reader\XLSX\Reader;
 |   other target         submitted, target U
 |   rejected             submitted by pemohon A, rejected by T (Ditolak)
 |   in progress          submitted by pemohon A, accepted by T (Dikerjakan)
+|   billed               invoiced by T, payment due date passed (Penagihan)
+|   paid                 invoice paid (Selesai)
 */
 
-const MATRIX_WORK_ORDERS = ['own draft', 'on-behalf draft', 'submitted', 'on-behalf submitted', 'cancelled draft', 'other IC dept', 'other target', 'rejected', 'in progress'];
+const MATRIX_WORK_ORDERS = ['own draft', 'on-behalf draft', 'submitted', 'on-behalf submitted', 'cancelled draft', 'other IC dept', 'other target', 'rejected', 'in progress', 'billed', 'paid'];
 
 /** Submitted at least once, so seen by view-all. */
-const MATRIX_SUBMITTED = ['submitted', 'on-behalf submitted', 'other IC dept', 'other target', 'rejected', 'in progress'];
+const MATRIX_SUBMITTED = ['submitted', 'on-behalf submitted', 'other IC dept', 'other target', 'rejected', 'in progress', 'billed', 'paid'];
 
 /** Diajukan, which counts as pending. */
 const MATRIX_PENDING = ['submitted', 'on-behalf submitted', 'other IC dept', 'other target'];
 
-/** Past their target date in a status that counts as overdue (Diajukan, Dikerjakan); rejected is past it too, but does not count. */
-const MATRIX_OVERDUE = [...MATRIX_PENDING, 'in progress'];
+/** Past the date their status is late against: the target date (Diajukan, Dikerjakan) or the payment due date (Penagihan). Rejected and paid are past their target date too, but do not count. */
+const MATRIX_OVERDUE = [...MATRIX_PENDING, 'in progress', 'billed'];
 
 /**
  * Builds the departments, users, and work orders of the matrix, and returns
@@ -90,6 +93,8 @@ function visibilityWorld(string $userKey): array
         'other target' => WorkOrder::factory()->by($pemohonA)->targeting($u)->submitted()->create($overdue),
         'rejected' => WorkOrder::factory()->by($pemohonA)->targeting($t)->rejected()->create($overdue),
         'in progress' => WorkOrder::factory()->by($pemohonA)->targeting($t)->inProgress()->create($overdue),
+        'billed' => WorkOrder::factory()->by($pemohonA)->targeting($t)->billed(['invoice_date' => '2026-08-25', 'due_date' => '2026-09-01'])->create($overdue),
+        'paid' => WorkOrder::factory()->by($pemohonA)->targeting($t)->paid()->create($overdue),
     ];
 
     foreach ($workOrders as $key => $workOrder) {
@@ -150,8 +155,8 @@ function inMatrixOrder(array $visible): array
     return array_values(array_intersect(MATRIX_WORK_ORDERS, $visible));
 }
 
-$ownDepartment = ['own draft', 'on-behalf draft', 'submitted', 'on-behalf submitted', 'cancelled draft', 'other target', 'rejected', 'in progress'];
-$addressedToT = ['submitted', 'on-behalf submitted', 'other IC dept', 'rejected', 'in progress'];
+$ownDepartment = ['own draft', 'on-behalf draft', 'submitted', 'on-behalf submitted', 'cancelled draft', 'other target', 'rejected', 'in progress', 'billed', 'paid'];
+$addressedToT = ['submitted', 'on-behalf submitted', 'other IC dept', 'rejected', 'in progress', 'billed', 'paid'];
 
 dataset('visibility matrix', [
     'IC pemohon A' => ['IC pemohon A', $ownDepartment],
@@ -196,6 +201,9 @@ it('opens the detail page of visible work orders and answers 404 for the rest', 
 it('answers 404 to comments exactly on the work orders the user cannot see', function (string $userKey, array $visible) {
     ['user' => $user, 'workOrders' => $workOrders] = visibilityWorld($userKey);
 
+    // More posts than the comment limiter allows in a minute; throttling has its own tests.
+    $this->withoutMiddleware(ThrottleRequests::class);
+
     foreach ($workOrders as $key => $workOrder) {
         $status = $this->actingAs($user)->post(route('work-orders.comments.store', $workOrder), ['body' => 'Cek'])->getStatusCode();
 
@@ -216,6 +224,30 @@ it('downloads attachments only of visible work orders', function (string $userKe
     }
 })->with('visibility matrix');
 
+it('shows invoices and downloads their files only on visible work orders', function (string $userKey, array $visible) {
+    Storage::fake('attachments');
+    ['user' => $user, 'workOrders' => $workOrders] = visibilityWorld($userKey);
+
+    foreach (['billed', 'paid'] as $key) {
+        $workOrder = $workOrders[$key];
+        $seen = in_array($key, $visible, true);
+
+        foreach ([WorkOrder::INVOICE, WorkOrder::BAST, WorkOrder::PAYMENT_PROOF] as $collection) {
+            $media = app(AddAttachment::class)->handle($workOrder, $workOrder->attachmentCollections()[$collection], attachmentUpload('dokumen.pdf'), $workOrder->enteredBy);
+
+            $this->actingAs($user)->get(route('attachments.show', $media))->assertStatus($seen ? 200 : 404);
+        }
+
+        $response = $this->actingAs($user)->get(route('work-orders.show', $workOrder))->assertStatus($seen ? 200 : 404);
+
+        if ($seen) {
+            $response->assertInertia(fn (Assert $page): Assert => $page
+                ->where('invoice.number', $workOrder->invoice?->number)
+                ->has('invoiceAttachments', 3));
+        }
+    }
+})->with('visibility matrix');
+
 it('counts and lists only visible work orders on the dashboard', function (string $userKey, array $visible) {
     ['user' => $user, 'workOrders' => $workOrders] = visibilityWorld($userKey);
     $pending = array_intersect($visible, MATRIX_PENDING);
@@ -224,7 +256,9 @@ it('counts and lists only visible work orders on the dashboard', function (strin
     $this->actingAs($user)->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page): Assert => $page
         ->loadDeferredProps(fn (Assert $reload): Assert => $reload
             ->where('workOrderCounts', ['total' => count($visible), 'pending' => count($pending), 'overdue' => count($overdue)])
-            ->where('recentWorkOrders', fn ($rows): bool => matrixKeys($workOrders, collect($rows)->pluck('id')) === inMatrixOrder($visible))));
+            // "WO Terbaru" lists at most 8 of them.
+            ->where('recentWorkOrders', fn ($rows): bool => count($rows) === min(8, count($visible))
+                && array_diff(matrixKeys($workOrders, collect($rows)->pluck('id')), $visible) === [])));
 })->with('visibility matrix');
 
 it('exports only visible work orders', function (string $userKey, array $visible) {

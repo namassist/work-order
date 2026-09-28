@@ -18,12 +18,14 @@ final readonly class AttachmentCollection
 
     /**
      * @param  list<AttachmentType>|null  $types  every AttachmentType when null
+     * @param  int  $minFiles  files that must stay once the parent needs them (e.g. an invoice's file); removal below it is refused
      */
     public function __construct(
         public string $name,
         public int $maxFiles,
         public int $maxSizeKb,
         ?array $types = null,
+        public int $minFiles = 0,
     ) {
         $this->types = $types ?? AttachmentType::cases();
     }

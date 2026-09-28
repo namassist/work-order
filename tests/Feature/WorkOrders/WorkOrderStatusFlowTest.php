@@ -2,6 +2,7 @@
 
 use App\Actions\Attachments\AddAttachment;
 use App\Actions\WorkOrders\TransitionWorkOrder;
+use App\Enums\WorkOrderSide;
 use App\Models\Department;
 use App\Models\Media;
 use App\Models\User;
@@ -51,21 +52,25 @@ it('sets every status property per FLOW.md §5', function () {
             'editable' => $state?->isEditable(),
             'deletable' => $state?->isDeletable(),
             'comments' => $state?->acceptsComments(),
-            'overdue' => $state?->countsAsOverdueWhenLate(),
+            'deadline' => $state?->deadline()?->value,
             'target' => $state?->requiresTargetDepartment(),
             'note' => $state?->requiresNote(),
             'number' => $state?->assignsNumber(),
-            'attachments' => $state?->attachmentSide()?->value,
+            'attachments' => array_map(fn (WorkOrderSide $side): string => $side->value, $state?->attachmentSides() ?? []),
             'by' => $state?->performedBy()?->value,
+            'waits' => $state?->waitsOn()?->value,
+            'form' => $state?->transitionForm(),
         ]];
     });
 
     expect($properties->all())->toBe([
-        'draft' => ['tone' => 'secondary', 'editable' => true, 'deletable' => true, 'comments' => true, 'overdue' => false, 'target' => false, 'note' => false, 'number' => false, 'attachments' => 'requester', 'by' => null],
-        'diajukan' => ['tone' => 'warning', 'editable' => false, 'deletable' => false, 'comments' => true, 'overdue' => true, 'target' => true, 'note' => false, 'number' => true, 'attachments' => null, 'by' => 'requester'],
-        'ditolak' => ['tone' => 'destructive', 'editable' => true, 'deletable' => false, 'comments' => true, 'overdue' => false, 'target' => true, 'note' => true, 'number' => false, 'attachments' => 'requester', 'by' => 'executor'],
-        'dikerjakan' => ['tone' => 'info', 'editable' => false, 'deletable' => false, 'comments' => true, 'overdue' => true, 'target' => true, 'note' => false, 'number' => false, 'attachments' => 'executor', 'by' => 'executor'],
-        'dibatalkan' => ['tone' => 'muted', 'editable' => false, 'deletable' => false, 'comments' => false, 'overdue' => false, 'target' => false, 'note' => true, 'number' => false, 'attachments' => null, 'by' => 'requester'],
+        'draft' => ['tone' => 'secondary', 'editable' => true, 'deletable' => true, 'comments' => true, 'deadline' => null, 'target' => false, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => null, 'waits' => 'requester', 'form' => null],
+        'diajukan' => ['tone' => 'warning', 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'target' => true, 'note' => false, 'number' => true, 'attachments' => [], 'by' => 'requester', 'waits' => 'executor', 'form' => null],
+        'ditolak' => ['tone' => 'destructive', 'editable' => true, 'deletable' => false, 'comments' => true, 'deadline' => null, 'target' => true, 'note' => true, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => 'executor', 'waits' => 'requester', 'form' => null],
+        'dikerjakan' => ['tone' => 'info', 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'target' => true, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'executor', 'bast' => 'executor'], 'by' => 'executor', 'waits' => 'executor', 'form' => null],
+        'penagihan' => ['tone' => 'billing', 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'payment_due_date', 'target' => true, 'note' => false, 'number' => false, 'attachments' => ['bukti_bayar' => 'finance'], 'by' => 'executor', 'waits' => 'finance', 'form' => 'invoice'],
+        'selesai' => ['tone' => 'success', 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'target' => true, 'note' => false, 'number' => false, 'attachments' => [], 'by' => 'finance', 'waits' => null, 'form' => 'payment'],
+        'dibatalkan' => ['tone' => 'muted', 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'target' => false, 'note' => true, 'number' => false, 'attachments' => [], 'by' => 'requester', 'waits' => null, 'form' => null],
     ]);
 });
 
@@ -214,7 +219,7 @@ describe('revising a rejected work order', function () {
 });
 
 describe('attachments', function () {
-    it('lets only the side of attachmentSide() add documents', function (string $state, bool $requester, bool $executor) {
+    it('lets only the side of attachmentSides() add documents', function (string $state, bool $requester, bool $executor) {
         $workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->{$state}()->create();
 
         expect($this->pemohon->can('addAttachment', [$workOrder, WorkOrder::DOCUMENTS]))->toBe($requester)
@@ -226,7 +231,7 @@ describe('attachments', function () {
         'Dibatalkan' => ['cancelled', false, false],
     ]);
 
-    it('changes only files of the documents collection', function () {
+    it('changes only the collections the status names for the side', function () {
         $other = new Media()->forceFill(['collection_name' => 'bast', 'uploaded_by' => $this->pemohon->id]);
 
         expect($this->pemohon->can('addAttachment', [$this->workOrder, 'bast']))->toBeFalse()
@@ -287,7 +292,12 @@ describe('detail page', function () {
         'Diajukan, keuangan' => ['submitted', 'keuangan', 'Menunggu pelaksana ENG memproses.', []],
         'Ditolak, pelaksana' => ['rejected', 'pelaksana', 'Menunggu pemohon merevisi dan mengajukan ulang.', []],
         'Dikerjakan, pemohon' => ['inProgress', 'pemohon', 'Sedang dikerjakan oleh ENG.', []],
-        'Dikerjakan, pelaksana' => ['inProgress', 'pelaksana', null, []],
+        'Dikerjakan, pelaksana' => ['inProgress', 'pelaksana', null, ['penagihan']],
+        'Dikerjakan, keuangan' => ['inProgress', 'keuangan', 'Sedang dikerjakan oleh ENG.', []],
+        'Penagihan, pemohon' => ['billed', 'pemohon', 'Menunggu konfirmasi pembayaran oleh keuangan.', []],
+        'Penagihan, pelaksana' => ['billed', 'pelaksana', 'Menunggu konfirmasi pembayaran oleh keuangan.', []],
+        'Penagihan, keuangan' => ['billed', 'keuangan', null, ['selesai']],
+        'Selesai, keuangan' => ['paid', 'keuangan', null, []],
         'Dibatalkan, pemohon' => ['cancelled', 'pemohon', null, []],
     ]);
 
@@ -298,8 +308,8 @@ describe('detail page', function () {
             ->get(route('work-orders.show', $this->workOrder))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('transitions', [
-                    ['value' => 'dikerjakan', 'label' => 'Kerjakan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'requires_target_department' => true],
-                    ['value' => 'ditolak', 'label' => 'Tolak', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan penolakan', 'requires_target_department' => true],
+                    ['value' => 'dikerjakan', 'label' => 'Kerjakan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'requires_target_department' => true, 'form' => null, 'blocked_reason' => null],
+                    ['value' => 'ditolak', 'label' => 'Tolak', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan penolakan', 'requires_target_department' => true, 'form' => null, 'blocked_reason' => null],
                 ]));
     });
 });

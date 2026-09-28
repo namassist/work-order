@@ -8,6 +8,7 @@ const TONE_CLASSES: Record<StatusTone, string> = {
     secondary: 'bg-secondary text-secondary-foreground',
     warning: 'bg-warning text-warning-foreground',
     info: 'bg-info text-info-foreground',
+    billing: 'bg-billing text-billing-foreground',
     success: 'bg-success text-success-foreground',
     destructive: 'bg-destructive/10 text-destructive',
     // Ended, nothing left to do: an outline in the muted text colour.
@@ -27,6 +28,7 @@ const TONE_CHART_COLORS: Record<StatusTone, string> = {
     secondary: 'var(--chart-5)',
     warning: 'var(--chart-submitted)',
     info: 'var(--info)',
+    billing: 'var(--billing)',
     success: 'var(--success)',
     destructive: 'var(--destructive)',
     muted: 'var(--chart-cancelled)',

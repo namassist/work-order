@@ -3,6 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import type { LucideIcon } from '@lucide/vue';
 import {
     Ban,
+    CircleCheckBig,
     CircleDot,
     ClipboardList,
     Download,
@@ -10,6 +11,7 @@ import {
     History,
     Pencil,
     Plus,
+    ReceiptText,
     RotateCcw,
     SearchX,
     Send,
@@ -88,12 +90,14 @@ defineOptions({
     },
 });
 
-/** PROVISIONAL like the status flow; unknown statuses get a plain dot. */
+/** One icon per status; unknown statuses get a plain dot. */
 const statusIcons: Record<string, LucideIcon> = {
     draft: FilePen,
     diajukan: Send,
     ditolak: Undo2,
     dikerjakan: Wrench,
+    penagihan: ReceiptText,
+    selesai: CircleCheckBig,
     dibatalkan: Ban,
 };
 
