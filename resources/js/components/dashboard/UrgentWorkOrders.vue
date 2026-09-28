@@ -5,14 +5,15 @@ import { useNow } from '@vueuse/core';
 import WorkOrderController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderController';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import WorkOrderStatusBadge from '@/components/work-orders/WorkOrderStatusBadge.vue';
 import { useFormatDate } from '@/composables/useFormatDate';
 import { formatRelative } from '@/lib/format';
 import type { UrgentWorkOrder } from '@/types';
 
 /**
- * Dashboard "WO Mendesak": submitted work orders with urgency mendesak,
- * waiting longest first. "Lihat semua" opens the list with the same filter.
- * PROVISIONAL like the status flow: "diajukan" is the awaiting status.
+ * Dashboard "WO Mendesak": active work orders (WorkOrderStatus::isActive())
+ * with urgency mendesak, the earliest in the flow first, then waiting
+ * longest. "Lihat semua" opens the list with the same filter.
  */
 defineProps<{
     /** Undefined while the deferred prop loads. */
@@ -23,7 +24,7 @@ const { formatDateTime } = useFormatDate();
 const now = useNow({ interval: 60_000 });
 
 const listHref = WorkOrderController.index({
-    query: { status: 'diajukan', urgency: 'mendesak' },
+    query: { urgency: 'mendesak', status: 'aktif' },
 });
 </script>
 
@@ -52,7 +53,7 @@ const listHref = WorkOrderController.index({
             class="px-4 py-10 text-center text-sm text-muted-foreground sm:px-6"
             data-test="urgent-empty"
         >
-            Tidak ada WO mendesak yang menunggu.
+            Tidak ada WO mendesak yang masih berjalan.
         </p>
 
         <ul v-else class="divide-y">
@@ -78,8 +79,17 @@ const listHref = WorkOrderController.index({
                             </span>
                         </time>
                     </span>
-                    <span class="mt-0.5 block truncate font-medium">
-                        {{ workOrder.title }}
+                    <span
+                        class="mt-0.5 flex items-center justify-between gap-2"
+                    >
+                        <span class="truncate font-medium">
+                            {{ workOrder.title }}
+                        </span>
+                        <WorkOrderStatusBadge
+                            :status="workOrder.status"
+                            class="shrink-0"
+                            data-test="urgent-status"
+                        />
                     </span>
                     <span class="block truncate text-muted-foreground">
                         {{ workOrder.category }} ·

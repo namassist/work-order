@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WorkOrderDeadline;
 use App\Enums\WorkOrderUrgency;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
 use App\Http\Resources\ActivityResource;
@@ -9,6 +10,9 @@ use App\Http\Resources\WorkOrderResource;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\States\WorkOrder\Diajukan;
+use App\States\WorkOrder\Dikerjakan;
+use App\States\WorkOrder\Penagihan;
+use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\WorkOrderRequestOverview;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
@@ -68,41 +72,54 @@ class DashboardController extends Controller
     }
 
     /**
-     * Counts over the work orders the user may see. "Pending" means awaiting
-     * approval, which in the provisional flow is the Diajukan status;
-     * "overdue" is WorkOrder::overdue() ("Terlambat").
+     * The stat strip's counts over the work orders the user may see: one
+     * per status the cards name, and "Terlambat" (WorkOrder::overdue())
+     * with its split by the date the work order is late against.
      *
-     * @return array{total: int, pending: int, overdue: int}
+     * @return array{submitted: int, in_progress: int, billing: int, overdue: int, overdue_by: array<string, int>}
      */
     private function workOrderCounts(User $user): array
     {
         $counts = WorkOrder::query()
             ->visibleTo($user)
             ->toBase()
-            ->selectRaw('count(*) as total')
-            ->selectRaw('coalesce(sum(case when status = ? then 1 else 0 end), 0) as pending', [Diajukan::getMorphClass()])
+            ->selectRaw('count(*) filter (where status = ?) as submitted', [Diajukan::getMorphClass()])
+            ->selectRaw('count(*) filter (where status = ?) as in_progress', [Dikerjakan::getMorphClass()])
+            ->selectRaw('count(*) filter (where status = ?) as billing', [Penagihan::getMorphClass()])
             ->first();
 
+        $overdueBy = [];
+
+        foreach (WorkOrderDeadline::cases() as $deadline) {
+            $overdueBy[$deadline->value] = WorkOrder::query()->visibleTo($user)->overdue($deadline)->count();
+        }
+
         return [
-            'total' => (int) $counts?->total,
-            'pending' => (int) $counts?->pending,
-            'overdue' => WorkOrder::query()->visibleTo($user)->overdue()->count(),
+            'submitted' => (int) $counts?->submitted,
+            'in_progress' => (int) $counts?->in_progress,
+            'billing' => (int) $counts?->billing,
+            // Each status has at most one deadline, so the groups never overlap.
+            'overdue' => array_sum($overdueBy),
+            'overdue_by' => $overdueBy,
         ];
     }
 
     /**
-     * Submitted "mendesak" work orders the user may see, waiting longest first.
+     * Active "mendesak" work orders the user may see (the list filtered by
+     * urgency mendesak and status aktif): the earliest in the flow first,
+     * then waiting longest.
      *
-     * @return list<array{id: int, number: string|null, title: string, category: string, requester: array{id: int|null, name: string}, submitted_at: string|null}>
+     * @return list<array{id: int, number: string|null, title: string, category: string, requester: array{id: int|null, name: string}, status: array{value: string, label: string, tone: string}, submitted_at: string|null}>
      */
     private function urgentWorkOrders(User $user): array
     {
         $workOrders = WorkOrder::query()
             ->visibleTo($user)
-            ->where('status', Diajukan::getMorphClass())
+            ->whereIn('status', WorkOrderStatus::activeNames())
             ->where('urgency', WorkOrderUrgency::Mendesak)
             ->withSubmittedAt()
             ->with(['category', 'requester'])
+            ->orderByRaw('array_position(?::text[], status::text)', ['{'.implode(',', WorkOrderStatus::flowOrder()).'}'])
             ->orderBy('submitted_at')
             ->orderBy('id')
             ->limit(self::URGENT_LIMIT)
@@ -114,6 +131,7 @@ class DashboardController extends Controller
             'title' => $workOrder->title,
             'category' => $workOrder->category->name,
             'requester' => ['id' => $workOrder->requester?->id, 'name' => $workOrder->requesterName()],
+            'status' => $workOrder->status->toOption(),
             'submitted_at' => $this->isoMoment($workOrder->getAttribute('submitted_at')),
         ])->all());
     }

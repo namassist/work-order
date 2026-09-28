@@ -28,6 +28,11 @@ class Penagihan extends WorkOrderStatus
         return 'billing';
     }
 
+    public function isActive(): bool
+    {
+        return true;
+    }
+
     public function actionLabel(): string
     {
         return 'Tagihkan';

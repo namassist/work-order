@@ -34,7 +34,7 @@ class WorkOrderPaymentController extends Controller
             return back();
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Pembayaran work order :number dikonfirmasi. Work order selesai.', ['number' => $workOrder->displayNumber()])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Pembayaran work order :number dikonfirmasi. Work order selesai.', ['number' => $workOrder->reference()])]);
 
         return back();
     }

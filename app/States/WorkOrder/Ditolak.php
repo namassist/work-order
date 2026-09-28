@@ -24,6 +24,11 @@ class Ditolak extends WorkOrderStatus
         return 'destructive';
     }
 
+    public function isActive(): bool
+    {
+        return true;
+    }
+
     public function actionLabel(): string
     {
         return 'Tolak';

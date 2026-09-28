@@ -24,6 +24,11 @@ class Dikerjakan extends WorkOrderStatus
         return 'info';
     }
 
+    public function isActive(): bool
+    {
+        return true;
+    }
+
     public function actionLabel(): string
     {
         return 'Kerjakan';

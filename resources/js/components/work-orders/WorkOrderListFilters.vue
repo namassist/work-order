@@ -23,7 +23,7 @@ import { workOrderFilterChips } from '@/lib/workOrderFilters';
 
 /**
  * The Work Order list's toolbar (docs/DESIGN.md › Toolbar filter): search,
- * Status, and Urgensi inline, the rest behind "Filter", the sort at the far
+ * Status (with the "Aktif" group first) and Urgensi inline, the rest behind "Filter", the sort at the far
  * right, and a chip per active filter. Query parameters are the server's, so
  * existing URLs, the export, and dashboard links keep working.
  */
@@ -42,6 +42,7 @@ const filters = useListFilters(
         urgency: props.filters.urgency || ALL,
         sort: props.filters.sort || ALL,
         department: props.filters.department || ALL,
+        target: props.filters.target || ALL,
         category: props.filters.category || ALL,
     },
     () => WorkOrderController.index(),
@@ -54,6 +55,18 @@ const departmentOptions = computed(() =>
         code: department.code,
     })),
 );
+const targetDepartmentOptions = computed(() =>
+    props.targetDepartments.map((department) => ({
+        value: String(department.id),
+        label: department.name,
+        code: department.code,
+    })),
+);
+/** Groups ("Aktif") first, then every single status. */
+const statusOptions = computed(() => [
+    ...props.statusGroups,
+    ...props.statuses,
+]);
 const categoryOptions = computed(() =>
     props.categories.map((category) => ({
         value: String(category.id),
@@ -78,7 +91,9 @@ const popoverCount = computed(
     () =>
         [
             filters.department !== ALL,
+            filters.target !== ALL,
             filters.category !== ALL,
+            filters.overdue,
             filters.from !== '' || filters.to !== '',
             filters.trashed,
         ].filter(Boolean).length,
@@ -99,8 +114,8 @@ const clear = (key: WorkOrderFilterChipKey) => {
         filters.search = '';
     } else if (key === 'created') {
         setCreated({ from: '', to: '' });
-    } else if (key === 'trashed') {
-        filters.trashed = false;
+    } else if (key === 'trashed' || key === 'overdue') {
+        filters[key] = false;
     } else {
         filters[key] = ALL;
     }
@@ -111,7 +126,9 @@ const FILTER_KEYS: WorkOrderFilterChipKey[] = [
     'status',
     'urgency',
     'department',
+    'target',
     'category',
+    'overdue',
     'created',
     'trashed',
 ];
@@ -138,7 +155,7 @@ const reset = () => FILTER_KEYS.forEach(clear);
                 v-model="filters.status"
                 label="Filter status"
                 all-label="Semua status"
-                :options="statuses"
+                :options="statusOptions"
                 trigger-class="w-fit min-w-36 shrink-0"
             />
             <FilterSelect
@@ -151,16 +168,29 @@ const reset = () => FILTER_KEYS.forEach(clear);
             <FilterPopover :count="popoverCount">
                 <FilterField
                     v-if="departments"
-                    label="Departemen"
+                    label="Departemen pemohon"
                     for="filter-department"
                     data-test="filter-department"
                 >
                     <FilterSelect
                         id="filter-department"
                         v-model="filters.department"
-                        label="Filter departemen"
+                        label="Filter departemen pemohon"
                         all-label="Semua departemen"
                         :options="departmentOptions"
+                    />
+                </FilterField>
+                <FilterField
+                    label="Departemen tujuan"
+                    for="filter-target"
+                    data-test="filter-target"
+                >
+                    <FilterSelect
+                        id="filter-target"
+                        v-model="filters.target"
+                        label="Filter departemen tujuan"
+                        all-label="Semua departemen"
+                        :options="targetDepartmentOptions"
                     />
                 </FilterField>
                 <FilterField
@@ -185,6 +215,10 @@ const reset = () => FILTER_KEYS.forEach(clear);
                         @update:range="setCreated"
                     />
                 </FilterField>
+                <div class="flex items-center gap-2" data-test="filter-overdue">
+                    <Checkbox id="filter-overdue" v-model="filters.overdue" />
+                    <Label for="filter-overdue">Hanya yang terlambat</Label>
+                </div>
                 <div
                     v-if="canRestore"
                     class="flex items-center gap-2"
@@ -204,7 +238,7 @@ const reset = () => FILTER_KEYS.forEach(clear);
                         v-model="filters.status"
                         label="Filter status"
                         all-label="Semua status"
-                        :options="statuses"
+                        :options="statusOptions"
                     />
                 </FilterField>
                 <FilterField label="Urgensi" for="sheet-urgency">
@@ -218,15 +252,24 @@ const reset = () => FILTER_KEYS.forEach(clear);
                 </FilterField>
                 <FilterField
                     v-if="departments"
-                    label="Departemen"
+                    label="Departemen pemohon"
                     for="sheet-department"
                 >
                     <FilterSelect
                         id="sheet-department"
                         v-model="filters.department"
-                        label="Filter departemen"
+                        label="Filter departemen pemohon"
                         all-label="Semua departemen"
                         :options="departmentOptions"
+                    />
+                </FilterField>
+                <FilterField label="Departemen tujuan" for="sheet-target">
+                    <FilterSelect
+                        id="sheet-target"
+                        v-model="filters.target"
+                        label="Filter departemen tujuan"
+                        all-label="Semua departemen"
+                        :options="targetDepartmentOptions"
                     />
                 </FilterField>
                 <FilterField label="Kategori" for="sheet-category">
@@ -247,6 +290,10 @@ const reset = () => FILTER_KEYS.forEach(clear);
                         @update:range="setCreated"
                     />
                 </FilterField>
+                <div class="flex items-center gap-2">
+                    <Checkbox id="sheet-overdue" v-model="filters.overdue" />
+                    <Label for="sheet-overdue">Hanya yang terlambat</Label>
+                </div>
                 <div v-if="canRestore" class="flex items-center gap-2">
                     <Checkbox id="sheet-trashed" v-model="filters.trashed" />
                     <Label for="sheet-trashed">Tampilkan terhapus</Label>

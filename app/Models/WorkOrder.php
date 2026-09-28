@@ -252,6 +252,15 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
+     * How messages name the work order: its number, or its quoted title
+     * until it is submitted (never "Draft", which says nothing about which).
+     */
+    public function reference(): string
+    {
+        return $this->number ?? "'{$this->title}'";
+    }
+
+    /**
      * Whether the user may see this work order (FLOW.md §6). Client company
      * (IC) users see their own department's work orders, drafts included.
      * Executor company (Unggul) users see those they entered, and submitted
@@ -357,15 +366,21 @@ class WorkOrder extends Model implements Attachable
      * Late work orders (the dashboard's "Terlambat"): in a status with a
      * deadline() whose date is before today in the display timezone, e.g.
      * the target date while Diajukan or Dikerjakan and the payment due date
-     * while Penagihan. Work orders without that date are never late.
+     * while Penagihan. Work orders without that date are never late. With
+     * $only, just the ones late against that deadline (the dashboard's
+     * breakdown).
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
-    protected function overdue(Builder $query): void
+    protected function overdue(Builder $query, ?WorkOrderDeadline $only = null): void
     {
         $today = DisplayDate::today();
-        $groups = WorkOrderStatus::namesByDeadline();
+        $groups = array_filter(
+            WorkOrderStatus::namesByDeadline(),
+            fn (string $deadline): bool => ! $only instanceof WorkOrderDeadline || $deadline === $only->value,
+            ARRAY_FILTER_USE_KEY,
+        );
 
         $query->where(function (Builder $query) use ($groups, $today): void {
             foreach ($groups as $deadline => $statuses) {

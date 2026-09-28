@@ -56,7 +56,10 @@ import { useCan } from '@/composables/useCan';
 import { useFormatDate } from '@/composables/useFormatDate';
 import { isFiltering, toFilterQuery } from '@/composables/useListFilters';
 import { panelTableClass } from '@/lib/panel';
-import type { WorkOrderFilters } from '@/lib/workOrderFilters';
+import type {
+    WorkOrderFilters,
+    WorkOrderStatusGroupOption,
+} from '@/lib/workOrderFilters';
 import type {
     CategoryOption,
     DepartmentOption,
@@ -70,11 +73,14 @@ const props = defineProps<{
     workOrders: Paginated<WorkOrderListItem>;
     filters: WorkOrderFilters;
     statuses: WorkOrderStatusOption[];
+    statusGroups: WorkOrderStatusGroupOption[];
     urgencies: WorkOrderUrgencyOption[];
     /** Visible, non-deleted work orders per status, ignoring the filters. */
     stats: { total: number; statuses: Record<string, number> };
     /** Null unless the user sees every department's work orders. */
     departments: DepartmentOption[] | null;
+    /** Executor departments, for the target filter. */
+    targetDepartments: DepartmentOption[];
     categories: CategoryOption[];
     can: { create: boolean; restore: boolean; export: boolean };
     /** The most work orders one export may hold. */
@@ -189,8 +195,10 @@ const openHistory = (workOrder: WorkOrderListItem) => {
         <WorkOrderListFilters
             :filters="filters"
             :statuses="statuses"
+            :status-groups="statusGroups"
             :urgencies="urgencies"
             :departments="departments"
+            :target-departments="targetDepartments"
             :categories="categories"
             :can-restore="can.restore"
         >

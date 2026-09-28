@@ -31,7 +31,7 @@ class WorkOrderTransitionController extends Controller
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Work order :number sekarang :status.', [
-            'number' => $workOrder->displayNumber(),
+            'number' => $workOrder->reference(),
             'status' => mb_strtolower($workOrder->status->label()),
         ])]);
 

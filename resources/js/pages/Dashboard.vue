@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import {
-    AlarmClock,
-    ArrowRight,
-    ClipboardList,
-    Hourglass,
-    History,
-    Wrench,
-} from '@lucide/vue';
+import { ArrowRight, History } from '@lucide/vue';
 import { computed } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
 import ActivityEventBadge from '@/components/admin/ActivityEventBadge.vue';
@@ -16,11 +9,12 @@ import RequestOverviewChart from '@/components/dashboard/RequestOverviewChart.vu
 import UrgentWorkOrders from '@/components/dashboard/UrgentWorkOrders.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PagePanel from '@/components/PagePanel.vue';
-import type { StatItem } from '@/components/StatStrip.vue';
 import StatStrip from '@/components/StatStrip.vue';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormatDate } from '@/composables/useFormatDate';
+import type { WorkOrderCounts } from '@/lib/dashboardMetrics';
+import { dashboardMetrics } from '@/lib/dashboardMetrics';
 import { greeting } from '@/lib/greeting';
 import { dashboard } from '@/routes';
 import type {
@@ -33,11 +27,7 @@ import type {
 const props = defineProps<{
     department: { code: string; name: string } | null;
     /** Undefined while the deferred prop loads; null when not allowed. */
-    workOrderCounts?: {
-        total: number;
-        pending: number;
-        overdue: number;
-    } | null;
+    workOrderCounts?: WorkOrderCounts | null;
     /** Undefined while the deferred prop loads; null when not allowed. */
     requestOverview?: RequestOverview | null;
     /** Undefined while the deferred prop loads; null when not allowed. */
@@ -62,40 +52,7 @@ const title = computed(
         `${greeting(new Date(), page.props.displayTimezone)}, ${page.props.auth.user.name}`,
 );
 
-/**
- * Work order metrics over the WO the user may see. "Menunggu Persetujuan"
- * counts submitted WOs in the provisional flow; "Terlambat" counts WOs past
- * the date their status is late against (WorkOrderStatus::deadline(): the
- * target date, or the invoice's payment due date in Penagihan). "Dalam
- * Pengerjaan" waits for the execution stages.
- */
-const metrics = computed<StatItem[]>(() => {
-    const counts = props.workOrderCounts;
-
-    return [
-        {
-            label: 'Total WO',
-            icon: ClipboardList,
-            value: counts === undefined ? undefined : (counts?.total ?? null),
-        },
-        {
-            label: 'Menunggu Persetujuan',
-            icon: Hourglass,
-            value: counts === undefined ? undefined : (counts?.pending ?? null),
-        },
-        {
-            label: 'Dalam Pengerjaan',
-            icon: Wrench,
-            value: null,
-            hint: 'Segera hadir',
-        },
-        {
-            label: 'Terlambat',
-            icon: AlarmClock,
-            value: counts === undefined ? undefined : (counts?.overdue ?? null),
-        },
-    ];
-});
+const metrics = computed(() => dashboardMetrics(props.workOrderCounts));
 </script>
 
 <template>

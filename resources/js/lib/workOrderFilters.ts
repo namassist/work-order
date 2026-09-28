@@ -11,8 +11,13 @@ export type WorkOrderFilters = {
     search: string;
     status: string;
     urgency: string;
+    /** Requester (client company) department id. */
     department: string;
+    /** Target (executor company) department id. */
+    target: string;
     category: string;
+    /** Only work orders late against their status's deadline. */
+    overdue: boolean;
     /** Created on or after this WITA calendar day (Y-m-d). */
     from: string;
     /** Created on or before this WITA calendar day (Y-m-d). */
@@ -30,18 +35,26 @@ export const EMPTY_WORK_ORDER_FILTERS: WorkOrderFilters = {
     status: '',
     urgency: '',
     department: '',
+    target: '',
     category: '',
+    overdue: false,
     from: '',
     to: '',
     trashed: false,
     sort: '',
 };
 
+/** A status filter value standing for several statuses, e.g. 'aktif'. */
+export type WorkOrderStatusGroupOption = { value: string; label: string };
+
 export type WorkOrderFilterOptions = {
     statuses: WorkOrderStatusOption[];
+    statusGroups: WorkOrderStatusGroupOption[];
     urgencies: WorkOrderUrgencyOption[];
     /** Null unless the user sees every department's work orders. */
     departments: DepartmentOption[] | null;
+    /** Executor departments; every user may filter by them. */
+    targetDepartments: DepartmentOption[];
     categories: CategoryOption[];
 };
 
@@ -51,7 +64,9 @@ export type WorkOrderFilterChipKey =
     | 'status'
     | 'urgency'
     | 'department'
+    | 'target'
     | 'category'
+    | 'overdue'
     | 'created'
     | 'trashed';
 
@@ -77,7 +92,7 @@ export function workOrderFilterChips(
     }
 
     if (filters.status) {
-        const status = options.statuses.find(
+        const status = [...options.statusGroups, ...options.statuses].find(
             (option) => option.value === filters.status,
         );
         chips.push({
@@ -100,7 +115,15 @@ export function workOrderFilterChips(
         const department = byId(options.departments, filters.department);
         chips.push({
             key: 'department',
-            label: `Departemen: ${department?.code ?? filters.department}`,
+            label: `Dept. pemohon: ${department?.code ?? filters.department}`,
+        });
+    }
+
+    if (filters.target) {
+        const department = byId(options.targetDepartments, filters.target);
+        chips.push({
+            key: 'target',
+            label: `Dept. tujuan: ${department?.code ?? filters.target}`,
         });
     }
 
@@ -110,6 +133,10 @@ export function workOrderFilterChips(
             key: 'category',
             label: `Kategori: ${category?.name ?? filters.category}`,
         });
+    }
+
+    if (filters.overdue) {
+        chips.push({ key: 'overdue', label: 'Terlambat' });
     }
 
     if (filters.from || filters.to) {

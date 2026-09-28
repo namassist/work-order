@@ -19,6 +19,11 @@ use Spatie\ModelStates\StateConfig;
 abstract class WorkOrderStatus extends State
 {
     /**
+     * The status filter value for every active status (isActive()).
+     */
+    public const string GROUP_ACTIVE = 'aktif';
+
+    /**
      * The status label shown in badges, lists, and the timeline.
      */
     abstract public function label(): string;
@@ -28,6 +33,14 @@ abstract class WorkOrderStatus extends State
      * billing, success, destructive, or muted.
      */
     abstract public function tone(): string;
+
+    /**
+     * Whether a work order in this status is still open work: submitted and
+     * not final (Diajukan, Ditolak, Dikerjakan, Penagihan). The list's
+     * "Aktif" status group and the dashboard's "WO Mendesak" read it, so
+     * every new status must decide it.
+     */
+    abstract public function isActive(): bool;
 
     /**
      * The label of the button that moves a work order into this status.
@@ -250,7 +263,69 @@ abstract class WorkOrderStatus extends State
      */
     public static function options(): array
     {
-        return array_map(fn (string $class): array => new $class(new WorkOrder)->toOption(), [
+        return array_map(fn (self $state): array => $state->toOption(), self::inFlowOrder());
+    }
+
+    /**
+     * The stored names of every status, in flow order.
+     *
+     * @return list<string>
+     */
+    public static function flowOrder(): array
+    {
+        return array_map(fn (self $state): string => $state->getValue(), self::inFlowOrder());
+    }
+
+    /**
+     * The stored names of the statuses whose isActive() is true, in flow order.
+     *
+     * @return list<string>
+     */
+    public static function activeNames(): array
+    {
+        return array_values(array_map(
+            fn (self $state): string => $state->getValue(),
+            array_filter(self::inFlowOrder(), fn (self $state): bool => $state->isActive()),
+        ));
+    }
+
+    /**
+     * The status filter's groups, offered before the single statuses.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public static function groupOptions(): array
+    {
+        return [['value' => self::GROUP_ACTIVE, 'label' => 'Aktif']];
+    }
+
+    /**
+     * The stored names a status filter value stands for: a group's
+     * statuses, or the single status itself.
+     *
+     * @return list<string>
+     */
+    public static function namesFor(string $filter): array
+    {
+        return $filter === self::GROUP_ACTIVE ? self::activeNames() : [$filter];
+    }
+
+    /**
+     * The label of a status filter value: a group's or a status's.
+     */
+    public static function filterLabelFor(string $filter): string
+    {
+        $group = array_find(self::groupOptions(), fn (array $option): bool => $option['value'] === $filter);
+
+        return $group['label'] ?? self::labelFor($filter);
+    }
+
+    /**
+     * @return list<self>
+     */
+    private static function inFlowOrder(): array
+    {
+        return array_map(fn (string $class): self => new $class(new WorkOrder), [
             Draft::class,
             Diajukan::class,
             Ditolak::class,

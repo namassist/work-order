@@ -7,8 +7,10 @@ import {
 
 const options: WorkOrderFilterOptions = {
     statuses: [{ value: 'diajukan', label: 'Diajukan', tone: 'warning' }],
+    statusGroups: [{ value: 'aktif', label: 'Aktif' }],
     urgencies: [{ value: 'mendesak', label: 'Mendesak' }],
     departments: [{ id: 3, code: 'IT', name: 'Teknologi Informasi' }],
+    targetDepartments: [{ id: 7, code: 'ENG', name: 'Engineering' }],
     categories: [{ id: 2, code: 'PRB', name: 'Perbaikan' }],
 };
 
@@ -30,7 +32,9 @@ describe('workOrderFilterChips', () => {
                     status: 'diajukan',
                     urgency: 'mendesak',
                     department: '3',
+                    target: '7',
                     category: '2',
+                    overdue: true,
                     from: '2026-09-01',
                     to: '2026-09-27',
                     trashed: true,
@@ -42,8 +46,10 @@ describe('workOrderFilterChips', () => {
             { key: 'search', label: 'Cari: “pompa”' },
             { key: 'status', label: 'Status: Diajukan' },
             { key: 'urgency', label: 'Urgensi: Mendesak' },
-            { key: 'department', label: 'Departemen: IT' },
+            { key: 'department', label: 'Dept. pemohon: IT' },
+            { key: 'target', label: 'Dept. tujuan: ENG' },
             { key: 'category', label: 'Kategori: Perbaikan' },
+            { key: 'overdue', label: 'Terlambat' },
             { key: 'created', label: 'Dibuat: 1 Sep 2026 – 27 Sep 2026' },
             { key: 'trashed', label: 'Terhapus' },
         ]);
@@ -64,6 +70,15 @@ describe('workOrderFilterChips', () => {
                 { ...EMPTY_WORK_ORDER_FILTERS, department: '9' },
                 { ...options, departments: null },
             ),
-        ).toEqual([{ key: 'department', label: 'Departemen: 9' }]);
+        ).toEqual([{ key: 'department', label: 'Dept. pemohon: 9' }]);
+    });
+
+    it('labels a status group like a status', () => {
+        expect(
+            workOrderFilterChips(
+                { ...EMPTY_WORK_ORDER_FILTERS, status: 'aktif' },
+                options,
+            ),
+        ).toEqual([{ key: 'status', label: 'Status: Aktif' }]);
     });
 });
