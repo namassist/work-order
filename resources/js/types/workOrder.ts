@@ -151,6 +151,7 @@ export type UrgentWorkOrder = {
     title: string;
     category: string;
     requester: { id: number | null; name: string };
+    status: WorkOrderStatusOption;
     /** ISO moment of the first submission. */
     submitted_at: string | null;
 };

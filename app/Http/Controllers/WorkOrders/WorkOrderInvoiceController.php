@@ -32,7 +32,7 @@ class WorkOrderInvoiceController extends Controller
             return back();
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invoice work order :number diterbitkan.', ['number' => $workOrder->displayNumber()])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invoice work order :number diterbitkan.', ['number' => $workOrder->reference()])]);
 
         return back();
     }

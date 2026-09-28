@@ -25,11 +25,13 @@ const options = {
         { value: 'draft', label: 'Draft', tone: 'secondary' },
         { value: 'diajukan', label: 'Diajukan', tone: 'warning' },
     ],
+    statusGroups: [{ value: 'aktif', label: 'Aktif' }],
     urgencies: [
         { value: 'normal', label: 'Normal' },
         { value: 'mendesak', label: 'Mendesak' },
     ],
     departments: [{ id: 3, code: 'IT', name: 'Teknologi Informasi' }],
+    targetDepartments: [{ id: 7, code: 'ENG', name: 'Engineering' }],
     categories: [
         { id: 2, code: 'PRB', name: 'Perbaikan' },
         { id: 5, code: 'PGD', name: 'Pengadaan' },
@@ -90,6 +92,48 @@ describe('WorkOrderListFilters', () => {
         expect(inBody('[data-test="filter-trashed"]')).toBeNull();
     });
 
+    it('offers Departemen tujuan and Terlambat to every user', async () => {
+        const wrapper = mountFilters(
+            {},
+            { departments: null, canRestore: false },
+        );
+        await openPopover(wrapper);
+
+        expect(inBody('[data-test="filter-target"]')).not.toBeNull();
+        expect(inBody('[data-test="filter-overdue"]')).not.toBeNull();
+    });
+
+    it('opens a target and overdue URL with their chips, counted on the Filter button', () => {
+        const wrapper = mountFilters({ target: '7', overdue: true });
+
+        expect(chipLabels(wrapper)).toEqual(['Dept. tujuan: ENG', 'Terlambat']);
+        expect(
+            wrapper.get('[data-test="filter-popover-trigger"]').text(),
+        ).toContain('2');
+    });
+
+    it('reloads without overdue when its chip is removed', async () => {
+        const wrapper = mountFilters({ target: '7', overdue: true });
+
+        const overdueChip = wrapper
+            .findAll('[data-test="filter-chip"]')
+            .find((chip) => chip.text() === 'Terlambat');
+        await overdueChip?.trigger('click');
+        await flushPromises();
+
+        expect(lastQuery()).toEqual({ target: '7' });
+    });
+
+    it('sends overdue as 1 when Hanya yang terlambat is checked', async () => {
+        const wrapper = mountFilters();
+        await openPopover(wrapper);
+
+        (inBody('#filter-overdue') as HTMLElement).click();
+        await flushPromises();
+
+        expect(lastQuery()).toEqual({ overdue: 1 });
+    });
+
     it('opens an existing filtered URL with its chips, and none for the sort', () => {
         const wrapper = mountFilters({
             status: 'diajukan',
@@ -112,12 +156,12 @@ describe('WorkOrderListFilters', () => {
 
     it('opens the dashboard "WO Mendesak" link with its two chips', () => {
         const wrapper = mountFilters({
-            status: 'diajukan',
+            status: 'aktif',
             urgency: 'mendesak',
         });
 
         expect(chipLabels(wrapper)).toEqual([
-            'Status: Diajukan',
+            'Status: Aktif',
             'Urgensi: Mendesak',
         ]);
     });
@@ -180,6 +224,8 @@ describe('WorkOrderListFilters', () => {
             search: 'pompa',
             status: 'diajukan',
             department: '3',
+            target: '7',
+            overdue: true,
             trashed: true,
             sort: 'urgensi',
         });

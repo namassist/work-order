@@ -52,10 +52,15 @@ class ListWorkOrdersRequest extends FormRequest
     {
         return [
             'search' => ['nullable', 'string', 'max:100'],
-            'status' => ['nullable', Rule::in(array_column(WorkOrderStatus::options(), 'value'))],
+            'status' => ['nullable', Rule::in([
+                ...array_column(WorkOrderStatus::groupOptions(), 'value'),
+                ...array_column(WorkOrderStatus::options(), 'value'),
+            ])],
             'urgency' => ['nullable', Rule::enum(WorkOrderUrgency::class)],
             'department' => ['nullable', 'integer'],
+            'target' => ['nullable', 'integer'],
             'category' => ['nullable', 'integer'],
+            'overdue' => ['nullable', 'boolean'],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
             'trashed' => ['nullable', 'boolean'],
@@ -66,7 +71,7 @@ class ListWorkOrdersRequest extends FormRequest
     /**
      * The validated filters and sort, with an empty string (or false) for each one not set.
      *
-     * @return array{search: string, status: string, urgency: string, department: string, category: string, from: string, to: string, trashed: bool, sort: string}
+     * @return array{search: string, status: string, urgency: string, department: string, target: string, category: string, overdue: bool, from: string, to: string, trashed: bool, sort: string}
      */
     public function filters(): array
     {
@@ -75,7 +80,9 @@ class ListWorkOrdersRequest extends FormRequest
             'status' => (string) $this->validated('status'),
             'urgency' => (string) $this->validated('urgency'),
             'department' => (string) $this->validated('department'),
+            'target' => (string) $this->validated('target'),
             'category' => (string) $this->validated('category'),
+            'overdue' => (bool) $this->validated('overdue'),
             'from' => (string) $this->validated('from'),
             'to' => (string) $this->validated('to'),
             'trashed' => (bool) $this->validated('trashed'),
@@ -97,10 +104,12 @@ class ListWorkOrdersRequest extends FormRequest
         return WorkOrder::query()
             ->visibleTo($this->listingUser())
             ->search($filters['search'])
-            ->when($filters['status'], fn (Builder $query, string $status) => $query->where('status', $status))
+            ->when($filters['status'], fn (Builder $query, string $status) => $query->whereIn('status', WorkOrderStatus::namesFor($status)))
             ->when($filters['urgency'], fn (Builder $query, string $urgency) => $query->where('urgency', $urgency))
             ->when($filters['department'], fn (Builder $query, string $id) => $query->where('requester_department_id', (int) $id))
+            ->when($filters['target'], fn (Builder $query, string $id) => $query->where('target_department_id', (int) $id))
             ->when($filters['category'], fn (Builder $query, string $id) => $query->where('work_order_category_id', (int) $id))
+            ->when($filters['overdue'], fn (Builder $query) => $query->overdue())
             ->when($filters['from'], fn (Builder $query, string $from) => $query
                 ->where('created_at', '>=', DisplayDate::startOfDayUtc($from)))
             ->when($filters['to'], fn (Builder $query, string $to) => $query

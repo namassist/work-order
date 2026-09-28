@@ -39,11 +39,14 @@ const MATRIX_WORK_ORDERS = ['own draft', 'on-behalf draft', 'submitted', 'on-beh
 /** Submitted at least once, so seen by view-all. */
 const MATRIX_SUBMITTED = ['submitted', 'on-behalf submitted', 'other IC dept', 'other target', 'rejected', 'in progress', 'billed', 'paid'];
 
-/** Diajukan, which counts as pending. */
+/** Diajukan: the dashboard's "Menunggu Diterima". */
 const MATRIX_PENDING = ['submitted', 'on-behalf submitted', 'other IC dept', 'other target'];
 
-/** Past the date their status is late against: the target date (Diajukan, Dikerjakan) or the payment due date (Penagihan). Rejected and paid are past their target date too, but do not count. */
-const MATRIX_OVERDUE = [...MATRIX_PENDING, 'in progress', 'billed'];
+/** Past their target date while Diajukan or Dikerjakan. Rejected and paid are past their target date too, but do not count. */
+const MATRIX_OVERDUE_TARGET = [...MATRIX_PENDING, 'in progress'];
+
+/** Past the payment due date while Penagihan. */
+const MATRIX_OVERDUE_PAYMENT = ['billed'];
 
 /**
  * Builds the departments, users, and work orders of the matrix, and returns
@@ -250,12 +253,17 @@ it('shows invoices and downloads their files only on visible work orders', funct
 
 it('counts and lists only visible work orders on the dashboard', function (string $userKey, array $visible) {
     ['user' => $user, 'workOrders' => $workOrders] = visibilityWorld($userKey);
-    $pending = array_intersect($visible, MATRIX_PENDING);
-    $overdue = array_intersect($visible, MATRIX_OVERDUE);
+    $count = fn (array $keys): int => count(array_intersect($visible, $keys));
 
     $this->actingAs($user)->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page): Assert => $page
         ->loadDeferredProps(fn (Assert $reload): Assert => $reload
-            ->where('workOrderCounts', ['total' => count($visible), 'pending' => count($pending), 'overdue' => count($overdue)])
+            ->where('workOrderCounts', [
+                'submitted' => $count(MATRIX_PENDING),
+                'in_progress' => $count(['in progress']),
+                'billing' => $count(['billed']),
+                'overdue' => $count([...MATRIX_OVERDUE_TARGET, ...MATRIX_OVERDUE_PAYMENT]),
+                'overdue_by' => ['target_date' => $count(MATRIX_OVERDUE_TARGET), 'payment_due_date' => $count(MATRIX_OVERDUE_PAYMENT)],
+            ])
             // "WO Terbaru" lists at most 8 of them.
             ->where('recentWorkOrders', fn ($rows): bool => count($rows) === min(8, count($visible))
                 && array_diff(matrixKeys($workOrders, collect($rows)->pluck('id')), $visible) === [])));

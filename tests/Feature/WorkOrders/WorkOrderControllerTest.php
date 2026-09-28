@@ -93,6 +93,80 @@ describe('index', function () {
                 ->where('workOrders.data.0.id', $match->id));
     });
 
+    it('filters by the aktif status group: every active status, and nothing else', function () {
+        $active = collect(['submitted', 'rejected', 'inProgress', 'billed'])
+            ->map(fn (string $state): int => WorkOrder::factory()->{$state}()->create(['requester_department_id' => $this->department->id])->id);
+        ownWorkOrder();
+        WorkOrder::factory()->paid()->create(['requester_department_id' => $this->department->id]);
+        WorkOrder::factory()->cancelled()->create(['requester_department_id' => $this->department->id]);
+
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+            ->get(route('work-orders.index', ['status' => 'aktif']))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->sort()->values()->all() === $active->sort()->values()->all())
+                ->where('filters.status', 'aktif')
+                ->where('statusGroups', [['value' => 'aktif', 'label' => 'Aktif']]));
+    });
+
+    it('filters by target department, offering every user the active executor departments', function () {
+        $engineering = Department::factory()->create(['code' => 'ENG']);
+        $general = Department::factory()->create(['code' => 'GA']);
+        Department::factory()->create(['code' => 'OLD'])->delete();
+        Department::factory()->inactive()->create(['code' => 'OFF']);
+        $match = WorkOrder::factory()->targeting($engineering)->submitted()->create(['requester_department_id' => $this->department->id]);
+        WorkOrder::factory()->targeting($general)->submitted()->create(['requester_department_id' => $this->department->id]);
+        WorkOrder::factory()->targeting($engineering)->submitted()->create();
+
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+            ->get(route('work-orders.index', ['target' => $engineering->id]))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->has('workOrders.data', 1)
+                ->where('workOrders.data.0.id', $match->id)
+                ->where('filters.target', (string) $engineering->id)
+                ->where('targetDepartments', fn ($departments): bool => collect($departments)->pluck('id')->all()
+                    === Department::query()->whereRelation('company', 'is_client', false)->where('is_active', true)->orderBy('code')->pluck('id')->all()
+                    && collect($departments)->pluck('code')->intersect(['ENG', 'GA', 'OLD', 'OFF', 'IT'])->values()->all() === ['ENG', 'GA'])
+                ->where('targetDepartments', fn ($departments): bool => collect($departments)->firstWhere('code', 'ENG') === ['id' => $engineering->id, 'code' => 'ENG', 'name' => $engineering->name]));
+    });
+
+    it('also offers an inactive or deleted target department of a work order the user may see, and no other', function () {
+        $closed = Department::factory()->inactive()->create(['code' => 'CLOSED']);
+        $gone = Department::factory()->create(['code' => 'GONE']);
+        $hidden = Department::factory()->inactive()->create(['code' => 'HIDDEN']);
+        WorkOrder::factory()->targeting($closed)->submitted()->create(['requester_department_id' => $this->department->id]);
+        WorkOrder::factory()->targeting($gone)->submitted()->create(['requester_department_id' => $this->department->id]);
+        WorkOrder::factory()->targeting($hidden)->submitted()->create();
+        $gone->delete();
+
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+            ->get(route('work-orders.index'))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('targetDepartments', fn ($departments): bool => collect($departments)->pluck('code')->intersect(['CLOSED', 'GONE', 'HIDDEN'])->values()->all() === ['CLOSED', 'GONE']));
+    });
+
+    it('filters to overdue work orders, late against either deadline', function () {
+        // 07:30 WITA on 25 Sep, still 24 Sep in UTC.
+        $this->travelTo(Carbon::parse('2026-09-24 23:30', 'UTC'));
+        $inDepartment = ['requester_department_id' => $this->department->id];
+        $lateTarget = WorkOrder::factory()->inProgress()->create([...$inDepartment, 'target_date' => '2026-09-24']);
+        $lateInvoice = WorkOrder::factory()->billed(['due_date' => '2026-09-24'])->create($inDepartment);
+        WorkOrder::factory()->inProgress()->create([...$inDepartment, 'target_date' => '2026-09-25']);
+        WorkOrder::factory()->billed(['due_date' => null])->create([...$inDepartment, 'target_date' => '2026-09-01']);
+        WorkOrder::factory()->inProgress()->create(['target_date' => '2026-09-01']);
+
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+            ->get(route('work-orders.index', ['overdue' => 1]))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->sort()->values()->all() === collect([$lateTarget->id, $lateInvoice->id])->sort()->values()->all())
+                ->where('filters.overdue', true));
+    });
+
+    it('rejects an unknown target department and overdue value', function () {
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+            ->get(route('work-orders.index', ['target' => 'eng', 'overdue' => 'ya']))
+            ->assertSessionHasErrors(['target', 'overdue']);
+    });
+
     it('filters the created date range by WITA days', function () {
         // 2026-09-24 23:30 UTC is 25 Sep 07:30 WITA.
         $inside = ownWorkOrder(['created_at' => Carbon::parse('2026-09-24 23:30', 'UTC')]);
@@ -418,13 +492,26 @@ describe('edit and update', function () {
 
 describe('destroy and restore', function () {
     it('soft-deletes a draft and restores it', function () {
-        $workOrder = ownWorkOrder();
+        $workOrder = ownWorkOrder(['title' => 'Lampu gudang']);
         $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersDelete, Permission::WorkOrdersRestore));
 
         $this->delete(route('work-orders.destroy', $workOrder))->assertRedirect(route('work-orders.index'));
         $this->assertSoftDeleted($workOrder);
 
-        $this->patch(route('work-orders.restore', $workOrder))->assertRedirect();
+        $this->patch(route('work-orders.restore', $workOrder))
+            ->assertRedirect()
+            ->assertInertiaFlash('toast.message', "Work order 'Lampu gudang' dipulihkan.");
+        $this->assertNotSoftDeleted($workOrder);
+    });
+
+    it('refuses to delete a cancelled draft without telling the user to cancel it', function () {
+        $workOrder = ownWorkOrder(['title' => 'Lampu gudang', 'status' => 'dibatalkan']);
+
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersDelete))
+            ->delete(route('work-orders.destroy', $workOrder))
+            ->assertInertiaFlash('toast.type', 'error')
+            ->assertInertiaFlash('toast.message', 'Draft yang sudah dibatalkan tidak dapat dihapus.');
+
         $this->assertNotSoftDeleted($workOrder);
     });
 
@@ -435,7 +522,8 @@ describe('destroy and restore', function () {
             ->from(route('work-orders.show', $workOrder))
             ->delete(route('work-orders.destroy', $workOrder))
             ->assertRedirect(route('work-orders.show', $workOrder))
-            ->assertInertiaFlash('toast.type', 'error');
+            ->assertInertiaFlash('toast.type', 'error')
+            ->assertInertiaFlash('toast.message', 'Work order WO/IT/2026/09/0001 sudah diajukan dan tidak dapat dihapus. Batalkan bila tidak diperlukan.');
 
         $this->assertNotSoftDeleted($workOrder);
     });

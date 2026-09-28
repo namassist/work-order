@@ -49,6 +49,7 @@ it('sets every status property per FLOW.md §5', function () {
 
         return [$option['value'] => [
             'tone' => $state?->tone(),
+            'active' => $state?->isActive(),
             'editable' => $state?->isEditable(),
             'deletable' => $state?->isDeletable(),
             'comments' => $state?->acceptsComments(),
@@ -64,15 +65,22 @@ it('sets every status property per FLOW.md §5', function () {
     });
 
     expect($properties->all())->toBe([
-        'draft' => ['tone' => 'secondary', 'editable' => true, 'deletable' => true, 'comments' => true, 'deadline' => null, 'target' => false, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => null, 'waits' => 'requester', 'form' => null],
-        'diajukan' => ['tone' => 'warning', 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'target' => true, 'note' => false, 'number' => true, 'attachments' => [], 'by' => 'requester', 'waits' => 'executor', 'form' => null],
-        'ditolak' => ['tone' => 'destructive', 'editable' => true, 'deletable' => false, 'comments' => true, 'deadline' => null, 'target' => true, 'note' => true, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => 'executor', 'waits' => 'requester', 'form' => null],
-        'dikerjakan' => ['tone' => 'info', 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'target' => true, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'executor', 'bast' => 'executor'], 'by' => 'executor', 'waits' => 'executor', 'form' => null],
-        'penagihan' => ['tone' => 'billing', 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'payment_due_date', 'target' => true, 'note' => false, 'number' => false, 'attachments' => ['bukti_bayar' => 'finance'], 'by' => 'executor', 'waits' => 'finance', 'form' => 'invoice'],
-        'selesai' => ['tone' => 'success', 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'target' => true, 'note' => false, 'number' => false, 'attachments' => [], 'by' => 'finance', 'waits' => null, 'form' => 'payment'],
-        'dibatalkan' => ['tone' => 'muted', 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'target' => false, 'note' => true, 'number' => false, 'attachments' => [], 'by' => 'requester', 'waits' => null, 'form' => null],
+        'draft' => ['tone' => 'secondary', 'active' => false, 'editable' => true, 'deletable' => true, 'comments' => true, 'deadline' => null, 'target' => false, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => null, 'waits' => 'requester', 'form' => null],
+        'diajukan' => ['tone' => 'warning', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'target' => true, 'note' => false, 'number' => true, 'attachments' => [], 'by' => 'requester', 'waits' => 'executor', 'form' => null],
+        'ditolak' => ['tone' => 'destructive', 'active' => true, 'editable' => true, 'deletable' => false, 'comments' => true, 'deadline' => null, 'target' => true, 'note' => true, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => 'executor', 'waits' => 'requester', 'form' => null],
+        'dikerjakan' => ['tone' => 'info', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'target' => true, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'executor', 'bast' => 'executor'], 'by' => 'executor', 'waits' => 'executor', 'form' => null],
+        'penagihan' => ['tone' => 'billing', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'payment_due_date', 'target' => true, 'note' => false, 'number' => false, 'attachments' => ['bukti_bayar' => 'finance'], 'by' => 'executor', 'waits' => 'finance', 'form' => 'invoice'],
+        'selesai' => ['tone' => 'success', 'active' => false, 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'target' => true, 'note' => false, 'number' => false, 'attachments' => [], 'by' => 'finance', 'waits' => null, 'form' => 'payment'],
+        'dibatalkan' => ['tone' => 'muted', 'active' => false, 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'target' => false, 'note' => true, 'number' => false, 'attachments' => [], 'by' => 'requester', 'waits' => null, 'form' => null],
     ]);
 });
+
+it('calls a status active exactly when it is submitted and not final', function (string $status) {
+    $state = WorkOrderStatus::fromName($status);
+    $isFinal = WorkOrderStatus::config()->transitionableStates($status) === [];
+
+    expect($state?->isActive())->toBe($state?->requiresTargetDepartment() && ! $isFinal);
+})->with(fn (): array => WorkOrderStatus::flowOrder());
 
 it('refuses a work order without a number in every status after the first submission', function (string $status) {
     $factory = WorkOrder::factory()->by($this->pemohon)->targeting($this->target);

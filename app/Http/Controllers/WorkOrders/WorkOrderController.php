@@ -67,6 +67,7 @@ class WorkOrderController extends Controller
             ]),
             'filters' => $request->filters(),
             'statuses' => WorkOrderStatus::options(),
+            'statusGroups' => WorkOrderStatus::groupOptions(),
             'urgencies' => WorkOrderUrgency::options(),
             'stats' => $this->statusCounts($user),
             // Only users who see other departments can filter by (requesting, so client company) department.
@@ -76,6 +77,7 @@ class WorkOrderController extends Controller
                     ->orderBy('code')
                     ->get(['id', 'code', 'name'])
                 : null,
+            'targetDepartments' => $this->filterableTargetDepartments($user),
             'categories' => WorkOrderCategory::orderBy('code')->get(['id', 'code', 'name']),
             'can' => [
                 'create' => $user->can('create', WorkOrder::class),
@@ -270,10 +272,15 @@ class WorkOrderController extends Controller
         Gate::authorize('delete', $workOrder);
 
         if (! $workOrder->status->isDeletable()) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Work order :number sudah :status dan tidak dapat dihapus. Batalkan bila tidak diperlukan.', [
-                'number' => $workOrder->displayNumber(),
-                'status' => mb_strtolower($workOrder->status->label()),
-            ])]);
+            // Never submitted yet not deletable: a draft that was cancelled.
+            $message = $workOrder->wasSubmitted()
+                ? __('Work order :number sudah :status dan tidak dapat dihapus. Batalkan bila tidak diperlukan.', [
+                    'number' => $workOrder->reference(),
+                    'status' => mb_strtolower($workOrder->status->label()),
+                ])
+                : __('Draft yang sudah dibatalkan tidak dapat dihapus.');
+
+            Inertia::flash('toast', ['type' => 'error', 'message' => $message]);
 
             return back();
         }
@@ -294,7 +301,7 @@ class WorkOrderController extends Controller
 
         $workOrder->restore();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Work order :number dipulihkan.', ['number' => $workOrder->displayNumber()])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Work order :number dipulihkan.', ['number' => $workOrder->reference()])]);
 
         return back();
     }
@@ -329,6 +336,25 @@ class WorkOrderController extends Controller
             ->where(fn (Builder $query) => $query
                 ->where(fn (Builder $query) => $query->where('is_active', true)->whereNull('deleted_at'))
                 ->when($workOrder?->target_department_id, fn (Builder $query, int $id) => $query->orWhere('id', $id)))
+            ->orderBy('code')
+            ->get(['id', 'code', 'name']);
+    }
+
+    /**
+     * Target departments every user may filter the list by: the active
+     * executor departments the form offers, plus deactivated or deleted
+     * ones that a work order the user may see is addressed to. So a filter
+     * never names a department the user could not already see.
+     *
+     * @return Collection<int, Department>
+     */
+    private function filterableTargetDepartments(User $user): Collection
+    {
+        return Department::withTrashed()
+            ->whereRelation('company', 'is_client', false)
+            ->where(fn (Builder $query) => $query
+                ->where(fn (Builder $query) => $query->where('is_active', true)->whereNull('deleted_at'))
+                ->orWhereIn('id', WorkOrder::query()->visibleTo($user)->whereNotNull('target_department_id')->select('target_department_id')))
             ->orderBy('code')
             ->get(['id', 'code', 'name']);
     }

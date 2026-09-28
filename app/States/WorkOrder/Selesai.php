@@ -23,6 +23,11 @@ class Selesai extends WorkOrderStatus
         return 'success';
     }
 
+    public function isActive(): bool
+    {
+        return false;
+    }
+
     public function actionLabel(): string
     {
         return 'Konfirmasi pembayaran';

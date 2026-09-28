@@ -20,6 +20,11 @@ class Diajukan extends WorkOrderStatus
         return 'warning';
     }
 
+    public function isActive(): bool
+    {
+        return true;
+    }
+
     public function actionLabel(): string
     {
         return 'Ajukan';

@@ -32,10 +32,12 @@ class ExportWorkOrdersRequest extends ListWorkOrdersRequest
 
         $parts = array_filter([
             'Cari' => $filters['search'],
-            'Status' => $filters['status'] === '' ? '' : WorkOrderStatus::labelFor($filters['status']),
+            'Status' => $filters['status'] === '' ? '' : WorkOrderStatus::filterLabelFor($filters['status']),
             'Urgensi' => WorkOrderUrgency::tryFrom($filters['urgency'])?->label() ?? '',
-            'Departemen' => $filters['department'] === '' ? '' : $this->codeOf(Department::withTrashed(), $filters['department']),
+            'Dept. pemohon' => $filters['department'] === '' ? '' : $this->codeOf(Department::withTrashed(), $filters['department']),
+            'Dept. tujuan' => $filters['target'] === '' ? '' : $this->codeOf(Department::withTrashed(), $filters['target']),
             'Kategori' => $filters['category'] === '' ? '' : $this->codeOf(WorkOrderCategory::withTrashed(), $filters['category']),
+            'Terlambat' => $filters['overdue'] ? 'Ya' : '',
             'Dari' => $filters['from'],
             'Sampai' => $filters['to'],
             'Terhapus' => $filters['trashed'] ? 'Ya' : '',

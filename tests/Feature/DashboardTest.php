@@ -63,20 +63,57 @@ test('users who cannot view the activity log get no activity', function () {
         ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('recentActivities', null));
 });
 
-test('work order counts cover only the work orders the user may see', function () {
+/**
+ * The dashboard's counts with every card at zero but the given ones.
+ *
+ * @param  array<string, mixed>  $counts
+ * @return array<string, mixed>
+ */
+function dashboardCounts(array $counts = []): array
+{
+    return array_replace_recursive([
+        'submitted' => 0,
+        'in_progress' => 0,
+        'billing' => 0,
+        'overdue' => 0,
+        'overdue_by' => ['target_date' => 0, 'payment_due_date' => 0],
+    ], $counts);
+}
+
+test('each card counts its status over the work orders the user may see', function () {
     $department = Department::factory()->client()->create();
-    WorkOrder::factory()->create(['requester_department_id' => $department->id]);
-    WorkOrder::factory()->submitted()->create(['requester_department_id' => $department->id]);
-    WorkOrder::factory()->cancelled()->create(['requester_department_id' => $department->id]);
+    $inDepartment = ['requester_department_id' => $department->id];
+    WorkOrder::factory()->create($inDepartment);
+    WorkOrder::factory()->submitted()->count(2)->create($inDepartment);
+    WorkOrder::factory()->rejected()->create($inDepartment);
+    WorkOrder::factory()->inProgress()->create($inDepartment);
+    WorkOrder::factory()->billed()->count(3)->create($inDepartment);
+    WorkOrder::factory()->paid()->create($inDepartment);
+    WorkOrder::factory()->cancelled()->create($inDepartment);
+    WorkOrder::factory()->inProgress()->create($inDepartment)->delete();
     WorkOrder::factory()->submitted()->create();
-    WorkOrder::factory()->create(['requester_department_id' => $department->id])->delete();
+    WorkOrder::factory()->billed()->create();
 
     $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->missing('workOrderCounts')
             ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
-                ->where('workOrderCounts', ['total' => 3, 'pending' => 1, 'overdue' => 0])));
+                ->where('workOrderCounts', dashboardCounts(['submitted' => 2, 'in_progress' => 1, 'billing' => 3]))));
+});
+
+test('an executor user\'s cards count only work orders addressed to their department', function () {
+    $target = Department::factory()->create();
+    WorkOrder::factory()->targeting($target)->submitted()->create();
+    WorkOrder::factory()->targeting($target)->inProgress()->create();
+    WorkOrder::factory()->targeting($target)->create();
+    WorkOrder::factory()->submitted()->create();
+
+    $this->actingAs(userInDepartment($target, Permission::WorkOrdersView))
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
+                ->where('workOrderCounts', dashboardCounts(['submitted' => 1, 'in_progress' => 1]))));
 });
 
 test('work order counts span every department with work-orders.view-all', function () {
@@ -86,7 +123,36 @@ test('work order counts span every department with work-orders.view-all', functi
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
-                ->where('workOrderCounts', ['total' => 2, 'pending' => 2, 'overdue' => 0])));
+                ->where('workOrderCounts', dashboardCounts(['submitted' => 2]))));
+});
+
+test('terlambat splits into late against the target date and late against the payment due date', function () {
+    // 07:30 WITA on 25 Sep, still 24 Sep in UTC.
+    $this->travelTo(Carbon::parse('2026-09-24 23:30', 'UTC'));
+    $department = Department::factory()->client()->create();
+    $inDepartment = ['requester_department_id' => $department->id];
+    $late = ['target_date' => '2026-09-24'];
+
+    WorkOrder::factory()->submitted()->create([...$inDepartment, ...$late]);
+    WorkOrder::factory()->inProgress()->count(2)->create([...$inDepartment, ...$late]);
+    WorkOrder::factory()->billed(['due_date' => '2026-09-24'])->create($inDepartment);
+    WorkOrder::factory()->billed(['due_date' => '2026-09-25'])->create([...$inDepartment, ...$late]);
+    WorkOrder::factory()->paid(['due_date' => '2026-09-21'])->create([...$inDepartment, ...$late]);
+    WorkOrder::factory()->rejected()->create([...$inDepartment, ...$late]);
+    WorkOrder::factory()->inProgress()->create($late);
+    WorkOrder::factory()->billed(['due_date' => '2026-09-21'])->create();
+
+    $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
+                ->where('workOrderCounts', dashboardCounts([
+                    'submitted' => 1,
+                    'in_progress' => 2,
+                    'billing' => 2,
+                    'overdue' => 4,
+                    'overdue_by' => ['target_date' => 3, 'payment_due_date' => 1],
+                ]))));
 });
 
 test('users who cannot list work orders get no counts', function () {
@@ -116,7 +182,8 @@ test('terlambat counts visible submitted work orders whose target date is before
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
-                ->where('workOrderCounts.overdue', 1)));
+                ->where('workOrderCounts.overdue', 1)
+                ->where('workOrderCounts.overdue_by.target_date', 1)));
 });
 
 test('the request overview counts visible work orders per WITA day and current status', function () {
@@ -192,7 +259,7 @@ function workOrderSubmittedAt(string $moment, array $attributes): WorkOrder
     return app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $workOrder->requester);
 }
 
-test('the urgent list shows up to five visible submitted mendesak work orders, oldest submission first', function () {
+test('the urgent list shows up to five visible active mendesak work orders, oldest submission first', function () {
     $department = Department::factory()->client()->create();
     $urgent = ['requester_department_id' => $department->id, 'urgency' => WorkOrderUrgency::Mendesak];
 
@@ -221,8 +288,62 @@ test('the urgent list shows up to five visible submitted mendesak work orders, o
                     'title' => 'Pertama',
                     'category' => $first->category->name,
                     'requester' => ['id' => $first->requester->id, 'name' => $first->requester->name],
+                    'status' => ['value' => 'diajukan', 'label' => 'Diajukan', 'tone' => 'warning'],
                     'submitted_at' => '2026-09-20T01:00:00+00:00',
                 ])));
+});
+
+test('the urgent list takes every active status, in flow order, then oldest submission first', function () {
+    $department = Department::factory()->client()->create();
+    $urgent = ['requester_department_id' => $department->id, 'urgency' => WorkOrderUrgency::Mendesak];
+    $inStatus = function (string $status, string $moment, string $title) use ($urgent): void {
+        $workOrder = workOrderSubmittedAt($moment, [...$urgent, 'title' => $title]);
+        // Straight to the status: only the list's selection is under test here.
+        WorkOrder::query()->whereKey($workOrder->id)->update(['status' => $status]);
+    };
+
+    $inStatus('penagihan', '2026-09-16 00:00', 'Penagihan lama');
+    $inStatus('penagihan', '2026-09-17 00:00', 'Penagihan baru');
+    $inStatus('dikerjakan', '2026-09-18 00:00', 'Dikerjakan');
+    $inStatus('ditolak', '2026-09-19 00:00', 'Ditolak');
+    $inStatus('diajukan', '2026-09-21 00:00', 'Diajukan baru');
+    $inStatus('diajukan', '2026-09-20 00:00', 'Diajukan lama');
+    $inStatus('selesai', '2026-09-01 00:00', 'Selesai');
+
+    $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
+                ->where('urgentWorkOrders', fn (Collection $rows): bool => $rows->pluck('title')->all() === [
+                    'Diajukan lama', 'Diajukan baru', 'Ditolak', 'Dikerjakan', 'Penagihan lama',
+                ])
+                ->where('urgentWorkOrders.3.status.value', 'dikerjakan')));
+});
+
+test('the urgent list is the list filtered by urgency mendesak and status aktif', function () {
+    $department = Department::factory()->client()->create();
+    $urgent = ['requester_department_id' => $department->id, 'urgency' => WorkOrderUrgency::Mendesak];
+    foreach (['diajukan', 'ditolak', 'dikerjakan', 'penagihan', 'selesai', 'dibatalkan'] as $index => $status) {
+        $workOrder = workOrderSubmittedAt("2026-09-2{$index} 00:00", [...$urgent, 'title' => $status]);
+        WorkOrder::query()->whereKey($workOrder->id)->update(['status' => $status]);
+    }
+    WorkOrder::factory()->create([...$urgent, 'title' => 'draft']);
+    $user = userInDepartment($department, Permission::WorkOrdersView);
+
+    $listed = null;
+    $this->actingAs($user)
+        ->get(route('work-orders.index', ['urgency' => 'mendesak', 'status' => 'aktif']))
+        ->assertInertia(function (Assert $page) use (&$listed): AssertableInertia {
+            $listed = collect($page->toArray()['props']['workOrders']['data'])->pluck('title')->sort()->values()->all();
+
+            return $page;
+        });
+
+    $this->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
+                ->where('urgentWorkOrders', fn (Collection $rows): bool => $rows->pluck('title')->sort()->values()->all() === $listed
+                    && $listed === ['diajukan', 'dikerjakan', 'ditolak', 'penagihan'])));
 });
 
 test('the urgent list is empty when nothing mendesak is waiting', function () {

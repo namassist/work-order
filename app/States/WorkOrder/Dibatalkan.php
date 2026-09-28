@@ -22,6 +22,11 @@ class Dibatalkan extends WorkOrderStatus
         return 'muted';
     }
 
+    public function isActive(): bool
+    {
+        return false;
+    }
+
     public function actionLabel(): string
     {
         return 'Batalkan';

@@ -19,6 +19,11 @@ class Draft extends WorkOrderStatus
         return 'secondary';
     }
 
+    public function isActive(): bool
+    {
+        return false;
+    }
+
     public function isEditable(): bool
     {
         return true;

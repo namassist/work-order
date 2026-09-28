@@ -781,9 +781,11 @@ Nanti saya kabari lagi.'],
             if ($path === 'paid') {
                 /** @var User $confirmer */
                 $confirmer = $this->faker->randomElement($keuangan);
-                $events[] = ['at' => $paidAt, 'actor' => $confirmer, 'run' => function () use (&$created, $index, $confirmer, $paidAt): void {
-                    // Every other payment comes with the transfer receipt.
-                    $proof = $index % 2 === 0 ? [$this->sampleUpload(['foto.jpg', 'Bukti_Transfer.jpg'])] : [];
+                // Every other payment comes with the transfer receipt: counted among the
+                // paid work orders, not by position in the shuffled plan, so exactly half do.
+                $withProof = $billedPerPath[$path] % 2 === 0;
+                $events[] = ['at' => $paidAt, 'actor' => $confirmer, 'run' => function () use (&$created, $index, $confirmer, $paidAt, $withProof): void {
+                    $proof = $withProof ? [$this->sampleUpload(['foto.jpg', 'Bukti_Transfer.jpg'])] : [];
                     $this->confirmPayment->handle($created[$index], $confirmer, DisplayDate::local($paidAt)->toDateString(), $proof);
                 }];
             }

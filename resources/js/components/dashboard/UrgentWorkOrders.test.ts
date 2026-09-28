@@ -10,43 +10,37 @@ vi.mock('@inertiajs/vue3', async (importOriginal) => ({
 
 const workOrder: UrgentWorkOrder = {
     id: 12,
-    number: 'WO/IT/2026/09/0003',
-    title: 'Server mati',
+    number: 'WO/PRD/2026/09/0003',
+    title: 'Pompa air mati',
     category: 'Perbaikan',
-    requester: { id: 4, name: 'Dewi Lestari' },
-    submitted_at: '2026-09-24T23:30:00+00:00',
+    requester: { id: 4, name: 'Eko Purnomo' },
+    status: { value: 'dikerjakan', label: 'Dikerjakan', tone: 'info' },
+    submitted_at: '2026-09-20T01:00:00+00:00',
 };
 
 describe('UrgentWorkOrders', () => {
-    it('links "Lihat semua" to the list filtered to submitted mendesak work orders', () => {
-        const href = mount(UrgentWorkOrders, { props: { items: [] } })
-            .get('[data-test="urgent-list-link"]')
-            .attributes('href');
-        const query = new URL(href ?? '', 'http://localhost').searchParams;
-
-        expect(query.get('status')).toBe('diajukan');
-        expect(query.get('urgency')).toBe('mendesak');
-    });
-
-    it('says in one line that nothing is waiting', () => {
+    it('links "Lihat semua" to the list filtered exactly like the panel', () => {
         const wrapper = mount(UrgentWorkOrders, { props: { items: [] } });
 
-        expect(wrapper.get('[data-test="urgent-empty"]').text()).toBe(
-            'Tidak ada WO mendesak yang menunggu.',
+        const href = new URL(
+            wrapper.get('[data-test="urgent-list-link"]').attributes('href')!,
+            'http://localhost',
         );
+
+        expect(href.pathname).toBe('/work-orders');
+        expect(Object.fromEntries(href.searchParams)).toEqual({
+            urgency: 'mendesak',
+            status: 'aktif',
+        });
     });
 
-    it('links each row to its work order and shows the full WITA submission time on hover', () => {
+    it("shows each work order's status", () => {
         const wrapper = mount(UrgentWorkOrders, {
             props: { items: [workOrder] },
         });
 
-        expect(wrapper.get('li a').attributes('href')).toMatch(
-            /\/work-orders\/12$/,
+        expect(wrapper.get('[data-test="urgent-status"]').text()).toBe(
+            'Dikerjakan',
         );
-        expect(wrapper.text()).toContain('Perbaikan · Dewi Lestari');
-        expect(
-            wrapper.get('[data-test="submitted-at"]').attributes('title'),
-        ).toBe('25 Sep 2026 07:30');
     });
 });

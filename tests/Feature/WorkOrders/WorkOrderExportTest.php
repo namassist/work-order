@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
+use App\Models\WorkOrderInvoice;
 use Illuminate\Support\Carbon;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia;
@@ -13,6 +14,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use OpenSpout\Common\Entity\Cell;
 use OpenSpout\Common\Entity\Cell\DateTimeCell;
 use OpenSpout\Common\Entity\Cell\EmptyCell;
+use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Reader\XLSX\Reader;
 use Spatie\Activitylog\Models\Activity;
 
@@ -70,16 +72,35 @@ function exportedRows(TestResponse $response): array
  */
 function exportedSheetXml(TestResponse $response): string
 {
+    return exportedXml($response, 'xl/worksheets/sheet1.xml');
+}
+
+/**
+ * One XML part of the downloaded workbook, e.g. xl/styles.xml.
+ */
+function exportedXml(TestResponse $response, string $part): string
+{
     $path = tempnam(sys_get_temp_dir(), 'wo-export');
     file_put_contents($path, $response->streamedContent());
 
     $zip = new ZipArchive;
     $zip->open($path);
-    $xml = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
+    $xml = (string) $zip->getFromName($part);
     $zip->close();
     unlink($path);
 
     return $xml;
+}
+
+/**
+ * The number format id of the cell style at $index in styles.xml's cellXfs.
+ */
+function styleNumberFormat(string $styles, int $index): int
+{
+    preg_match('~<cellXfs[^>]*>(.*?)</cellXfs>~s', $styles, $cellXfs);
+    preg_match_all('~<xf [^>]*numFmtId="(\d+)"~', $cellXfs[1], $formats);
+
+    return (int) $formats[1][$index];
 }
 
 /**
@@ -103,7 +124,10 @@ it('downloads the list as an xlsx named after the WITA time', function () {
         ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     expect(array_map(fn (Cell $cell): mixed => $cell->getValue(), exportedRows($response)[0]))
-        ->toBe(['Nomor', 'Judul', 'Deskripsi', 'Departemen', 'Kategori', 'Pemohon', 'Status', 'Urgensi', 'Target', 'Dibuat', 'Diajukan'])
+        ->toBe([
+            'Nomor', 'Judul', 'Deskripsi', 'Departemen pemohon', 'Departemen tujuan', 'Kategori', 'Pemohon', 'Diinput oleh',
+            'Status', 'Urgensi', 'Target', 'Dibuat', 'Diajukan', 'No. invoice', 'Tanggal invoice', 'Jumlah', 'Jatuh tempo', 'Tanggal bayar',
+        ])
         ->and(exportedSheetXml($response))->toContain('<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>');
 });
 
@@ -120,8 +144,8 @@ it('writes one row per work order in list order, with Draft as a draft\'s number
     $rows = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
 
     expect($rows)->toHaveCount(3)
-        ->and(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($rows[1], 0, 8)))
-        ->toBe(['Draft', 'AC bocor', 'Ruang rapat lantai 2', 'IT - Teknologi Informasi', 'PRB - Perbaikan', 'Dewi Lestari', 'Draft', 'Mendesak'])
+        ->and(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($rows[1], 0, 10)))
+        ->toBe(['Draft', 'AC bocor', 'Ruang rapat lantai 2', 'IT - Teknologi Informasi', '', 'PRB - Perbaikan', 'Dewi Lestari', 'Dewi Lestari', 'Draft', 'Mendesak'])
         ->and($rows[2][1]->getValue())->toBe('Lama');
 });
 
@@ -171,6 +195,26 @@ it('follows the list\'s last-activity sort without logging it as a filter', func
         ->toBe(['Lama, baru diubah', 'Baru'])
         ->and(Activity::query()->where('event', 'exported')->latest('id')->first()->properties['filter'])
         ->toBe('Semua');
+});
+
+it('applies the list\'s aktif, target department, and overdue filters, and logs them', function () {
+    // 07:30 WITA on 25 Sep, still 24 Sep in UTC.
+    $this->travelTo(Carbon::parse('2026-09-24 23:30', 'UTC'));
+    $engineering = Department::factory()->create(['code' => 'ENG']);
+    $late = ['target_date' => '2026-09-24', 'target_department_id' => $engineering->id];
+    exportableWorkOrder([...$late, 'title' => 'Terlambat di ENG', 'status' => 'dikerjakan', 'number' => 'WO/IT/2026/09/0001']);
+    exportableWorkOrder([...$late, 'title' => 'Tepat waktu', 'status' => 'dikerjakan', 'number' => 'WO/IT/2026/09/0002', 'target_date' => '2026-09-25']);
+    exportableWorkOrder([...$late, 'title' => 'Departemen lain', 'status' => 'dikerjakan', 'number' => 'WO/IT/2026/09/0003', 'target_department_id' => Department::factory()->create()->id]);
+
+    $response = $this->actingAs($this->exporter)->get(route('work-orders.export', [
+        'status' => 'aktif',
+        'target' => $engineering->id,
+        'overdue' => 1,
+    ]));
+
+    expect(exportedTitles($response))->toBe(['Terlambat di ENG'])
+        ->and(Activity::query()->where('event', 'exported')->sole()->properties['filter'])
+        ->toBe('Status: Aktif; Dept. tujuan: ENG; Terlambat: Ya');
 });
 
 it('filters the created date by WITA day', function () {
@@ -227,7 +271,7 @@ it('writes dates as Excel date cells in WITA', function () {
     app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $this->exporter);
 
     [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
-    [$target, $created, $submitted] = array_slice($row, 8);
+    [$target, $created, $submitted] = array_slice($row, 10, 3);
 
     expect($target)->toBeInstanceOf(DateTimeCell::class)
         ->and($target->getValue()->format('Y-m-d'))->toBe('2026-10-01')
@@ -243,16 +287,76 @@ it('leaves Target and Diajukan empty when a work order has neither', function ()
 
     [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
 
-    expect($row[8])->toBeInstanceOf(EmptyCell::class)
-        ->and($row[10])->toBeInstanceOf(EmptyCell::class);
+    expect($row[10])->toBeInstanceOf(EmptyCell::class)
+        ->and($row[12])->toBeInstanceOf(EmptyCell::class);
+});
+
+it('writes the target department, the requester contact, and who entered it on their behalf', function () {
+    $koordinator = unggulUser(Permission::WorkOrdersCreateOnBehalf);
+    $koordinator->update(['name' => 'Dewi Lestari']);
+    WorkOrder::factory()->onBehalf($koordinator, contactName: 'Pak Andi, Produksi')->create([
+        'requester_department_id' => $this->department->id,
+        'target_department_id' => Department::factory()->create(['code' => 'ENG', 'name' => 'Engineering'])->id,
+    ]);
+
+    [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
+
+    expect(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($row, 3, 5)))
+        ->toBe(['IT - Teknologi Informasi', 'ENG - Engineering', $row[5]->getValue(), 'Pak Andi, Produksi', 'Dewi Lestari']);
+});
+
+it('writes the invoice: number, dates as calendar dates, and the amount as a Rupiah number', function () {
+    WorkOrderInvoice::factory()->paid('2026-09-24')->for(exportableWorkOrder([
+        'title' => 'Lunas',
+        'created_at' => now()->subDay(),
+        'target_department_id' => Department::factory()->create()->id,
+        'number' => 'WO/IT/2026/09/0001',
+        'status' => 'selesai',
+    ]))->create([
+        'number' => 'INV/ENG/2026/001',
+        'invoice_date' => '2026-09-20',
+        'amount' => '1500000.50',
+        'due_date' => '2026-09-30',
+    ]);
+    exportableWorkOrder(['title' => 'Belum ditagih']);
+
+    $response = $this->actingAs($this->exporter)->get(route('work-orders.export'));
+    [, $withoutInvoice, $paid] = exportedRows($response);
+    [$number, $invoiceDate, $amount, $dueDate, $paidOn] = array_slice($paid, 13);
+
+    expect($number->getValue())->toBe('INV/ENG/2026/001')
+        ->and($invoiceDate)->toBeInstanceOf(DateTimeCell::class)
+        ->and($invoiceDate->getValue()->format('Y-m-d'))->toBe('2026-09-20')
+        ->and($amount)->toBeInstanceOf(NumericCell::class)
+        ->and($amount->getValue())->toBe(1500000.5)
+        ->and($dueDate->getValue()->format('Y-m-d'))->toBe('2026-09-30')
+        ->and($paidOn->getValue()->format('Y-m-d'))->toBe('2026-09-24')
+        ->and(array_map(fn (Cell $cell): string => $cell::class, array_slice($withoutInvoice, 13)))
+        ->toBe(array_fill(0, 5, EmptyCell::class));
+
+    $styles = exportedXml($response, 'xl/styles.xml');
+    preg_match('~<c r="P3" s="(\d+)"[^>]*><v>1500000.5</v></c>~', exportedSheetXml($response), $cell);
+    preg_match('~<numFmt numFmtId="(\d+)" formatCode="&quot;Rp &quot;#,##0\.00"/>~', $styles, $format);
+
+    expect($cell)->not->toBeEmpty()
+        ->and($format)->not->toBeEmpty()
+        ->and(styleNumberFormat($styles, (int) $cell[1]))->toBe((int) $format[1]);
 });
 
 it('writes user-entered text as plain strings, never formulas', function () {
     $requester = User::factory()->create(['name' => '+SUM(1,1)']);
-    exportableWorkOrder([
+    WorkOrderInvoice::factory()->for(exportableWorkOrder([
         'title' => '=HYPERLINK("http://x","y")',
         'description' => '@SUM(A1)',
         'created_by' => $requester->id,
+        'target_department_id' => Department::factory()->create()->id,
+        'number' => 'WO/IT/2026/09/0001',
+        'status' => 'penagihan',
+    ]))->create(['number' => '-2+3']);
+    $koordinator = unggulUser(Permission::WorkOrdersCreateOnBehalf);
+    WorkOrder::factory()->onBehalf($koordinator, contactName: '=1+1')->create([
+        'requester_department_id' => $this->department->id,
+        'created_at' => now()->subDay(),
     ]);
 
     $xml = exportedSheetXml($this->actingAs($this->exporter)->get(route('work-orders.export')));
@@ -260,7 +364,9 @@ it('writes user-entered text as plain strings, never formulas', function () {
     expect($xml)->not->toContain('<f>')
         ->and($xml)->toMatch('~<c r="B2"[^>]* t="inlineStr"><is><t>=HYPERLINK\(&quot;http://x&quot;,&quot;y&quot;\)</t></is></c>~')
         ->and($xml)->toMatch('~<c r="C2"[^>]* t="inlineStr"><is><t>@SUM\(A1\)</t></is></c>~')
-        ->and($xml)->toMatch('~<c r="F2"[^>]* t="inlineStr"><is><t>\+SUM\(1,1\)</t></is></c>~');
+        ->and($xml)->toMatch('~<c r="G2"[^>]* t="inlineStr"><is><t>\+SUM\(1,1\)</t></is></c>~')
+        ->and($xml)->toMatch('~<c r="N2"[^>]* t="inlineStr"><is><t>-2\+3</t></is></c>~')
+        ->and($xml)->toMatch('~<c r="G3"[^>]* t="inlineStr"><is><t>=1\+1</t></is></c>~');
 });
 
 it('refuses an export above the row cap and asks to narrow the filters', function () {

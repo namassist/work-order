@@ -38,6 +38,15 @@ it('numbers a draft on submission and records the change', function () {
         ]);
 });
 
+it('names a cancelled draft by its title, never "Draft"', function () {
+    $this->workOrder->update(['title' => 'Perbaikan pintu ruang arsip']);
+
+    $this->actingAs($this->user)
+        ->post(route('work-orders.transitions.store', $this->workOrder), ['status' => 'dibatalkan', 'note' => 'Tidak jadi.'])
+        ->assertRedirect()
+        ->assertInertiaFlash('toast.message', "Work order 'Perbaikan pintu ruang arsip' sekarang dibatalkan.");
+});
+
 it('shows the status change with labels in the history panel', function () {
     $this->travel(1)->minutes();
     app(TransitionWorkOrder::class)->handle($this->workOrder, 'diajukan', $this->user);
