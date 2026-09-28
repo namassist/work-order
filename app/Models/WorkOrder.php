@@ -6,6 +6,7 @@ use App\Concerns\HasAttachments;
 use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
 use App\Enums\Permission;
+use App\Enums\WorkOrderSide;
 use App\Enums\WorkOrderUrgency;
 use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\WorkOrderStatus;
@@ -219,6 +220,27 @@ class WorkOrder extends Model implements Attachable
 
         return $this->wasSubmitted()
             && ($user->checkPermissionTo(Permission::WorkOrdersViewAll->value) || $this->target_department_id === $user->department_id);
+    }
+
+    /**
+     * Whether the user acts for the given side of this work order (FLOW.md
+     * §5). The requester side is a client company user of the requester
+     * department with work-orders.update, or the koordinator who entered it
+     * on their behalf; the executor side is a user of the target department
+     * with work-orders.process (internal-only, so never an IC user).
+     */
+    public function isOnSide(User $user, WorkOrderSide $side): bool
+    {
+        return match ($side) {
+            WorkOrderSide::Requester => $user->isClient()
+                ? $this->requester_department_id === $user->department_id
+                    && $user->checkPermissionTo(Permission::WorkOrdersUpdate->value)
+                : $this->created_by === $user->id
+                    && $user->checkPermissionTo(Permission::WorkOrdersCreateOnBehalf->value),
+            WorkOrderSide::Executor => $this->target_department_id !== null
+                && $this->target_department_id === $user->department_id
+                && $user->checkPermissionTo(Permission::WorkOrdersProcess->value),
+        };
     }
 
     /**

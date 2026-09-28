@@ -8,6 +8,8 @@ export type Attachment = {
     previewable: boolean;
     uploader: { id: number; name: string } | null;
     created_at: string;
+    /** Whether this user may remove this file; it can depend on the uploader. */
+    can_delete?: boolean;
 };
 
 /** A collection's limits (AttachmentCollection::toFrontend). The server re-checks all of them. */

@@ -25,17 +25,22 @@ class AttachmentPanel
         /** @var int|string $id */
         $id = $parent->getKey();
 
+        $items = array_values(array_map(
+            // Removal may depend on the file, e.g. only one's own uploads.
+            fn (Media $media): array => [
+                ...new AttachmentResource($media)->resolve($request),
+                'can_delete' => $user->can('deleteAttachment', [$parent, $media]),
+            ],
+            $parent->attachmentsIn($rules->name)->all(),
+        ));
+
         return [
             'target' => ['type' => $parent->getMorphClass(), 'id' => $id, 'collection' => $rules->name],
             'rules' => $rules->toFrontend(),
-            'items' => array_values(array_map(
-                fn (Media $media): array => new AttachmentResource($media)->resolve($request),
-                $parent->attachmentsIn($rules->name)->all(),
-            )),
+            'items' => $items,
             'can' => [
                 'upload' => $user->can('addAttachment', [$parent, $rules->name]),
-                // Removal follows the same rule for every file of a collection.
-                'delete' => $user->can('deleteAttachment', [$parent, new Media]),
+                'delete' => in_array(true, array_column($items, 'can_delete'), true),
             ],
         ];
     }

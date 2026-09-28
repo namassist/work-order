@@ -323,7 +323,7 @@ const destroy = () => {
                         </a>
                     </Button>
                     <Button
-                        v-if="canDelete"
+                        v-if="attachment.can_delete ?? canDelete"
                         variant="ghost"
                         size="icon"
                         :aria-label="`Hapus ${attachment.name}`"

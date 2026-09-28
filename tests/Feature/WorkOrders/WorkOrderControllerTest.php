@@ -174,7 +174,7 @@ describe('index', function () {
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('stats', [
                     'total' => 4,
-                    'statuses' => ['draft' => 2, 'diajukan' => 1, 'dibatalkan' => 1],
+                    'statuses' => ['draft' => 2, 'diajukan' => 1, 'ditolak' => 0, 'dikerjakan' => 0, 'dibatalkan' => 1],
                 ]));
     });
 
@@ -328,13 +328,15 @@ describe('show', function () {
                 ->where('timeline.0.to', ['value' => 'draft', 'label' => 'Draft'])
                 ->where('timeline.0.user.name', $user->name)
                 ->where('transitions', [
-                    ['value' => 'diajukan', 'label' => 'Ajukan', 'tone' => 'warning', 'requires_note' => false, 'requires_target_department' => true],
-                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'tone' => 'destructive', 'requires_note' => true, 'requires_target_department' => false],
+                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'requires_target_department' => true],
+                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan', 'requires_target_department' => false],
                 ])
+                ->where('waitingFor', null)
+                ->where('statusNote', null)
                 ->where('can.update', true));
     });
 
-    it('lists the documents and allows changing them only on drafts', function (Closure $workOrder, bool $changeable) {
+    it('lists the documents and lets the requester side change them only in Draft and Ditolak', function (Closure $workOrder, bool $changeable) {
         Storage::fake('attachments');
         $user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate);
         $workOrder = $workOrder();
@@ -349,10 +351,14 @@ describe('show', function () {
                 ->where('attachments.items.0.name', 'Surat.pdf')
                 ->where('attachments.items.0.previewable', true)
                 ->where('attachments.items.0.uploader.name', $user->name)
+                ->where('attachments.items.0.can_delete', $changeable)
                 ->where('attachments.can', ['upload' => $changeable, 'delete' => $changeable]));
     })->with([
         'draft' => [fn (): WorkOrder => ownWorkOrder(), true],
         'submitted' => [fn () => WorkOrder::factory()->submitted()->create(['requester_department_id' => test()->department->id]), false],
+        'rejected' => [fn () => WorkOrder::factory()->rejected()->create(['requester_department_id' => test()->department->id]), true],
+        'in progress' => [fn () => WorkOrder::factory()->inProgress()->create(['requester_department_id' => test()->department->id]), false],
+        'cancelled' => [fn () => WorkOrder::factory()->cancelled()->create(['requester_department_id' => test()->department->id]), false],
     ]);
 
     it('offers no transitions without the update permission', function () {

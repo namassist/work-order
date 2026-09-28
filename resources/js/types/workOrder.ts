@@ -6,7 +6,8 @@ export type StatusTone =
     | 'warning'
     | 'info'
     | 'success'
-    | 'destructive';
+    | 'destructive'
+    | 'muted';
 
 export type WorkOrderStatusOption = {
     value: string;
@@ -58,15 +59,26 @@ export type WorkOrderListItem = WorkOrder & {
     can: { update: boolean; delete: boolean; restore: boolean };
 };
 
+/** A status change this user may perform (FLOW.md §5). */
 export type WorkOrderTransition = {
     value: string;
-    /** Button label, e.g. "Ajukan". */
+    /** Button label, e.g. "Ajukan", or "Ajukan ulang" after a rejection. */
     label: string;
-    /** Tone of the target status; destructive ones get a destructive button. */
-    tone: string;
+    /** Rejecting or cancelling: a destructive button. */
+    destructive: boolean;
     requires_note: boolean;
+    /** E.g. "Alasan penolakan"; "Catatan" when nothing more specific fits. */
+    note_label: string;
     /** The target status needs a target department (e.g. Diajukan). */
     requires_target_department: boolean;
+};
+
+/** The reason given when the work order was rejected or cancelled. */
+export type WorkOrderStatusNote = {
+    label: string;
+    note: string;
+    user: string;
+    created_at: string;
 };
 
 export type StatusHistoryEntry = {

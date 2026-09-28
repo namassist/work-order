@@ -36,7 +36,7 @@ const props = defineProps<{
     department: DepartmentOption | null;
     /** On create by a koordinator: the IC departments to enter the work order for. */
     requesterDepartments?: DepartmentOption[] | null;
-    /** On edit by the koordinator who entered this draft: its current requester, to correct. */
+    /** On edit by the koordinator who entered this work order: its current requester, to correct. */
     requesterCorrection?: RequesterCorrection | null;
     /** Executor company departments the work order can be addressed to. */
     targetDepartments: DepartmentOption[];
@@ -49,12 +49,15 @@ const props = defineProps<{
 /** The target select's value while no department is chosen. */
 const NO_TARGET = 'none';
 
+/** Submitted before (now Ditolak): the target may change but not be cleared. */
+const wasSubmitted = computed(() => props.workOrder?.number != null);
+
 /** Create on behalf of IC: the koordinator picks the department and the requester. */
 const onBehalf = computed(
     () => !props.workOrder && !!props.requesterDepartments,
 );
 
-/** The requester section: on-behalf create, or correcting an on-behalf draft. */
+/** The requester section: on-behalf create, or correcting an on-behalf work order. */
 const choosesRequester = computed(
     () => onBehalf.value || !!props.requesterCorrection,
 );
@@ -182,8 +185,8 @@ const submit = () => {
                             dipilih di sini.
                         </template>
                         <template v-else>
-                            Perbaiki pemohon draft yang Anda input. Departemen
-                            pemohon tidak dapat diubah.
+                            Perbaiki pemohon work order yang Anda input.
+                            Departemen pemohon tidak dapat diubah.
                         </template>
                     </p>
                 </div>
@@ -290,7 +293,7 @@ const submit = () => {
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem :value="NO_TARGET"
+                        <SelectItem v-if="!wasSubmitted" :value="NO_TARGET"
                             >Belum dipilih</SelectItem
                         >
                         <SelectItem
@@ -304,8 +307,14 @@ const submit = () => {
                     </SelectContent>
                 </Select>
                 <p class="text-xs text-muted-foreground">
-                    Departemen pelaksana yang mengerjakan. Wajib dipilih sebelum
-                    diajukan.
+                    <template v-if="wasSubmitted">
+                        Departemen pelaksana yang mengerjakan. Pilih departemen
+                        lain bila salah tujuan, lalu ajukan ulang.
+                    </template>
+                    <template v-else>
+                        Departemen pelaksana yang mengerjakan. Wajib dipilih
+                        sebelum diajukan.
+                    </template>
                 </p>
                 <InputError :message="form.errors.target_department_id" />
             </div>

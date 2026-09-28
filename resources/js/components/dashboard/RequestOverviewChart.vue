@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCalendarDate } from '@/lib/format';
-import { statusToneChartColor } from '@/lib/workOrderStatus';
+import { statusChartColor } from '@/lib/workOrderStatus';
 import type { RequestOverview } from '@/types';
 
 /**
@@ -61,7 +61,7 @@ const statuses = computed(() => props.overview?.statuses ?? []);
 const totals = computed(() =>
     statuses.value.map((status) => ({
         ...status,
-        color: statusToneChartColor(status.tone),
+        color: statusChartColor(status),
         total:
             props.overview?.series.reduce(
                 (sum, day) => sum + (day.counts[status.value] ?? 0),

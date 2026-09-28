@@ -2,6 +2,9 @@
 
 namespace App\States\WorkOrder;
 
+use App\Enums\WorkOrderSide;
+use App\Models\WorkOrder;
+
 class Draft extends WorkOrderStatus
 {
     public static string $name = 'draft';
@@ -19,5 +22,25 @@ class Draft extends WorkOrderStatus
     public function isEditable(): bool
     {
         return true;
+    }
+
+    public function isDeletable(): bool
+    {
+        return true;
+    }
+
+    public function attachmentSide(): WorkOrderSide
+    {
+        return WorkOrderSide::Requester;
+    }
+
+    public function waitsOn(): WorkOrderSide
+    {
+        return WorkOrderSide::Requester;
+    }
+
+    public function waitingMessage(WorkOrder $workOrder): string
+    {
+        return 'Menunggu pemohon mengajukan.';
     }
 }

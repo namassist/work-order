@@ -3,7 +3,9 @@
 use App\Enums\AccountStatus;
 use App\Enums\AuditEvent;
 use App\Enums\CompanyScope;
+use App\Enums\Permission;
 use App\Enums\SystemRole;
+use App\Enums\WorkOrderSide;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Media;
@@ -135,7 +137,69 @@ it('only lets people act on work orders they can see', function () {
     $transitions = WorkOrderStatusHistory::query()->with(['workOrder', 'user'])->get();
 
     expect($comments->every(fn (WorkOrderComment $comment): bool => $comment->workOrder->isVisibleTo($comment->author)))->toBeTrue()
-        ->and($transitions->every(fn (WorkOrderStatusHistory $history): bool => $history->workOrder->isVisibleTo($history->user)))->toBeTrue();
+        // A department that rejected a work order sent to it by mistake no longer sees it once it is moved.
+        ->and($transitions->every(fn (WorkOrderStatusHistory $history): bool => $history->workOrder->isVisibleTo($history->user)
+            || in_array($history->user->department_id, previousTargets($history->workOrder), true)))->toBeTrue();
+});
+
+/**
+ * The target departments the work order had before its current one, from
+ * its audit log.
+ *
+ * @return list<int>
+ */
+function previousTargets(WorkOrder $workOrder): array
+{
+    return Activity::query()->forSubject($workOrder)->get()
+        ->map(fn (Activity $activity): mixed => $activity->attribute_changes?->get('old')['target_department_id'] ?? null)
+        ->filter()
+        ->values()
+        ->all();
+}
+
+it('lets only the side FLOW.md names make each status change', function () {
+    $this->seed(DemoSeeder::class);
+
+    WorkOrderStatusHistory::query()->whereNotNull('from_status')->with(['workOrder', 'user'])->get()
+        ->each(function (WorkOrderStatusHistory $history): void {
+            $side = WorkOrderStatus::fromName($history->to_status)?->performedBy();
+            $workOrder = $history->workOrder;
+
+            $onSide = $side === WorkOrderSide::Executor
+                // Rejections by a department it was moved away from count as that department's.
+                ? $history->user->hasPermissionTo(Permission::WorkOrdersProcess->value)
+                    && ($workOrder->target_department_id === $history->user->department_id
+                        || in_array($history->user->department_id, previousTargets($workOrder), true))
+                : $side instanceof WorkOrderSide && $workOrder->isOnSide($history->user, $side);
+
+            expect($onSide)->toBeTrue("{$history->from_status} → {$history->to_status} by {$history->user->name}");
+        });
+});
+
+it('rejects, resubmits under the same number, and carries out work orders', function () {
+    $this->seed(DemoSeeder::class);
+
+    $workOrders = WorkOrder::query()->with(['statusHistories', 'media'])->get();
+    $paths = $workOrders->map(fn (WorkOrder $workOrder): string => $workOrder->statusHistories->pluck('to_status')->implode(' → '));
+    $resubmitted = $workOrders->filter(fn (WorkOrder $workOrder): bool => $workOrder->statusHistories->pluck('to_status')->all() === ['draft', 'diajukan', 'ditolak', 'diajukan']);
+    $moved = $resubmitted->filter(fn (WorkOrder $workOrder): bool => previousTargets($workOrder) !== []);
+    $inProgress = $workOrders->filter(fn (WorkOrder $workOrder): bool => $workOrder->status->getValue() === 'dikerjakan');
+
+    expect($paths->countBy()->only([
+        'draft → diajukan → ditolak',
+        'draft → diajukan → ditolak → diajukan',
+        'draft → diajukan → ditolak → dibatalkan',
+        'draft → diajukan → dikerjakan',
+    ])->sortKeys()->all())->toBe([
+        'draft → diajukan → dikerjakan' => 8,
+        'draft → diajukan → ditolak' => 5,
+        'draft → diajukan → ditolak → diajukan' => 4,
+        'draft → diajukan → ditolak → dibatalkan' => 2,
+    ])
+        ->and($moved->count())->toBe(2)
+        ->and($moved->every(fn (WorkOrder $workOrder): bool => str_starts_with((string) $workOrder->statusHistories->firstWhere('to_status', 'ditolak')->note, 'Bukan lingkup departemen kami')))->toBeTrue()
+        // The pelaksana adds progress photos while carrying the work out.
+        ->and($inProgress->filter(fn (WorkOrder $workOrder): bool => $workOrder->media->contains('uploaded_by', $workOrder->statusHistories->firstWhere('to_status', 'dikerjakan')->user_id)))->not->toBeEmpty();
 });
 
 it('creates work orders in every status over the last three months', function () {
@@ -143,7 +207,7 @@ it('creates work orders in every status over the last three months', function ()
 
     $workOrders = WorkOrder::query()->with('statusHistories')->get();
 
-    expect($workOrders->count())->toBeBetween(40, 60)
+    expect($workOrders->count())->toBeBetween(50, 70)
         ->and($workOrders->map(fn (WorkOrder $workOrder): string => $workOrder->status->getValue())->unique()->sort()->values()->all())
         ->toBe(collect(WorkOrderStatus::options())->pluck('value')->sort()->values()->all())
         ->and($workOrders->min('created_at')->greaterThanOrEqualTo(now()->subMonths(3)->startOfDay()))->toBeTrue()
@@ -156,11 +220,12 @@ it('creates work orders in every status over the last three months', function ()
 
     $today = DisplayDate::local(now())->toDateString();
     $overdue = $workOrders->filter(
-        fn (WorkOrder $workOrder): bool => $workOrder->status->getValue() === 'diajukan'
+        fn (WorkOrder $workOrder): bool => $workOrder->status->countsAsOverdueWhenLate()
             && $workOrder->target_date !== null
             && $workOrder->target_date->toDateString() < $today,
     );
-    expect($overdue->count())->toBe(5);
+    expect($overdue->countBy(fn (WorkOrder $workOrder): string => $workOrder->status->getValue())->sortKeys()->all())
+        ->toBe(['diajukan' => 4, 'dikerjakan' => 2]);
 });
 
 it('mixes urgencies realistically: about 10% rendah, 60% normal, 20% tinggi, 10% mendesak', function () {
@@ -195,7 +260,7 @@ it('gives every work order a consistent status history', function () {
                 ->and($next->created_at->greaterThan($previous->created_at))->toBeTrue();
         });
 
-        $histories->where('to_status', 'dibatalkan')
+        $histories->whereIn('to_status', ['dibatalkan', 'ditolak'])
             ->each(fn (WorkOrderStatusHistory $history) => expect($history->note)->not->toBeEmpty());
     });
 });
@@ -203,7 +268,9 @@ it('gives every work order a consistent status history', function () {
 it('numbers work orders in submission order, restarting every month per department', function () {
     $this->seed(DemoSeeder::class);
 
+    // The first submission gives the number; a resubmission keeps it.
     $submissions = WorkOrderStatusHistory::query()
+        ->where('from_status', 'draft')
         ->where('to_status', 'diajukan')
         ->with('workOrder')
         ->orderBy('created_at')

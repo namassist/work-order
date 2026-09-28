@@ -58,7 +58,7 @@ class WorkOrderController extends Controller
                 ...new WorkOrderResource($workOrder)->resolve($request),
                 'can' => [
                     'update' => $user->can('update', $workOrder),
-                    'delete' => $user->can('delete', $workOrder) && $workOrder->status->isEditable(),
+                    'delete' => $user->can('delete', $workOrder) && $workOrder->status->isDeletable(),
                     'restore' => $user->can('restore', $workOrder),
                 ],
             ]),
@@ -159,17 +159,23 @@ class WorkOrderController extends Controller
 
         $workOrder->load(self::LIST_RELATIONS);
 
-        $canTransition = $user->can('transition', $workOrder);
+        $status = $workOrder->status;
+        $waitsOn = $status->waitsOn();
 
         return Inertia::render('work-orders/Show', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
             'timeline' => WorkOrderTimeline::for($workOrder, $user),
-            'transitions' => $canTransition
-                ? array_map($this->transitionOption(...), $workOrder->status->transitionableStates())
-                : [],
+            // Only the transitions this user may perform (FLOW.md §5).
+            'transitions' => array_values(array_map(
+                fn (string $to): array => $this->transitionOption($workOrder, $to),
+                array_filter($status->transitionableStates(), fn (string $to): bool => $user->can('transition', [$workOrder, $to])),
+            )),
+            // Tells everyone not on the side whose turn it is who the work order waits for.
+            'waitingFor' => $waitsOn !== null && ! $workOrder->isOnSide($user, $waitsOn) ? $status->waitingMessage($workOrder) : null,
+            'statusNote' => $this->statusNote($workOrder),
             'can' => [
                 'update' => $user->can('update', $workOrder),
-                'delete' => $user->can('delete', $workOrder) && $workOrder->status->isEditable(),
+                'delete' => $user->can('delete', $workOrder) && $workOrder->status->isDeletable(),
                 'comment' => $user->can('addComment', $workOrder) && $workOrder->status->acceptsComments(),
             ],
             'comments' => [
@@ -234,7 +240,7 @@ class WorkOrderController extends Controller
     {
         Gate::authorize('delete', $workOrder);
 
-        if (! $workOrder->status->isEditable()) {
+        if (! $workOrder->status->isDeletable()) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Work order :number sudah :status dan tidak dapat dihapus. Batalkan bila tidak diperlukan.', [
                 'number' => $workOrder->displayNumber(),
                 'status' => mb_strtolower($workOrder->status->label()),
@@ -340,18 +346,51 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * @return array{value: string, label: string, tone: string, requires_note: bool, requires_target_department: bool}
+     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string, requires_target_department: bool}
      */
-    private function transitionOption(string $name): array
+    private function transitionOption(WorkOrder $workOrder, string $name): array
     {
         $state = WorkOrderStatus::fromName($name);
 
         return [
             'value' => $name,
-            'label' => $state?->actionLabel() ?? $name,
-            'tone' => $state?->tone() ?? 'secondary',
+            'label' => $state?->actionLabelFor($workOrder) ?? $name,
+            'destructive' => $state?->isDestructiveAction() ?? false,
             'requires_note' => $state?->requiresNote() ?? false,
+            'note_label' => $state?->noteLabel() ?? 'Catatan',
             'requires_target_department' => $state?->requiresTargetDepartment() ?? false,
+        ];
+    }
+
+    /**
+     * The note given when the work order entered its current status, when
+     * that status requires one (the reason it was rejected or cancelled).
+     *
+     * @return array{label: string, note: string, user: string, created_at: string}|null
+     */
+    private function statusNote(WorkOrder $workOrder): ?array
+    {
+        if (! $workOrder->status->requiresNote()) {
+            return null;
+        }
+
+        $entry = $workOrder->statusHistories()
+            ->reorder()
+            ->latest('created_at')
+            ->latest('id')
+            ->where('to_status', $workOrder->status->getValue())
+            ->with('user')
+            ->first();
+
+        if ($entry === null || blank($entry->note)) {
+            return null;
+        }
+
+        return [
+            'label' => $workOrder->status->noteLabel(),
+            'note' => $entry->note,
+            'user' => $entry->user->name,
+            'created_at' => $entry->created_at->toIso8601String(),
         ];
     }
 }

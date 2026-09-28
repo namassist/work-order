@@ -20,13 +20,18 @@ import type {
     TimelineEntry,
     WorkOrder,
     WorkOrderCommentSettings,
+    WorkOrderStatusNote,
     WorkOrderTransition,
 } from '@/types';
 
 const props = defineProps<{
     workOrder: WorkOrder;
     timeline: TimelineEntry[];
+    /** Only the status changes this user may perform. */
     transitions: WorkOrderTransition[];
+    /** Who the work order waits for, when it is not this user's turn. */
+    waitingFor: string | null;
+    statusNote: WorkOrderStatusNote | null;
     can: { update: boolean; delete: boolean; comment: boolean };
     comments: WorkOrderCommentSettings;
     attachments: AttachmentPanelData;
@@ -64,6 +69,12 @@ const needsTarget = (transition: WorkOrderTransition) =>
 
 const blockedByTarget = computed(() => props.transitions.some(needsTarget));
 
+// One primary action per area: the first that moves the work order forward.
+const primaryTransition = computed(
+    () =>
+        props.transitions.find((transition) => !transition.destructive)?.value,
+);
+
 const destroy = () => {
     router.visit(WorkOrderController.destroy(props.workOrder.id), {
         onStart: () => (deleting.value = true),
@@ -89,6 +100,7 @@ const destroy = () => {
         <ListToolbar
             v-if="
                 transitions.length > 0 ||
+                waitingFor ||
                 can.update ||
                 can.delete ||
                 hasPermission('activity-log.view')
@@ -97,9 +109,13 @@ const destroy = () => {
             <template #actions>
                 <div class="flex flex-wrap items-center gap-2">
                     <Button
-                        v-for="(transition, index) in transitions"
+                        v-for="transition in transitions"
                         :key="transition.value"
-                        :variant="index === 0 ? 'default' : 'outline'"
+                        :variant="
+                            transition.value === primaryTransition
+                                ? 'default'
+                                : 'outline'
+                        "
                         :disabled="needsTarget(transition)"
                         @click="openTransition(transition)"
                     >
@@ -132,9 +148,32 @@ const destroy = () => {
                     >
                         Pilih departemen tujuan lewat Ubah sebelum mengajukan.
                     </p>
+                    <p
+                        v-if="waitingFor"
+                        class="basis-full text-xs text-muted-foreground"
+                    >
+                        {{ waitingFor }}
+                    </p>
                 </div>
             </template>
         </ListToolbar>
+
+        <section
+            v-if="statusNote"
+            class="border-b px-4 py-4 text-sm sm:px-6"
+            aria-labelledby="wo-status-note-heading"
+        >
+            <h2 id="wo-status-note-heading" class="text-muted-foreground">
+                {{ statusNote.label }}
+            </h2>
+            <p class="mt-1 whitespace-pre-line">{{ statusNote.note }}</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+                {{ statusNote.user }} ·
+                <span class="tabular-nums">{{
+                    formatDateTime(statusNote.created_at)
+                }}</span>
+            </p>
+        </section>
 
         <section class="px-4 py-6 sm:px-6" aria-labelledby="wo-detail-heading">
             <h2 id="wo-detail-heading" class="sr-only">Detail</h2>

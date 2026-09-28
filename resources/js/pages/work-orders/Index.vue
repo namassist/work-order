@@ -14,6 +14,8 @@ import {
     SearchX,
     Send,
     Trash2,
+    Undo2,
+    Wrench,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
@@ -90,6 +92,8 @@ defineOptions({
 const statusIcons: Record<string, LucideIcon> = {
     draft: FilePen,
     diajukan: Send,
+    ditolak: Undo2,
+    dikerjakan: Wrench,
     dibatalkan: Ban,
 };
 

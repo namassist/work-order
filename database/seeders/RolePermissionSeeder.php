@@ -47,6 +47,7 @@ class RolePermissionSeeder extends Seeder
                 Permission::UsersView,
                 Permission::WorkOrdersView,
                 Permission::WorkOrdersUpdate,
+                Permission::WorkOrdersProcess,
                 Permission::WorkOrdersExport,
                 Permission::WorkOrdersComment,
             ],

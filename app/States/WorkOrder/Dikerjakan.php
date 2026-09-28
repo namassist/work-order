@@ -5,36 +5,27 @@ namespace App\States\WorkOrder;
 use App\Enums\WorkOrderSide;
 use App\Models\WorkOrder;
 
-class Diajukan extends WorkOrderStatus
+/**
+ * Accepted and being carried out by the target department, which may add
+ * documents meanwhile.
+ */
+class Dikerjakan extends WorkOrderStatus
 {
-    public static string $name = 'diajukan';
+    public static string $name = 'dikerjakan';
 
     public function label(): string
     {
-        return 'Diajukan';
+        return 'Dikerjakan';
     }
 
     public function tone(): string
     {
-        return 'warning';
+        return 'info';
     }
 
     public function actionLabel(): string
     {
-        return 'Ajukan';
-    }
-
-    /**
-     * A rejected work order is resubmitted under the number it already has.
-     */
-    public function actionLabelFor(WorkOrder $workOrder): string
-    {
-        return $workOrder->wasSubmitted() ? 'Ajukan ulang' : $this->actionLabel();
-    }
-
-    public function assignsNumber(): bool
-    {
-        return true;
+        return 'Kerjakan';
     }
 
     public function countsAsOverdueWhenLate(): bool
@@ -49,7 +40,12 @@ class Diajukan extends WorkOrderStatus
 
     public function performedBy(): WorkOrderSide
     {
-        return WorkOrderSide::Requester;
+        return WorkOrderSide::Executor;
+    }
+
+    public function attachmentSide(): WorkOrderSide
+    {
+        return WorkOrderSide::Executor;
     }
 
     public function waitsOn(): WorkOrderSide
@@ -59,6 +55,6 @@ class Diajukan extends WorkOrderStatus
 
     public function waitingMessage(WorkOrder $workOrder): string
     {
-        return __('Menunggu pelaksana :department memproses.', ['department' => $workOrder->targetDepartment?->code]);
+        return __('Sedang dikerjakan oleh :department.', ['department' => $workOrder->targetDepartment?->code]);
     }
 }

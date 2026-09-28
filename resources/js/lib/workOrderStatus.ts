@@ -1,4 +1,4 @@
-import type { StatusTone } from '@/types';
+import type { StatusTone, WorkOrderStatusOption } from '@/types';
 
 /**
  * Badge classes per status tone (docs/DESIGN.md › Status Work Order). The
@@ -10,6 +10,8 @@ const TONE_CLASSES: Record<StatusTone, string> = {
     info: 'bg-info text-info-foreground',
     success: 'bg-success text-success-foreground',
     destructive: 'bg-destructive/10 text-destructive',
+    // Ended, nothing left to do: an outline in the muted text colour.
+    muted: 'border-border bg-transparent text-muted-foreground',
 };
 
 export function statusToneClass(tone: string): string {
@@ -27,8 +29,23 @@ const TONE_CHART_COLORS: Record<StatusTone, string> = {
     info: 'var(--info)',
     success: 'var(--success)',
     destructive: 'var(--destructive)',
+    muted: 'var(--chart-cancelled)',
 };
 
-export function statusToneChartColor(tone: string): string {
-    return TONE_CHART_COLORS[tone as StatusTone] ?? TONE_CHART_COLORS.secondary;
+/**
+ * Chart fills for statuses whose tone alone does not give them their own
+ * series colour; every other status uses its tone's fill.
+ */
+const STATUS_CHART_COLORS: Record<string, string> = {
+    dibatalkan: 'var(--chart-cancelled)',
+};
+
+export function statusChartColor(
+    status: Pick<WorkOrderStatusOption, 'value' | 'tone'>,
+): string {
+    return (
+        STATUS_CHART_COLORS[status.value] ??
+        TONE_CHART_COLORS[status.tone as StatusTone] ??
+        TONE_CHART_COLORS.secondary
+    );
 }
