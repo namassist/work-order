@@ -96,8 +96,11 @@ Payment track after Closed: §10
 | Review Dokumen | –        | Yes       | –                                          | target date                       | No                    |
 | Approval BAST  | –        | Yes       | –                                          | –                                 | No                    |
 | BAST Disetujui | –        | Yes       | –                                          | –                                 | No                    |
-| Closed         | –        | Read-only | Finance: payment track (§10)               | payment due date (§10)            | Yes (for the WO flow) |
+| Closed         | –        | Yes¹      | Finance: payment track (§10)               | payment due date (§10)            | Yes (for the WO flow) |
 | Dibatalkan     | –        | Read-only | –                                          | –                                 | Yes                   |
+
+¹ Comments on a Closed WO stay open while its payment is Belum ditagih or Ditagih, so Finance can
+coordinate billing there, and become read-only once it is Lunas.
 
 Every status sets every status flag (see `CLAUDE.md`). The number constraint covers every status
 after the first submission.

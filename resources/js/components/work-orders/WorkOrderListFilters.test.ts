@@ -30,6 +30,15 @@ const options = {
         { value: 'normal', label: 'Normal' },
         { value: 'mendesak', label: 'Mendesak' },
     ],
+    paymentStatuses: [
+        {
+            value: 'belum_ditagih' as const,
+            label: 'Belum ditagih',
+            tone: 'secondary',
+        },
+        { value: 'ditagih' as const, label: 'Ditagih', tone: 'warning' },
+        { value: 'lunas' as const, label: 'Lunas', tone: 'success' },
+    ],
     departments: [{ id: 3, code: 'IT', name: 'Teknologi Informasi' }],
     targetDepartments: [{ id: 7, code: 'ENG', name: 'Engineering' }],
     categories: [
@@ -101,6 +110,19 @@ describe('WorkOrderListFilters', () => {
 
         expect(inBody('[data-test="filter-target"]')).not.toBeNull();
         expect(inBody('[data-test="filter-overdue"]')).not.toBeNull();
+    });
+
+    it('opens the dashboard "Menunggu Pembayaran" link with its payment chip, counted on the Filter button', async () => {
+        const wrapper = mountFilters({ payment: 'ditagih' });
+
+        expect(chipLabels(wrapper)).toEqual(['Pembayaran: Ditagih']);
+        expect(
+            wrapper.get('[data-test="filter-popover-trigger"]').text(),
+        ).toContain('1');
+
+        await openPopover(wrapper);
+
+        expect(inBody('[data-test="filter-payment"]')).not.toBeNull();
     });
 
     it('opens a target and overdue URL with their chips, counted on the Filter button', () => {

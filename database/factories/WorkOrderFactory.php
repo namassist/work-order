@@ -7,13 +7,15 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderInvoice;
+use App\States\WorkOrder\ApprovalBast;
+use App\States\WorkOrder\BastDisetujui;
+use App\States\WorkOrder\Closed;
 use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\Dibatalkan;
-use App\States\WorkOrder\Dikerjakan;
 use App\States\WorkOrder\Ditolak;
 use App\States\WorkOrder\Draft;
-use App\States\WorkOrder\Penagihan;
-use App\States\WorkOrder\Selesai;
+use App\States\WorkOrder\Pelaksanaan;
+use App\States\WorkOrder\ReviewDokumen;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -97,38 +99,77 @@ class WorkOrderFactory extends Factory
     }
 
     /**
-     * A submitted work order being carried out.
+     * A work order Lead Operational approved, being carried out (Pelaksanaan).
      */
     public function inProgress(): static
     {
         return $this->submitted()->state(fn (array $attributes): array => [
-            'status' => Dikerjakan::class,
+            'status' => Pelaksanaan::class,
         ]);
     }
 
     /**
-     * An invoiced work order (Penagihan), with an
-     * unpaid invoice (no files) issued by a new user unless the given
-     * attributes say otherwise.
+     * A work order submitted for document review (Review Dokumen).
+     */
+    public function inReview(): static
+    {
+        return $this->submitted()->state(fn (array $attributes): array => [
+            'status' => ReviewDokumen::class,
+        ]);
+    }
+
+    /**
+     * A work order whose BAST waits for the Direktur (Approval BAST).
+     */
+    public function awaitingBastApproval(): static
+    {
+        return $this->submitted()->state(fn (array $attributes): array => [
+            'status' => ApprovalBast::class,
+        ]);
+    }
+
+    /**
+     * A work order whose BAST the Direktur approved (BAST Disetujui).
+     */
+    public function bastApproved(): static
+    {
+        return $this->submitted()->state(fn (array $attributes): array => [
+            'status' => BastDisetujui::class,
+        ]);
+    }
+
+    /**
+     * A closed work order not billed yet (payment Belum ditagih).
+     */
+    public function closed(): static
+    {
+        return $this->submitted()->state(fn (array $attributes): array => [
+            'status' => Closed::class,
+        ]);
+    }
+
+    /**
+     * A closed work order Finance billed (payment Ditagih), with an unpaid
+     * invoice (no files) issued by a new user unless the given attributes
+     * say otherwise.
      *
      * @param  array<string, mixed>  $invoice
      */
     public function billed(array $invoice = []): static
     {
-        return $this->submitted()
-            ->state(fn (array $attributes): array => ['status' => Penagihan::class])
+        return $this->closed()
             ->afterCreating(fn (WorkOrder $workOrder) => WorkOrderInvoice::factory()->for($workOrder)->create($invoice));
     }
 
     /**
-     * A work order whose invoice was paid (Selesai), confirmed by a new user.
+     * A closed work order whose invoice was paid (payment Lunas), confirmed
+     * by a new user.
      *
      * @param  array<string, mixed>  $invoice
      */
     public function paid(array $invoice = []): static
     {
-        return $this->submitted()
-            ->state(fn (array $attributes): array => ['status' => Selesai::class])
+        return $this->closed()
             ->afterCreating(fn (WorkOrder $workOrder) => WorkOrderInvoice::factory()->for($workOrder)->paid()->create($invoice));
     }
 

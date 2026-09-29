@@ -12,11 +12,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * The invoice of a work order (FLOW.md §8). Written only through
- * BillWorkOrder, CorrectInvoice, and ConfirmWorkOrderPayment, which log the
- * changes on the work order (so they show in its Riwayat); this model logs
- * nothing itself. Its files are the work order's 'invoice', 'bast', and
- * 'bukti_bayar' collections.
+ * The invoice of a closed work order, the data of its payment track
+ * (FLOW.md §10, PaymentStatus). Written only through BillWorkOrder,
+ * CorrectInvoice, and ConfirmWorkOrderPayment, which log the changes on the
+ * work order (so they show in its Riwayat); this model logs nothing itself.
+ * Its files are the work order's 'invoice' and 'bukti_bayar' collections.
  *
  * @property int $id
  * @property int $work_order_id
@@ -62,7 +62,7 @@ class WorkOrderInvoice extends Model
     }
 
     /**
-     * The executor side user who issued the invoice (moved the work order to Penagihan).
+     * The Finance user who issued the invoice.
      *
      * @return BelongsTo<User, $this>
      */
@@ -72,7 +72,7 @@ class WorkOrderInvoice extends Model
     }
 
     /**
-     * The executor side user who last corrected the invoice, if anyone did.
+     * The Finance user who last corrected the invoice, if anyone did.
      *
      * @return BelongsTo<User, $this>
      */
@@ -82,7 +82,7 @@ class WorkOrderInvoice extends Model
     }
 
     /**
-     * The finance side user who confirmed the payment.
+     * The Finance user who confirmed the payment.
      *
      * @return BelongsTo<User, $this>
      */
@@ -97,12 +97,22 @@ class WorkOrderInvoice extends Model
     }
 
     /**
-     * Whether the user may not confirm this invoice's payment because they
-     * issued it or last corrected it (segregation of duties, FLOW.md §8).
+     * Whether the user issued the invoice or last corrected it.
      */
     public function wasPreparedBy(User $user): bool
     {
         return $this->issued_by === $user->id || $this->corrected_by === $user->id;
+    }
+
+    /**
+     * Whether segregation of duties keeps the user from confirming this
+     * invoice's payment: only when the setting is on
+     * (work_order.payment.segregation_of_duties, default off, FLOW.md §10:
+     * the process has a single Finance lane), and then for whoever prepared it.
+     */
+    public function segregationBlocks(User $user): bool
+    {
+        return config()->boolean('work_order.payment.segregation_of_duties') && $this->wasPreparedBy($user);
     }
 
     /**

@@ -29,13 +29,18 @@ Warna brand dipakai hemat: sidebar, aksi utama, dan highlight. Sisanya netral.
 Warna status konsisten di badge, tabel, timeline, dan grafik:
 
 - Draft → `secondary`
-- Diajukan (menunggu diproses) → `warning`
-- Dikerjakan → `info`
-- Penagihan (menunggu pembayaran) → `billing`: ungu redup (`--billing`, terang `#7a5a92` dengan teks
-  `--billing-foreground` terang 5,57:1; gelap `#bea2d4` dengan teks gelap 8,17:1). Badge berisi,
-  seperti Diajukan dan Dikerjakan: masih berjalan, menunggu keuangan.
-- Selesai / Lunas / Closed → `success`
-- Ditolak → `destructive`: masih hidup, menunggu pemohon merevisi dan mengajukan ulang.
+- Diajukan (menunggu persetujuan) → `warning`
+- Pelaksanaan → `info`
+- Review Dokumen → `review`: sian (`--review`, terang `#0e7490` dengan teks `--review-foreground`
+  terang 5,26:1; gelap `#67c7d6` dengan teks gelap 9,40:1). Badge berisi: masih berjalan, menunggu
+  Rental.
+- Approval BAST → `approval`: ungu redup (`--approval`, terang `#7a5a92` dengan teks terang 5,57:1;
+  gelap `#bea2d4` dengan teks gelap 8,17:1). Badge berisi: menunggu Direktur.
+- BAST Disetujui → `approved`: garis tipis warna `success` tanpa isi (`border-success`, teks
+  `text-success`, 4,91:1 terang, 7,58:1 gelap). Sudah disetujui tapi belum ditutup, jadi tidak boleh
+  tertukar dengan Closed atau Lunas yang berisi hijau.
+- Closed → `success`
+- Ditolak → `destructive`: masih hidup, menunggu Admin WO merevisi dan mengajukan ulang.
 - Dibatalkan → `muted`: sudah berakhir, tidak ada lagi yang perlu dilakukan. Badge garis tipis
   (`border-border`, tanpa isi) dengan teks `text-muted-foreground` (5,26:1 terang, 6,73:1 gelap),
   supaya berbeda dari Draft yang berisi abu dan dari Ditolak yang merah.
@@ -45,18 +50,28 @@ menolak atau membatalkan memakai varian `destructive` di dialog konfirmasinya, a
 tujuannya.
 
 Di grafik, seri status memakai token badge-nya, asal kontrasnya minimal 3:1 terhadap `card`
-di mode terang dan gelap. Jika kurang, seri memakai token `--chart-*` khusus grafik dari keluarga
-warna yang sama; token badge tidak diubah. Saat ini: Draft `--chart-5` (abu netral, 4,96:1
-terang), Diajukan `--chart-submitted` (emas `--warning` yang digelapkan, 3,21:1 terang; di mode
-gelap sama dengan `--warning`), Dikerjakan `--info` (5,32:1 terang, 7,70:1 gelap), Penagihan
-`--billing` (5,57:1 terang, 7,55:1 gelap; jarak warna ΔE 26–27 dari `--info`, seri status terdekat,
-dan lebih jauh dari seri lain), Selesai `--success` (4,91:1 terang, 7,58:1 gelap), Ditolak
-`--destructive` (6,46:1 terang, 6,16:1 gelap), Dibatalkan `--chart-cancelled` (netral gelap:
-12,46:1 terang, 3,18:1 gelap; di kedua mode lebih gelap dari `--chart-5`, beda 2,51:1 terang dan
-2,11:1 gelap, supaya tidak tertukar dengan Draft). Warna grafik dipilih per status, dengan tone
-sebagai cadangan: `statusChartColor()` di `lib/workOrderStatus.ts` membaca `STATUS_CHART_COLORS`
-dulu (Dibatalkan), lalu warna tone-nya. Grafik selalu punya legenda berlabel, tooltip dengan
-angka, dan tabel alternatif untuk pembaca layar; angka tidak dicetak di dalam batang.
+di mode terang dan gelap. Jika kurang, atau badge-nya hanya garis, seri memakai token `--chart-*`
+khusus grafik dari keluarga warna yang sama; token badge tidak diubah. Jarak warna di bawah ini
+ΔE CIE76. Saat ini: Draft `--chart-5` (abu netral, 4,96:1 terang), Diajukan `--chart-submitted`
+(emas `--warning` yang digelapkan, 3,21:1 terang; di mode gelap sama dengan `--warning`),
+Pelaksanaan `--info` (5,32:1 terang, 7,70:1 gelap), Review Dokumen `--review` (5,26:1 terang,
+8,70:1 gelap; ΔE 27,5 terang dan 26,2 gelap dari `--info`, seri terdekat), Approval BAST
+`--approval` (5,57:1 terang, 7,55:1 gelap; ΔE 26–27 dari `--info`), BAST Disetujui
+`--chart-bast-approved` (hijau zaitun, 4,91:1 terang `#4d7c0f`, 10,35:1 gelap `#a3d977`; ΔE 36,7
+terang dan 29,4 gelap dari `--success`, seri terdekat), Closed `--success` (4,91:1 terang, 7,58:1
+gelap), Ditolak `--destructive` (6,46:1 terang, 6,16:1 gelap), Dibatalkan `--chart-cancelled`
+(netral gelap: 12,46:1 terang, 3,18:1 gelap; di kedua mode lebih gelap dari `--chart-5`, beda
+2,51:1 terang dan 2,11:1 gelap, supaya tidak tertukar dengan Draft). Warna grafik dipilih per
+status, dengan tone sebagai cadangan: `statusChartColor()` di `lib/workOrderStatus.ts` membaca
+`STATUS_CHART_COLORS` dulu (Dibatalkan), lalu warna tone-nya (`approved` → `--chart-bast-approved`).
+Grafik selalu punya legenda berlabel, tooltip dengan angka, dan tabel alternatif untuk pembaca
+layar; angka tidak dicetak di dalam batang.
+
+## Status pembayaran
+
+Jalur pembayaran WO Closed (FLOW.md §10) bukan status WO, jadi badge-nya selalu tampil di samping
+label "Pembayaran" (`components/work-orders/PaymentStatusBadge.vue`), tidak pernah menggantikan badge
+status: Belum ditagih → `secondary`, Ditagih → `warning` (menunggu Finance), Lunas → `success`.
 
 ## Urgensi Work Order
 
@@ -194,8 +209,9 @@ milik server, jadi URL lama, ekspor, dan tautan dashboard tetap berlaku.
 
 - Di bawah 1024px sidebar menjadi drawer.
 - Strip statistik: 4 kolom → 2×2 → 1 kolom. Strip dengan lebih dari 4 sel (Daftar WO: total plus
-  setiap status, 8 sel): 4 kolom mulai `lg` (dua baris) → 2 kolom, juga di ponsel, supaya tidak
-  menjadi satu kolom yang panjang dan tidak ada baris dengan sel kosong.
+  setiap status, 10 sel): 5 kolom mulai `lg` bila jumlahnya kelipatan 5 (Daftar WO: dua baris
+  berisi 5), selain itu 4 kolom, → 2 kolom, juga di ponsel, supaya tidak menjadi satu kolom yang
+  panjang dan tidak ada baris dengan sel kosong.
 - Tabel: kolom sekunder (orang, tanggal) disembunyikan di mobile, sisanya tetap terbaca
   tanpa scroll horizontal jika memungkinkan.
 

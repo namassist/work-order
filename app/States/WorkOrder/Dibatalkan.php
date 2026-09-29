@@ -2,11 +2,10 @@
 
 namespace App\States\WorkOrder;
 
-use App\Enums\WorkOrderSide;
-
 /**
- * Ended by the requester side with a reason, from Draft, Diajukan, or
- * Ditolak. Final: nothing is left to do, so it is shown muted.
+ * Ended with a reason (FLOW.md §5.2): by an Admin WO before execution, by
+ * Lead Operational during Pelaksanaan or Review Dokumen. Final: nothing is
+ * left to do, so it is shown muted.
  */
 class Dibatalkan extends WorkOrderStatus
 {
@@ -27,33 +26,8 @@ class Dibatalkan extends WorkOrderStatus
         return false;
     }
 
-    public function actionLabel(): string
-    {
-        return 'Batalkan';
-    }
-
-    public function isDestructiveAction(): bool
-    {
-        return true;
-    }
-
-    public function requiresNote(): bool
-    {
-        return true;
-    }
-
-    public function noteLabel(): string
-    {
-        return 'Alasan pembatalan';
-    }
-
     public function acceptsComments(): bool
     {
         return false;
-    }
-
-    public function performedBy(): WorkOrderSide
-    {
-        return WorkOrderSide::Requester;
     }
 }

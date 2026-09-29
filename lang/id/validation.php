@@ -201,8 +201,6 @@ return [
         'paid_on' => 'tanggal pembayaran',
         'invoice_files' => 'berkas invoice',
         'invoice_files.*' => 'berkas invoice',
-        'bast_files' => 'berkas BAST',
-        'bast_files.*' => 'berkas BAST',
         'proof_files' => 'bukti bayar',
         'proof_files.*' => 'bukti bayar',
         'remove_files' => 'berkas yang dihapus',

@@ -10,12 +10,11 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
-use Spatie\ModelStates\Exceptions\CouldNotPerformTransition;
 
 class WorkOrderPaymentController extends Controller
 {
     /**
-     * Confirm that the invoice was paid and close the work order (Selesai).
+     * Confirm that the invoice was paid: the payment becomes Lunas (FLOW.md §10).
      */
     public function store(ConfirmWorkOrderPaymentRequest $request, WorkOrder $workOrder, ConfirmWorkOrderPayment $confirm): RedirectResponse
     {
@@ -24,17 +23,13 @@ class WorkOrderPaymentController extends Controller
 
         try {
             $workOrder = $confirm->handle($workOrder, $user, $request->string('paid_on')->toString(), $request->uploads());
-        } catch (CouldNotPerformTransition) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Status work order sudah berubah. Muat ulang halaman lalu coba lagi.')]);
-
-            return back();
         } catch (InvoiceNotAllowed $exception) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
 
             return back();
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Pembayaran work order :number dikonfirmasi. Work order selesai.', ['number' => $workOrder->reference()])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Pembayaran work order :number dikonfirmasi. Status pembayaran: Lunas.', ['number' => $workOrder->reference()])]);
 
         return back();
     }

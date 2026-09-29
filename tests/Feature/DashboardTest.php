@@ -202,7 +202,7 @@ test('the request overview counts visible work orders per WITA day and current s
     // 23:59 WITA on 18 Sep, the day before the period.
     WorkOrder::factory()->create([...$inDepartment, 'created_at' => Carbon::parse('2026-09-18 15:59', 'UTC')]);
 
-    $none = ['draft' => 0, 'diajukan' => 0, 'ditolak' => 0, 'dikerjakan' => 0, 'penagihan' => 0, 'selesai' => 0, 'dibatalkan' => 0];
+    $none = array_fill_keys(WorkOrderStatus::flowOrder(), 0);
 
     $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
         ->get(route('dashboard'))
@@ -234,7 +234,7 @@ test('the request overview covers the last 30 days when asked', function () {
                 ->where('requestOverview.days', 30)
                 ->count('requestOverview.series', 30)
                 ->where('requestOverview.series.0.date', '2026-08-27')
-                ->where('requestOverview.series.9', ['date' => '2026-09-05', 'counts' => ['draft' => 1, 'diajukan' => 0, 'ditolak' => 0, 'dikerjakan' => 0, 'penagihan' => 0, 'selesai' => 0, 'dibatalkan' => 0]])));
+                ->where('requestOverview.series.9', ['date' => '2026-09-05', 'counts' => [...array_fill_keys(WorkOrderStatus::flowOrder(), 0), 'draft' => 1]])));
 });
 
 test('the request overview falls back to 7 days for an unknown period', function (string $period) {
@@ -256,7 +256,7 @@ function workOrderSubmittedAt(string $moment, array $attributes): WorkOrder
     test()->travelTo(Carbon::parse($moment, 'UTC'));
     $workOrder = WorkOrder::factory()->targeting(Department::factory()->create())->create($attributes);
 
-    return app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $workOrder->enteredBy);
+    return app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', adminUser());
 }
 
 test('the urgent list shows up to five visible active mendesak work orders, oldest submission first', function () {
@@ -271,7 +271,7 @@ test('the urgent list shows up to five visible active mendesak work orders, olde
     workOrderSubmittedAt('2026-09-19 00:00', [...$urgent, 'title' => 'Terhapus'])->delete();
     workOrderSubmittedAt('2026-09-19 00:00', [...$urgent, 'title' => 'Departemen lain', 'requester_department_id' => Department::factory()->create()->id]);
     $cancelled = workOrderSubmittedAt('2026-09-19 00:00', [...$urgent, 'title' => 'Dibatalkan']);
-    app(TransitionWorkOrder::class)->handle($cancelled, 'dibatalkan', $cancelled->enteredBy, 'Batal');
+    app(TransitionWorkOrder::class)->handle($cancelled, 'dibatalkan', adminUser(), 'Batal');
     WorkOrder::factory()->create([...$urgent, 'title' => 'Draft']);
 
     $first = WorkOrder::query()->where('title', 'Pertama')->with('category')->sole();
@@ -302,28 +302,30 @@ test('the urgent list takes every active status, in flow order, then oldest subm
         WorkOrder::query()->whereKey($workOrder->id)->update(['status' => $status]);
     };
 
-    $inStatus('penagihan', '2026-09-16 00:00', 'Penagihan lama');
-    $inStatus('penagihan', '2026-09-17 00:00', 'Penagihan baru');
-    $inStatus('dikerjakan', '2026-09-18 00:00', 'Dikerjakan');
+    $inStatus('bast_disetujui', '2026-09-14 00:00', 'BAST Disetujui');
+    $inStatus('review_dokumen', '2026-09-16 00:00', 'Review lama');
+    $inStatus('review_dokumen', '2026-09-17 00:00', 'Review baru');
+    $inStatus('pelaksanaan', '2026-09-18 00:00', 'Pelaksanaan');
     $inStatus('ditolak', '2026-09-19 00:00', 'Ditolak');
     $inStatus('diajukan', '2026-09-21 00:00', 'Diajukan baru');
     $inStatus('diajukan', '2026-09-20 00:00', 'Diajukan lama');
-    $inStatus('selesai', '2026-09-01 00:00', 'Selesai');
+    $inStatus('closed', '2026-09-01 00:00', 'Closed');
 
     $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
                 ->where('urgentWorkOrders', fn (Collection $rows): bool => $rows->pluck('title')->all() === [
-                    'Diajukan lama', 'Diajukan baru', 'Ditolak', 'Dikerjakan', 'Penagihan lama',
+                    'Diajukan lama', 'Diajukan baru', 'Ditolak', 'Pelaksanaan', 'Review lama',
                 ])
-                ->where('urgentWorkOrders.3.status.value', 'dikerjakan')));
+                ->where('urgentWorkOrders.3.status.value', 'pelaksanaan')));
 });
 
 test('the urgent list is the list filtered by urgency mendesak and status aktif', function () {
     $department = Department::factory()->client()->create();
     $urgent = ['requester_department_id' => $department->id, 'urgency' => WorkOrderUrgency::Mendesak];
-    foreach (['diajukan', 'ditolak', 'dikerjakan', 'penagihan', 'selesai', 'dibatalkan'] as $index => $status) {
+    // Five active statuses: the panel shows at most five.
+    foreach (['diajukan', 'ditolak', 'pelaksanaan', 'review_dokumen', 'bast_disetujui', 'closed', 'dibatalkan'] as $index => $status) {
         $workOrder = workOrderSubmittedAt("2026-09-2{$index} 00:00", [...$urgent, 'title' => $status]);
         WorkOrder::query()->whereKey($workOrder->id)->update(['status' => $status]);
     }
@@ -343,7 +345,7 @@ test('the urgent list is the list filtered by urgency mendesak and status aktif'
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
                 ->where('urgentWorkOrders', fn (Collection $rows): bool => $rows->pluck('title')->sort()->values()->all() === $listed
-                    && $listed === ['diajukan', 'dikerjakan', 'ditolak', 'penagihan'])));
+                    && $listed === ['bast_disetujui', 'diajukan', 'ditolak', 'pelaksanaan', 'review_dokumen'])));
 });
 
 test('the urgent list is empty when nothing mendesak is waiting', function () {
@@ -420,7 +422,7 @@ test('a comment or a status change moves a work order to the top of the recent l
         ->assertInertia(expectRecentWorkOrderIds([$commented->id, $untouched->id, $submitted->id]));
 
     $this->travel(1)->hours();
-    app(TransitionWorkOrder::class)->handle($submitted, 'diajukan', $user);
+    app(TransitionWorkOrder::class)->handle($submitted, 'diajukan', adminUser());
     $this->get(route('dashboard'))
         ->assertInertia(expectRecentWorkOrderIds([$submitted->id, $commented->id, $untouched->id]));
 });

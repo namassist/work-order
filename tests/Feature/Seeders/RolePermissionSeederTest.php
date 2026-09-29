@@ -4,6 +4,7 @@ use App\Enums\CompanyScope;
 use App\Enums\Permission;
 use App\Enums\SystemRole;
 use Database\Seeders\RolePermissionSeeder;
+use Spatie\Permission\Models\Permission as PermissionModel;
 use Spatie\Permission\Models\Role;
 
 it('gives the admin role every permission, including ones added later', function () {
@@ -52,12 +53,12 @@ it('gives each initial role exactly its work order permissions', function (strin
     expect(Role::findByName($role)->permissions->pluck('name')->sort()->values()->all())
         ->toBe(collect($permissions)->map(fn (Permission $permission): string => $permission->value)->sort()->values()->all());
 })->with([
-    'Admin WO' => ['admin-wo', [Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::WorkOrdersDelete, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
-    'Lead Operational' => ['lead-operational', [Permission::WorkOrdersView, Permission::WorkOrdersProcess, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
-    'PIC Timesheet' => ['pic-timesheet', [Permission::WorkOrdersView, Permission::WorkOrdersComment]],
-    'Rental' => ['rental', [Permission::WorkOrdersView, Permission::WorkOrdersComment]],
-    'Direktur' => ['direktur', [Permission::WorkOrdersView, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
-    'Finance' => ['finance', [Permission::WorkOrdersView, Permission::WorkOrdersConfirmPayment, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
+    'Admin WO' => ['admin-wo', [Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::WorkOrdersDelete, Permission::WorkOrdersSubmit, Permission::WorkOrdersClose, Permission::WorkOrdersCancel, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
+    'Lead Operational' => ['lead-operational', [Permission::WorkOrdersView, Permission::WorkOrdersApprove, Permission::WorkOrdersCancelExecution, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
+    'PIC Timesheet' => ['pic-timesheet', [Permission::WorkOrdersView, Permission::WorkOrdersSubmitReview, Permission::WorkOrdersComment]],
+    'Rental' => ['rental', [Permission::WorkOrdersView, Permission::WorkOrdersReview, Permission::WorkOrdersComment]],
+    'Direktur' => ['direktur', [Permission::WorkOrdersView, Permission::WorkOrdersApproveBast, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
+    'Finance' => ['finance', [Permission::WorkOrdersView, Permission::WorkOrdersBill, Permission::WorkOrdersConfirmPayment, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
     'Viewer' => ['viewer', [Permission::WorkOrdersView]],
 ]);
 
@@ -76,6 +77,16 @@ it('refuses to run while a v1 role still exists, and changes nothing', function 
 
     expect(Role::query()->pluck('name')->all())->toBe([$v1Role]);
 })->with(RolePermissionSeeder::V1_ROLES);
+
+it('refuses to run while a retired permission still exists, and changes nothing', function (string $retired) {
+    PermissionModel::create(['name' => $retired, 'guard_name' => 'web']);
+
+    expect(fn () => $this->seed(RolePermissionSeeder::class))
+        ->toThrow(LogicException::class, "The database still has the retired permissions [{$retired}].");
+
+    expect(PermissionModel::query()->pluck('name')->all())->toBe([$retired])
+        ->and(Role::query()->exists())->toBeFalse();
+})->with(RolePermissionSeeder::RETIRED_PERMISSIONS);
 
 it('keeps an admin label edited after the first run', function () {
     $this->seed(RolePermissionSeeder::class);

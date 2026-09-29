@@ -20,10 +20,14 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
+use App\States\WorkOrder\ApprovalBast;
+use App\States\WorkOrder\BastDisetujui;
+use App\States\WorkOrder\Closed;
 use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\Dibatalkan;
-use App\States\WorkOrder\Dikerjakan;
 use App\States\WorkOrder\Ditolak;
+use App\States\WorkOrder\Pelaksanaan;
+use App\States\WorkOrder\ReviewDokumen;
 use App\Support\Comments\CommentHtml;
 use App\Support\DisplayDate;
 use Carbon\CarbonImmutable;
@@ -46,7 +50,8 @@ use RuntimeException;
  * role (IC never logs in; its departments and contacts are requester data
  * only), categories, and work orders spread over the last three months.
  * Work orders go through CreateWorkOrder, AddAttachment,
- * TransitionWorkOrder, and the comment actions at their historical moments,
+ * TransitionWorkOrder, the payment track actions, and the comment actions at
+ * their historical moments,
  * in chronological order, so numbers, status history, the timeline, and the
  * activity log match real use.
  *
@@ -306,7 +311,27 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * Optional notes when Lead Operational accepts a work order.
+     * Why Rental returns a work order from Review Dokumen to Pelaksanaan.
+     *
+     * @var list<string>
+     */
+    private const array RETURN_NOTES = [
+        'Foto sesudah pekerjaan belum dilampirkan. Mohon dilengkapi.',
+        'Laporan harian tanggal terakhir belum mencantumkan jumlah material terpakai.',
+    ];
+
+    /**
+     * Why Lead Operational cancels a work order during execution.
+     *
+     * @var list<string>
+     */
+    private const array EXECUTION_CANCEL_NOTES = [
+        'IC menghentikan pekerjaan karena perubahan rencana produksi.',
+        'Pekerjaan dialihkan ke vendor IC sendiri.',
+    ];
+
+    /**
+     * Optional notes when Lead Operational approves a work order.
      *
      * @var list<string|null>
      */
@@ -371,38 +396,69 @@ Nanti saya kabari lagi.'],
         .'<p>Rincian pekerjaan terlampir. Pertanyaan bisa ke <a href="mailto:helpdesk@worder.test">helpdesk</a>.</p>';
 
     /**
-     * How many work orders take each path through the flow (FLOW.md §5).
-     * Overdue ones have a target date that has passed. Resubmitted ones were
-     * rejected and submitted again under the same number.
+     * How many work orders take each path through the flow (FLOW.md §5) and
+     * the payment track (§10). Overdue ones have a target date that has
+     * passed. Resubmitted ones were rejected and submitted again under the
+     * same number; returned ones were sent back from Review Dokumen to
+     * Pelaksanaan by Rental; cancelled_execution ones were cancelled by Lead
+     * Operational, alternately in Pelaksanaan and in Review Dokumen.
      *
      * @var array<string, int>
      */
     private const array PATHS = [
-        'draft' => 15,
-        'submitted' => 14,
+        'draft' => 10,
+        'submitted' => 9,
         'overdue' => 4,
-        'resubmitted' => 4,
-        'in_progress' => 6,
+        'resubmitted' => 3,
+        'rejected' => 4,
+        'rejected_cancelled' => 2,
+        'cancelled_draft' => 4,
+        'cancelled_submitted' => 2,
+        'in_progress' => 5,
         'in_progress_overdue' => 2,
+        'returned' => 2,
+        'cancelled_execution' => 2,
+        'in_review' => 3,
+        'awaiting_bast' => 3,
+        'bast_approved' => 2,
+        'closed' => 3,
         'billed' => 4,
         'billed_overdue' => 2,
         'paid' => 4,
-        'rejected' => 5,
-        'rejected_cancelled' => 2,
-        'cancelled_draft' => 5,
-        'cancelled_submitted' => 3,
     ];
 
     /**
-     * Paths through Dikerjakan: accepted by Lead Operational.
+     * How far along the flow each path goes after Lead Operational approves
+     * it: every later path also takes the earlier steps.
+     *
+     * @var array<string, int> 1 review submitted, 2 BAST submitted, 3 BAST approved, 4 closed
      */
-    private const array ACCEPTED_PATHS = ['in_progress', 'in_progress_overdue', 'billed', 'billed_overdue', 'paid'];
+    private const array STAGES = [
+        'returned' => 1,
+        'in_review' => 1,
+        'awaiting_bast' => 2,
+        'bast_approved' => 3,
+        'closed' => 4,
+        'billed' => 4,
+        'billed_overdue' => 4,
+        'paid' => 4,
+    ];
 
     /**
-     * Paths through Penagihan: invoiced by Lead Operational (PROVISIONAL
-     * until step 3 moves invoicing to Finance's payment track).
+     * Paths through Pelaksanaan: approved by Lead Operational.
+     */
+    private const array ACCEPTED_PATHS = ['in_progress', 'in_progress_overdue', 'returned', 'cancelled_execution', 'in_review', 'awaiting_bast', 'bast_approved', 'closed', 'billed', 'billed_overdue', 'paid'];
+
+    /**
+     * Paths Finance bills after the work order is closed.
      */
     private const array BILLED_PATHS = ['billed', 'billed_overdue', 'paid'];
+
+    /**
+     * Paths whose work orders get comments, from submission until they stop
+     * taking them (a cancellation or the payment).
+     */
+    private const array COMMENTED_PATHS = ['submitted', 'overdue', 'in_progress', 'in_progress_overdue', 'returned', 'cancelled_execution', 'in_review', 'awaiting_bast', 'bast_approved', 'closed', 'billed', 'billed_overdue', 'paid', 'cancelled_submitted'];
 
     /**
      * How many work orders get each urgency: 10% rendah, 60% normal, 20%
@@ -672,6 +728,8 @@ Nanti saya kabari lagi.'],
         $withRole = fn (string $role): array => $users->filter(fn (User $user): bool => $user->hasRole($role))->values()->all();
         $adminWos = $withRole('admin-wo');
         $lead = $users->sole(fn (User $user): bool => $user->hasRole('lead-operational'));
+        $rental = $users->sole(fn (User $user): bool => $user->hasRole('rental'));
+        $direktur = $users->sole(fn (User $user): bool => $user->hasRole('direktur'));
         $finance = $withRole('finance');
         $picByDepartment = $users
             ->filter(fn (User $user): bool => $user->hasRole('pic-timesheet'))
@@ -685,8 +743,8 @@ Nanti saya kabari lagi.'],
         $created = [];
         $events = [];
         $withComments = 0;
-        /** @var array<string, int> $billedPerPath */
-        $billedPerPath = [];
+        /** @var array<string, int> $perPath how many work orders of each path came before */
+        $perPath = [];
 
         foreach ($paths as $index => $path) {
             // Admin WO enters every work order for an IC department and contact
@@ -728,15 +786,23 @@ Nanti saya kabari lagi.'],
                 }
             }
 
+            $nth = $perPath[$path] = ($perPath[$path] ?? 0) + 1;
+
             // Each step some minutes to days after the one before: at most
-            // 3 + 2 + 2 days after creation, or 3 + 2 + 5 + 4 when invoiced
-            // and paid, within creationMoment()'s margin.
+            // 20 days after creation for a paid one, within creationMoment()'s margin.
             $submittedAt = $createdAt->addMinutes($this->faker->numberBetween(30, 3 * 24 * 60));
             $decidedAt = $submittedAt->addMinutes($this->faker->numberBetween(60, 2 * 24 * 60));
             $revisedAt = $decidedAt->addMinutes($this->faker->numberBetween(60, 2 * 24 * 60));
-            // After the progress photo a day into the work.
-            $billedAt = $decidedAt->addMinutes($this->faker->numberBetween(2 * 24 * 60, 5 * 24 * 60));
+            // After the progress photo and report a day into the work.
+            $reviewAt = $decidedAt->addMinutes($this->faker->numberBetween(2 * 24 * 60, 5 * 24 * 60));
+            $reviewedAt = $reviewAt->addMinutes($this->faker->numberBetween(2 * 60, 24 * 60));
+            $bastApprovedAt = $reviewedAt->addMinutes($this->faker->numberBetween(2 * 60, 24 * 60));
+            $closedAt = $bastApprovedAt->addMinutes($this->faker->numberBetween(60, 24 * 60));
+            $billedAt = $closedAt->addMinutes($this->faker->numberBetween(24 * 60, 3 * 24 * 60));
             $paidAt = $billedAt->addMinutes($this->faker->numberBetween(24 * 60, 4 * 24 * 60));
+            // Alternately during Pelaksanaan (after the progress photo) and during Review Dokumen.
+            $cancelledInReview = $path === 'cancelled_execution' && $nth % 2 === 0;
+            $executionCancelledAt = $cancelledInReview ? $reviewedAt : $decidedAt->addMinutes($this->faker->numberBetween(2 * 24 * 60, 4 * 24 * 60));
 
             if ($path === 'cancelled_draft') {
                 $events[] = $this->transitionEvent($created, $index, $submittedAt, $actor, Dibatalkan::getMorphClass(), $this->faker->randomElement(self::DRAFT_CANCEL_NOTES));
@@ -751,12 +817,12 @@ Nanti saya kabari lagi.'],
             $events[] = $this->transitionEvent($created, $index, $submittedAt, $actor, Diajukan::getMorphClass());
 
             // Comments start once the work order is submitted, when every
-            // role sees it, and end before a cancellation, which makes them
-            // read-only.
-            if (in_array($path, ['submitted', 'overdue', 'in_progress', 'in_progress_overdue', 'billed', 'billed_overdue', 'paid', 'cancelled_submitted'], true) && in_array($index % 5, [1, 2, 3], true)) {
-                // Selesai, like a cancellation, makes them read-only.
+            // role sees it, and end before a cancellation or the payment
+            // (Lunas), which make them read-only.
+            if (in_array($path, self::COMMENTED_PATHS, true) && in_array($index % 5, [1, 2, 3], true)) {
                 $until = match ($path) {
                     'cancelled_submitted' => $decidedAt,
+                    'cancelled_execution' => $executionCancelledAt,
                     'paid' => $paidAt,
                     default => CarbonImmutable::now()->subHour(),
                 };
@@ -771,9 +837,36 @@ Nanti saya kabari lagi.'],
                 array_push($events, ...$this->planAcceptance($created, $index, $decidedAt, $lead, $pic));
             }
 
+            $stage = self::STAGES[$path] ?? ($cancelledInReview ? 1 : 0);
+
+            if ($stage >= 1) {
+                $events[] = $this->transitionEvent($created, $index, $reviewAt, $pic, ReviewDokumen::getMorphClass());
+            }
+
+            if ($path === 'returned') {
+                $events[] = $this->transitionEvent($created, $index, $reviewedAt, $rental, Pelaksanaan::getMorphClass(), self::RETURN_NOTES[$nth % count(self::RETURN_NOTES)]);
+            }
+
+            if ($path === 'cancelled_execution') {
+                $events[] = $this->transitionEvent($created, $index, $executionCancelledAt, $lead, Dibatalkan::getMorphClass(), self::EXECUTION_CANCEL_NOTES[$nth % count(self::EXECUTION_CANCEL_NOTES)]);
+            }
+
+            if ($stage >= 2) {
+                $events[] = $this->transitionEvent($created, $index, $reviewedAt, $rental, ApprovalBast::getMorphClass());
+            }
+
+            if ($stage >= 3) {
+                $events[] = $this->transitionEvent($created, $index, $bastApprovedAt, $direktur, BastDisetujui::getMorphClass());
+            }
+
+            if ($stage >= 4) {
+                $events[] = $this->transitionEvent($created, $index, $closedAt, $actor, Closed::getMorphClass());
+            }
+
             if (in_array($path, self::BILLED_PATHS, true)) {
-                $billedPerPath[$path] = ($billedPerPath[$path] ?? 0) + 1;
-                array_push($events, ...$this->planBilling($created, $index, $path, $billedPerPath[$path], $billedAt, $lead));
+                /** @var User $biller */
+                $biller = $this->faker->randomElement($finance);
+                array_push($events, ...$this->planBilling($created, $index, $path, $nth, $billedAt, $biller));
             }
 
             if ($path === 'paid') {
@@ -781,7 +874,7 @@ Nanti saya kabari lagi.'],
                 $confirmer = $this->faker->randomElement($finance);
                 // Every other payment comes with the transfer receipt: counted among the
                 // paid work orders, not by position in the shuffled plan, so exactly half do.
-                $withProof = $billedPerPath[$path] % 2 === 0;
+                $withProof = $nth % 2 === 0;
                 $events[] = ['at' => $paidAt, 'actor' => $confirmer, 'run' => function () use (&$created, $index, $confirmer, $paidAt, $withProof): void {
                     $proof = $withProof ? [$this->sampleUpload(['foto.jpg', 'Bukti_Transfer.jpg'])] : [];
                     $this->confirmPayment->handle($created[$index], $confirmer, DisplayDate::local($paidAt)->toDateString(), $proof);
@@ -824,23 +917,23 @@ Nanti saya kabari lagi.'],
     }
 
     /**
-     * Lead Operational accepts the work order, sometimes with a note, and on
-     * every other one uploads a progress photo a day later (the executor
-     * side adds documents while Dikerjakan, PROVISIONAL until step 3). On
-     * every third one the target department's PIC Timesheet posts a
-     * formatted progress report with an inline photo and a document (FLOW.md
-     * §9), uploaded and claimed through the real actions.
+     * Lead Operational approves the work order, sometimes with a note. On
+     * every other one the target department's PIC Timesheet uploads a
+     * progress photo a day later (PIC Timesheet adds documents during
+     * Pelaksanaan, FLOW.md §5.3), and on every third one posts a formatted
+     * progress report with an inline photo and a document (FLOW.md §9),
+     * uploaded and claimed through the real actions.
      *
      * @param  array<int, WorkOrder>  $created  filled while the timeline runs
      * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
      */
     private function planAcceptance(array &$created, int $index, CarbonImmutable $at, User $lead, User $pic): array
     {
-        $events = [$this->transitionEvent($created, $index, $at, $lead, Dikerjakan::getMorphClass(), self::ACCEPT_NOTES[$index % count(self::ACCEPT_NOTES)])];
+        $events = [$this->transitionEvent($created, $index, $at, $lead, Pelaksanaan::getMorphClass(), self::ACCEPT_NOTES[$index % count(self::ACCEPT_NOTES)])];
 
         if ($index % 2 === 0) {
-            $events[] = ['at' => $at->addDay(), 'actor' => $lead, 'run' => function () use (&$created, $index, $lead): void {
-                $this->attachSample($created[$index], ['foto.jpg', 'Foto_Progres.jpg'], $lead);
+            $events[] = ['at' => $at->addDay(), 'actor' => $pic, 'run' => function () use (&$created, $index, $pic): void {
+                $this->attachSample($created[$index], ['foto.jpg', 'Foto_Progres.jpg'], $pic);
             }];
         }
 
@@ -854,17 +947,17 @@ Nanti saya kabari lagi.'],
     }
 
     /**
-     * Lead Operational invoices it (FLOW.md v1 §8, PROVISIONAL until step 3): an
-     * invoice file always, a BAST on every other one, an amount, and a due
-     * date 30 days on (14 when it is meant to be past by now). Of the ones
-     * still waiting for payment, the first has neither amount nor due date,
-     * and the second gets its amount corrected a few hours later.
+     * Finance bills the closed work order (FLOW.md §10): an invoice file, an
+     * amount, and a due date 30 days on (14 when it is meant to be past by
+     * now). Of the ones still waiting for payment, the first has neither
+     * amount nor due date, and the second gets its amount corrected by the
+     * same Finance user a few hours later.
      *
      * @param  array<int, WorkOrder>  $created  filled while the timeline runs
      * @param  int  $nth  this work order's place among those of its path, from 1
      * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
      */
-    private function planBilling(array &$created, int $index, string $path, int $nth, CarbonImmutable $at, User $lead): array
+    private function planBilling(array &$created, int $index, string $path, int $nth, CarbonImmutable $at, User $biller): array
     {
         $bare = $path === 'billed' && $nth === 1;
         $invoiceDate = DisplayDate::local($at)->toDateString();
@@ -875,7 +968,7 @@ Nanti saya kabari lagi.'],
             default => DisplayDate::local($at)->addDays(30)->toDateString(),
         };
 
-        $events = [['at' => $at, 'actor' => $lead, 'run' => function () use (&$created, $index, $lead, $invoiceDate, $amount, $dueDate): void {
+        $events = [['at' => $at, 'actor' => $biller, 'run' => function () use (&$created, $index, $biller, $invoiceDate, $amount, $dueDate): void {
             $workOrder = $created[$index];
             $department = (string) $workOrder->targetDepartment?->code;
             $year = substr($invoiceDate, 0, 4);
@@ -883,7 +976,7 @@ Nanti saya kabari lagi.'],
 
             $created[$index] = $this->billWorkOrder->handle(
                 $workOrder,
-                $lead,
+                $biller,
                 [
                     'number' => sprintf('INV/UGL/%s/%s/%03d', $department, $year, $sequence),
                     'invoice_date' => $invoiceDate,
@@ -891,15 +984,14 @@ Nanti saya kabari lagi.'],
                     'due_date' => $dueDate,
                 ],
                 [$this->sampleUpload(['dokumen.pdf', "Invoice_{$department}_{$sequence}.pdf"])],
-                $index % 2 === 0 ? [$this->sampleUpload(['dokumen.pdf', 'BAST.pdf'])] : [],
             );
         }]];
 
         if ($path === 'billed' && $nth === 2 && $amount !== null) {
-            $events[] = ['at' => $at->addHours(3), 'actor' => $lead, 'run' => function () use (&$created, $index, $lead, $amount): void {
+            $events[] = ['at' => $at->addHours(3), 'actor' => $biller, 'run' => function () use (&$created, $index, $biller, $amount): void {
                 $invoice = $created[$index]->invoice()->sole();
 
-                $this->correctInvoice->handle($created[$index], $lead, [
+                $this->correctInvoice->handle($created[$index], $biller, [
                     'number' => $invoice->number,
                     'invoice_date' => $invoice->invoice_date->toDateString(),
                     'amount' => (string) ((int) $amount + 250_000),
@@ -991,21 +1083,23 @@ Nanti saya kabari lagi.'],
     }
 
     /**
-     * A moment in WITA working hours. Work orders that move on are created at
-     * least 8 days ago (16 when invoiced) so every later step is in the past (at most 7 days
-     * later, plus a day for a progress photo); overdue ones at least 30 days ago so their target has passed.
+     * A moment in WITA working hours, far enough back that every later step
+     * of the path is in the past (see planWorkOrders()): up to 7 days of
+     * steps before execution, 13 to closing, 16 to billing, and 20 to
+     * payment. Overdue ones at least 30 days ago so their target has passed.
      */
     private function creationMoment(string $path): CarbonImmutable
     {
-        // Invoiced ones at least 16 days ago (14 days of steps). Their due date
-        // is 30 days after the invoice, so ones meant to be still due are at
-        // most 30 days old; ones meant to be past due (14 days) at least 40.
+        // Billed ones are due 30 days after the invoice, so ones meant to be
+        // still due are at most 30 days old; ones meant to be past due (14
+        // days) at least 40.
         [$minDaysAgo, $maxDaysAgo] = match ($path) {
             'draft' => [1, self::HISTORY_DAYS],
             'overdue', 'in_progress_overdue' => [30, self::HISTORY_DAYS],
-            'billed' => [16, 30],
+            'returned', 'cancelled_execution', 'in_review', 'awaiting_bast', 'bast_approved', 'closed' => [14, self::HISTORY_DAYS],
+            'billed' => [18, 30],
             'billed_overdue' => [40, self::HISTORY_DAYS],
-            'paid' => [16, self::HISTORY_DAYS],
+            'paid' => [22, self::HISTORY_DAYS],
             default => [8, self::HISTORY_DAYS],
         };
 

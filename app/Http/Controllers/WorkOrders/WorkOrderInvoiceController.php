@@ -12,12 +12,11 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
-use Spatie\ModelStates\Exceptions\CouldNotPerformTransition;
 
 class WorkOrderInvoiceController extends Controller
 {
     /**
-     * Invoice the work order and move it to Penagihan (FLOW.md §8).
+     * Bill the closed work order: its payment becomes Ditagih (FLOW.md §10).
      */
     public function store(StoreWorkOrderInvoiceRequest $request, WorkOrder $workOrder, BillWorkOrder $bill): RedirectResponse
     {
@@ -25,9 +24,9 @@ class WorkOrderInvoiceController extends Controller
         $user = $request->user();
 
         try {
-            $workOrder = $bill->handle($workOrder, $user, $request->invoiceAttributes(), $request->uploads('invoice_files'), $request->uploads('bast_files'));
-        } catch (CouldNotPerformTransition) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Status work order sudah berubah. Muat ulang halaman lalu coba lagi.')]);
+            $workOrder = $bill->handle($workOrder, $user, $request->invoiceAttributes(), $request->uploads());
+        } catch (InvoiceNotAllowed $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
 
             return back();
         }
@@ -38,7 +37,7 @@ class WorkOrderInvoiceController extends Controller
     }
 
     /**
-     * Correct the invoice while the work order waits for payment.
+     * Correct the invoice while it waits for payment.
      */
     public function update(UpdateWorkOrderInvoiceRequest $request, WorkOrder $workOrder, CorrectInvoice $correct): RedirectResponse
     {
@@ -46,7 +45,7 @@ class WorkOrderInvoiceController extends Controller
         $user = $request->user();
 
         try {
-            $correct->handle($workOrder, $user, $request->invoiceAttributes(), $request->uploads('invoice_files'), $request->uploads('bast_files'), $request->removedFiles());
+            $correct->handle($workOrder, $user, $request->invoiceAttributes(), $request->uploads(), $request->removedFiles());
         } catch (InvoiceNotAllowed $exception) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
 

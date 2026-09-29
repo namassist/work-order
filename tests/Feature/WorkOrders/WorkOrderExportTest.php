@@ -127,7 +127,7 @@ it('downloads the list as an xlsx named after the WITA time', function () {
     expect(array_map(fn (Cell $cell): mixed => $cell->getValue(), exportedRows($response)[0]))
         ->toBe([
             'Nomor', 'Judul', 'Deskripsi', 'Departemen pemohon', 'Departemen tujuan', 'Kategori', 'Kontak pemohon', 'PIC Work Order', 'Diinput oleh',
-            'Status', 'Urgensi', 'Target', 'Dibuat', 'Diajukan', 'No. invoice', 'Tanggal invoice', 'Jumlah', 'Jatuh tempo', 'Tanggal bayar',
+            'Status', 'Urgensi', 'Target', 'Dibuat', 'Diajukan', 'Status pembayaran', 'No. invoice', 'Tanggal invoice', 'Jumlah', 'Jatuh tempo', 'Tanggal bayar',
         ])
         ->and(exportedSheetXml($response))->toContain('<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>');
 });
@@ -204,9 +204,9 @@ it('applies the list\'s aktif, target department, and overdue filters, and logs 
     $this->travelTo(Carbon::parse('2026-09-24 23:30', 'UTC'));
     $engineering = Department::factory()->create(['code' => 'ENG']);
     $late = ['target_date' => '2026-09-24', 'target_department_id' => $engineering->id];
-    exportableWorkOrder([...$late, 'title' => 'Terlambat di ENG', 'status' => 'dikerjakan', 'number' => 'WO/IT/2026/09/0001']);
-    exportableWorkOrder([...$late, 'title' => 'Tepat waktu', 'status' => 'dikerjakan', 'number' => 'WO/IT/2026/09/0002', 'target_date' => '2026-09-25']);
-    exportableWorkOrder([...$late, 'title' => 'Departemen lain', 'status' => 'dikerjakan', 'number' => 'WO/IT/2026/09/0003', 'target_department_id' => Department::factory()->create()->id]);
+    exportableWorkOrder([...$late, 'title' => 'Terlambat di ENG', 'status' => 'pelaksanaan', 'number' => 'WO/IT/2026/09/0001']);
+    exportableWorkOrder([...$late, 'title' => 'Tepat waktu', 'status' => 'pelaksanaan', 'number' => 'WO/IT/2026/09/0002', 'target_date' => '2026-09-25']);
+    exportableWorkOrder([...$late, 'title' => 'Departemen lain', 'status' => 'pelaksanaan', 'number' => 'WO/IT/2026/09/0003', 'target_department_id' => Department::factory()->create()->id]);
 
     $response = $this->actingAs($this->exporter)->get(route('work-orders.export', [
         'status' => 'aktif',
@@ -278,7 +278,7 @@ it('writes dates as Excel date cells in WITA', function () {
     $workOrder = exportableWorkOrder(['target_date' => '2026-10-01', 'target_department_id' => Department::factory()->create()->id]);
 
     Carbon::setTestNow('2026-09-26 01:05:00');
-    app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $this->exporter);
+    app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', adminUser());
 
     [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
     [$target, $created, $submitted] = array_slice($row, 11, 3);
@@ -323,7 +323,7 @@ it('writes the invoice: number, dates as calendar dates, and the amount as a Rup
         'created_at' => now()->subDay(),
         'target_department_id' => Department::factory()->create()->id,
         'number' => 'WO/IT/2026/09/0001',
-        'status' => 'selesai',
+        'status' => 'closed',
     ]))->create([
         'number' => 'INV/ENG/2026/001',
         'invoice_date' => '2026-09-20',
@@ -334,20 +334,22 @@ it('writes the invoice: number, dates as calendar dates, and the amount as a Rup
 
     $response = $this->actingAs($this->exporter)->get(route('work-orders.export'));
     [, $withoutInvoice, $paid] = exportedRows($response);
-    [$number, $invoiceDate, $amount, $dueDate, $paidOn] = array_slice($paid, 14);
+    [$paymentStatus, $number, $invoiceDate, $amount, $dueDate, $paidOn] = array_slice($paid, 14);
 
-    expect($number->getValue())->toBe('INV/ENG/2026/001')
+    expect($paymentStatus->getValue())->toBe('Lunas')
+        ->and($number->getValue())->toBe('INV/ENG/2026/001')
         ->and($invoiceDate)->toBeInstanceOf(DateTimeCell::class)
         ->and($invoiceDate->getValue()->format('Y-m-d'))->toBe('2026-09-20')
         ->and($amount)->toBeInstanceOf(NumericCell::class)
         ->and($amount->getValue())->toBe(1500000.5)
         ->and($dueDate->getValue()->format('Y-m-d'))->toBe('2026-09-30')
         ->and($paidOn->getValue()->format('Y-m-d'))->toBe('2026-09-24')
+        // Not closed: no payment status and no invoice.
         ->and(array_map(fn (Cell $cell): string => $cell::class, array_slice($withoutInvoice, 14)))
-        ->toBe(array_fill(0, 5, EmptyCell::class));
+        ->toBe(array_fill(0, 6, EmptyCell::class));
 
     $styles = exportedXml($response, 'xl/styles.xml');
-    preg_match('~<c r="Q3" s="(\d+)"[^>]*><v>1500000.5</v></c>~', exportedSheetXml($response), $cell);
+    preg_match('~<c r="R3" s="(\d+)"[^>]*><v>1500000.5</v></c>~', exportedSheetXml($response), $cell);
     preg_match('~<numFmt numFmtId="(\d+)" formatCode="&quot;Rp &quot;#,##0\.00"/>~', $styles, $format);
 
     expect($cell)->not->toBeEmpty()
@@ -363,7 +365,7 @@ it('writes user-entered text as plain strings, never formulas', function () {
         'pic_name' => '=cmd',
         'target_department_id' => Department::factory()->create()->id,
         'number' => 'WO/IT/2026/09/0001',
-        'status' => 'penagihan',
+        'status' => 'closed',
     ]))->create(['number' => '-2+3']);
     WorkOrder::factory()->create([
         'requester_department_id' => $this->department->id,
@@ -378,7 +380,7 @@ it('writes user-entered text as plain strings, never formulas', function () {
         ->and($xml)->toMatch('~<c r="C2"[^>]* t="inlineStr"><is><t>@SUM\(A1\)</t></is></c>~')
         ->and($xml)->toMatch('~<c r="G2"[^>]* t="inlineStr"><is><t>\+SUM\(1,1\)</t></is></c>~')
         ->and($xml)->toMatch('~<c r="H2"[^>]* t="inlineStr"><is><t>=cmd</t></is></c>~')
-        ->and($xml)->toMatch('~<c r="O2"[^>]* t="inlineStr"><is><t>-2\+3</t></is></c>~')
+        ->and($xml)->toMatch('~<c r="P2"[^>]* t="inlineStr"><is><t>-2\+3</t></is></c>~')
         ->and($xml)->toMatch('~<c r="G3"[^>]* t="inlineStr"><is><t>=1\+1</t></is></c>~');
 });
 

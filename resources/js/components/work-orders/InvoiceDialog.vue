@@ -21,19 +21,19 @@ import { calendarDateIn, formatRupiah, parseRupiahInput } from '@/lib/format';
 import type { Attachment, AttachmentRules, WorkOrderInvoice } from '@/types';
 
 /**
- * Issues the invoice, moving the work order to Penagihan (FLOW.md §8), or
- * corrects it while it waits for payment. Invoice files are required when
- * issuing; a correction may add files and remove existing ones, as long as
- * one invoice file stays (the server checks it).
+ * Bills a closed work order (payment Belum ditagih → Ditagih, FLOW.md §10),
+ * or corrects the invoice while it waits for payment. Invoice files are
+ * required when billing; a correction may add files and remove existing
+ * ones, as long as one invoice file stays (the server checks it).
  */
 const props = defineProps<{
     workOrderId: number;
     displayNumber: string;
     /** The invoice to correct; null to issue a new one. */
     invoice: WorkOrderInvoice | null;
-    rules: { invoice: AttachmentRules; bast: AttachmentRules };
-    /** The current files, offered for removal when correcting. */
-    files?: { invoice: Attachment[]; bast: Attachment[] };
+    rules: AttachmentRules;
+    /** The current invoice files, offered for removal when correcting. */
+    files?: Attachment[];
 }>();
 
 const open = defineModel<boolean>('open', { required: true });
@@ -49,7 +49,6 @@ const form = useForm({
     amount: '',
     due_date: '',
     invoice_files: [] as File[],
-    bast_files: [] as File[],
     remove_files: [] as string[],
 });
 
@@ -67,7 +66,6 @@ watch(open, (isOpen) => {
             : '',
         due_date: props.invoice?.due_date ?? '',
         invoice_files: [],
-        bast_files: [],
         remove_files: [],
     });
     form.reset();
@@ -83,11 +81,6 @@ const amountHint = computed(() => {
         ? formatRupiah(parsedAmount.value)
         : 'Bukan jumlah rupiah yang valid.';
 });
-
-const currentFiles = computed(() => [
-    ...(props.files?.invoice ?? []).map((file) => ({ file, kind: 'invoice' })),
-    ...(props.files?.bast ?? []).map((file) => ({ file, kind: 'BAST' })),
-]);
 
 /** Errors on a list ("invoice_files") or on one of its files ("invoice_files.0"). */
 const errorsFor = (prefix: string) =>
@@ -138,14 +131,14 @@ const submit = () => {
                         {{
                             correcting
                                 ? `Koreksi invoice ${displayNumber}`
-                                : `Tagihkan ${displayNumber}?`
+                                : `Terbitkan invoice ${displayNumber}?`
                         }}
                     </DialogTitle>
                     <DialogDescription>
                         {{
                             correcting
-                                ? 'Perubahan tercatat di riwayat work order. Yang mengoreksi invoice tidak dapat mengonfirmasi pembayarannya.'
-                                : 'Invoice dan berkasnya disimpan bersama perubahan status ke Penagihan.'
+                                ? 'Perubahan tercatat di riwayat work order.'
+                                : 'Status pembayaran menjadi Ditagih. Status work order tetap Closed.'
                         }}
                     </DialogDescription>
                 </DialogHeader>
@@ -216,14 +209,14 @@ const submit = () => {
                 </div>
 
                 <fieldset
-                    v-if="correcting && currentFiles.length > 0"
+                    v-if="correcting && (files ?? []).length > 0"
                     class="grid gap-2"
                 >
                     <legend class="mb-2 text-sm font-medium">
                         Berkas saat ini
                     </legend>
                     <div
-                        v-for="{ file, kind } in currentFiles"
+                        v-for="file in files"
                         :key="file.id"
                         class="flex items-center gap-2 text-sm"
                     >
@@ -234,9 +227,6 @@ const submit = () => {
                         />
                         <Label :for="`remove-${file.id}`" class="font-normal">
                             Hapus {{ file.name }}
-                            <span class="text-muted-foreground"
-                                >({{ kind }})</span
-                            >
                         </Label>
                     </div>
                 </fieldset>
@@ -251,33 +241,14 @@ const submit = () => {
                     </p>
                     <AttachmentPanel
                         v-model:pending="form.invoice_files"
-                        :rules="rules.invoice"
+                        :rules="rules"
                         :can-upload="!form.processing"
                         :progress="form.progress?.percentage ?? null"
                         :error="errorsFor('invoice_files')"
                     />
                 </div>
 
-                <div class="grid gap-2">
-                    <p class="text-sm font-medium">
-                        {{ correcting ? 'Tambah BAST' : 'BAST' }}
-                        <span class="font-normal text-muted-foreground">
-                            (opsional)
-                        </span>
-                    </p>
-                    <AttachmentPanel
-                        v-model:pending="form.bast_files"
-                        :rules="rules.bast"
-                        :can-upload="!form.processing"
-                        :progress="form.progress?.percentage ?? null"
-                        :error="errorsFor('bast_files')"
-                    />
-                </div>
-
-                <!-- "status": the work order moved on since the page loaded. -->
-                <InputError
-                    :message="errorsFor('remove_files') ?? errorsFor('status')"
-                />
+                <InputError :message="errorsFor('remove_files')" />
 
                 <DialogFooter class="gap-2">
                     <DialogClose as-child>
@@ -290,7 +261,9 @@ const submit = () => {
                             (!correcting && form.invoice_files.length === 0)
                         "
                     >
-                        {{ correcting ? 'Simpan koreksi' : 'Tagihkan' }}
+                        {{
+                            correcting ? 'Simpan koreksi' : 'Terbitkan invoice'
+                        }}
                     </Button>
                 </DialogFooter>
             </form>

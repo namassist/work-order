@@ -6,10 +6,11 @@ use App\Concerns\HasAttachments;
 use App\Concerns\LogsModelActivity;
 use App\Concerns\SearchesColumns;
 use App\Enums\AttachmentType;
+use App\Enums\PaymentStatus;
 use App\Enums\Permission;
 use App\Enums\WorkOrderDeadline;
-use App\Enums\WorkOrderSide;
 use App\Enums\WorkOrderUrgency;
+use App\States\WorkOrder\Closed;
 use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\Attachments\Attachable;
@@ -60,20 +61,15 @@ class WorkOrder extends Model implements Attachable
     use HasAttachments, HasFactory, HasStates, LogsModelActivity, SearchesColumns, SoftDeletes;
 
     /**
-     * Supporting documents: the requester's with the request, the target
-     * department's while it works.
+     * Supporting documents: Admin WO's with the request, PIC Timesheet's
+     * during Pelaksanaan.
      */
     public const string DOCUMENTS = 'dokumen';
 
     /**
-     * The invoice itself (FLOW.md §8): at least one file from Penagihan on.
+     * The invoice itself (FLOW.md §10): at least one file once billed.
      */
     public const string INVOICE = 'invoice';
-
-    /**
-     * The handover report (berita acara serah terima) of the finished work.
-     */
-    public const string BAST = 'bast';
 
     /**
      * Proof of payment, added by the finance side.
@@ -114,7 +110,6 @@ class WorkOrder extends Model implements Attachable
         return [
             self::DOCUMENTS => $this->configuredCollection(self::DOCUMENTS),
             self::INVOICE => $this->configuredCollection(self::INVOICE, self::SCAN_TYPES, minFiles: 1),
-            self::BAST => $this->configuredCollection(self::BAST),
             self::PAYMENT_PROOF => $this->configuredCollection(self::PAYMENT_PROOF, self::SCAN_TYPES),
             self::COMMENT_IMAGE_UPLOADS => $this->commentUploadCollection(self::COMMENT_IMAGE_UPLOADS, 'images', WorkOrderComment::IMAGE_TYPES),
             self::COMMENT_FILE_UPLOADS => $this->commentUploadCollection(self::COMMENT_FILE_UPLOADS, 'documents'),
@@ -249,8 +244,9 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * The invoice, from Penagihan on (FLOW.md §8). One per work order for
-     * now; instalments would make this a HasMany (FLOW.md §11).
+     * The invoice of a closed work order, once Finance billed it (FLOW.md
+     * §10). One per work order for now; instalments would make this a
+     * HasMany (FLOW.md §13).
      *
      * @return HasOne<WorkOrderInvoice, $this>
      */
@@ -298,25 +294,12 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * Whether the user acts for the given side of this work order (FLOW.md
-     * §5). PROVISIONAL until step 3 replaces the v1 statuses: the requester
-     * side is an executor company user with work-orders.update (Admin WO),
-     * the executor side one with work-orders.process (Lead Operational), and
-     * the finance side one with work-orders.confirm-payment (Finance), all
-     * internal-only, whatever their department. Client company users are on
-     * no side.
+     * The payment track of a closed work order (FLOW.md §10), following
+     * from its invoice; null for a work order that is not closed.
      */
-    public function isOnSide(User $user, WorkOrderSide $side): bool
+    public function paymentStatus(): ?PaymentStatus
     {
-        if ($user->isClient()) {
-            return false;
-        }
-
-        return $user->checkPermissionTo(match ($side) {
-            WorkOrderSide::Requester => Permission::WorkOrdersUpdate->value,
-            WorkOrderSide::Executor => Permission::WorkOrdersProcess->value,
-            WorkOrderSide::Finance => Permission::WorkOrdersConfirmPayment->value,
-        });
+        return $this->status->equals(Closed::class) ? PaymentStatus::of($this->invoice) : null;
     }
 
     /**
@@ -355,6 +338,17 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
+     * Only closed work orders in the given payment status (FLOW.md §10).
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function inPaymentStatus(Builder $query, PaymentStatus $status): void
+    {
+        $status->constrain($query);
+    }
+
+    /**
      * Search by number or title.
      *
      * @param  Builder<self>  $query
@@ -366,7 +360,7 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * Whether the work order is late (FLOW.md §7): its status has a
+     * Whether the work order is late (FLOW.md §11): its status has a
      * deadline() and that date is before today in the display timezone.
      * Must agree with scopeOverdue().
      */
@@ -380,8 +374,8 @@ class WorkOrder extends Model implements Attachable
     /**
      * Late work orders (the dashboard's "Terlambat"): in a status with a
      * deadline() whose date is before today in the display timezone, e.g.
-     * the target date while Diajukan or Dikerjakan and the payment due date
-     * while Penagihan. Work orders without that date are never late. With
+     * the target date while Diajukan, Pelaksanaan, or Review Dokumen and the
+     * payment due date while Closed and billed (Ditagih). Work orders without that date are never late. With
      * $only, just the ones late against that deadline (the dashboard's
      * breakdown).
      *

@@ -176,7 +176,7 @@ describe('cancelled work orders', function () {
     beforeEach(function () {
         $this->comment = commentBy();
         $this->travel(1)->minutes();
-        app(TransitionWorkOrder::class)->handle($this->workOrder, 'dibatalkan', $this->user, 'Tidak jadi');
+        app(TransitionWorkOrder::class)->handle($this->workOrder, 'dibatalkan', adminUser(), 'Tidak jadi');
     });
 
     it('refuses new, edited, and deleted comments', function (Closure $request) {
@@ -321,6 +321,7 @@ describe('deleting', function () {
 describe('timeline', function () {
     it('merges status changes and comments in chronological order', function () {
         $transition = app(TransitionWorkOrder::class);
+        $admin = adminUser();
         $draft = WorkOrder::factory()->targeting(Department::factory()->create())->create();
         $this->workOrder = $draft;
         $draft->statusHistories()->create(['to_status' => 'draft', 'user_id' => $this->user->id]);
@@ -328,10 +329,10 @@ describe('timeline', function () {
         $this->travel(5)->minutes();
         $first = commentBy(attributes: ['body' => 'Pertama']);
         $this->travel(5)->minutes();
-        $transition->handle($draft, 'diajukan', $this->user);
+        $transition->handle($draft, 'diajukan', $admin);
         $second = commentBy(attributes: ['body' => 'Bersamaan dengan pengajuan']);
         $this->travel(5)->minutes();
-        $transition->handle($draft, 'dibatalkan', $this->user, 'Salah input');
+        $transition->handle($draft, 'dibatalkan', $admin, 'Salah input');
 
         $this->actingAs($this->user)
             ->get(route('work-orders.show', $draft))

@@ -2,22 +2,23 @@
 
 namespace App\Actions\WorkOrders;
 
+use App\Actions\WorkOrders\Transitions\TransitionEffect;
+use App\Actions\WorkOrders\Transitions\TransitionRequirement;
 use App\Concerns\LogsAuditChanges;
 use App\Enums\AuditEvent;
 use App\Models\User;
 use App\Models\WorkOrder;
-use App\States\WorkOrder\Penagihan;
-use App\States\WorkOrder\Selesai;
-use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\WorkOrderNumberGenerator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\ModelStates\Exceptions\CouldNotPerformTransition;
 
 /**
- * Moves a work order to another status: assigns its number when the new
- * status calls for one, writes the status history row, and logs the change
- * to the audit trail, all in one transaction.
+ * Moves a work order to another status, in one transaction with the work
+ * order locked: checks the transition's requirements, assigns the number
+ * when the new status calls for one, changes the status, writes the status
+ * history row, logs the change to the audit trail, and runs the
+ * transition's effects (WorkOrderTransition).
  */
 class TransitionWorkOrder
 {
@@ -26,8 +27,8 @@ class TransitionWorkOrder
     public function __construct(private readonly WorkOrderNumberGenerator $numbers) {}
 
     /**
-     * @throws CouldNotPerformTransition when the transition is not allowed from the current status
-     * @throws ValidationException when the new status requires an invoice (Penagihan) or its payment (Selesai)
+     * @throws CouldNotPerformTransition when the current status does not allow the transition, or not for this user
+     * @throws ValidationException when the transition needs a note and has none, or a requirement is not met
      */
     public function handle(WorkOrder $workOrder, string $to, User $user, ?string $note = null): WorkOrder
     {
@@ -37,11 +38,28 @@ class TransitionWorkOrder
 
             $from = $locked->status->getValue();
             $oldNumber = $locked->number;
-            $target = WorkOrderStatus::fromName($to);
+            $transition = $locked->status->transitionFor($to);
 
-            $this->ensureInvoiced($locked, $to);
+            // The same destination may need another permission from another status
+            // (cancel before execution, cancel-execution during it), so the policy's
+            // answer for the status the page loaded is checked again here.
+            if ($transition === null || $user->isClient() || ! $user->checkPermissionTo($transition->permission->value)) {
+                throw CouldNotPerformTransition::notFound($from, $to, $locked);
+            }
 
-            if ($target?->assignsNumber() && $locked->number === null) {
+            if ($transition->requiresNote && blank($note)) {
+                throw ValidationException::withMessages(['note' => __('validation.required', ['attribute' => __('validation.attributes.note')])]);
+            }
+
+            foreach ($transition->requirements as $requirement) {
+                /** @var TransitionRequirement $check */
+                $check = app($requirement);
+                $check->ensureMet($locked, $user);
+            }
+
+            $target = new $transition->to($locked);
+
+            if ($target->assignsNumber() && $locked->number === null) {
                 $locked->number = $this->numbers->next($locked->requesterDepartment->code, now());
             }
 
@@ -61,34 +79,13 @@ class TransitionWorkOrder
                 ['status' => $locked->status->getValue(), 'number' => $locked->number],
             );
 
+            foreach ($transition->effects as $effect) {
+                /** @var TransitionEffect $run */
+                $run = app($effect);
+                $run->handle($locked, $user);
+            }
+
             return $locked;
         });
-    }
-
-    /**
-     * A work order enters Penagihan only with an invoice and its file, and
-     * Selesai only with the invoice paid (FLOW.md §8). BillWorkOrder and
-     * ConfirmWorkOrderPayment write them first; any other caller is refused.
-     *
-     * @throws ValidationException
-     */
-    private function ensureInvoiced(WorkOrder $workOrder, string $to): void
-    {
-        $invoice = $workOrder->invoice;
-
-        $missing = match ($to) {
-            Penagihan::$name => $invoice === null
-                || $workOrder->media()->where('collection_name', WorkOrder::INVOICE)->count() < $workOrder->attachmentCollections()[WorkOrder::INVOICE]->minFiles,
-            Selesai::$name => $invoice?->isPaid() !== true,
-            default => false,
-        };
-
-        if ($missing) {
-            throw ValidationException::withMessages([
-                'status' => $to === Penagihan::$name
-                    ? __('Lengkapi data invoice dan berkasnya sebelum menagihkan.')
-                    : __('Isi tanggal pembayaran sebelum menyelesaikan.'),
-            ]);
-        }
     }
 }

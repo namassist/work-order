@@ -3,8 +3,6 @@
 namespace App\Http\Requests\WorkOrders;
 
 use App\Models\WorkOrder;
-use App\States\WorkOrder\WorkOrderStatus;
-use Closure;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -36,21 +34,11 @@ class TransitionWorkOrderRequest extends FormRequest
      */
     public function rules(): array
     {
-        $target = WorkOrderStatus::fromName((string) $this->input('status'));
+        $transition = $this->workOrder()->status->transitionFor((string) $this->input('status'));
 
         return [
-            'status' => [
-                'required',
-                'string',
-                Rule::in($this->workOrder()->status->transitionableStates()),
-                // Penagihan and Selesai need their own form (invoice, payment).
-                function (string $attribute, mixed $value, Closure $fail) use ($target): void {
-                    if ($target?->transitionForm() !== null) {
-                        $fail(__('Status :status diubah lewat formulirnya sendiri.', ['status' => $target->label()]));
-                    }
-                },
-            ],
-            'note' => [$target?->requiresNote() ? 'required' : 'nullable', 'string', 'max:1000'],
+            'status' => ['required', 'string', Rule::in($this->workOrder()->status->transitionableStates())],
+            'note' => [$transition?->requiresNote ? 'required' : 'nullable', 'string', 'max:1000'],
         ];
     }
 

@@ -32,23 +32,26 @@ use OpenSpout\Reader\XLSX\Reader;
 |   cancelled submitted   Diajukan, then cancelled (numbered)
 |   other IC dept         Diajukan, requested by IC department B
 |   rejected              Ditolak
-|   in progress           Dikerjakan
-|   billed                Penagihan, payment due date passed
-|   paid                  Selesai
+|   in progress           Pelaksanaan
+|   in review             Review Dokumen
+|   awaiting BAST         Approval BAST
+|   closed                Closed, payment Belum ditagih
+|   billed                Closed, payment Ditagih, payment due date passed
+|   paid                  Closed, payment Lunas
 */
 
-const MATRIX_WORK_ORDERS = ['draft', 'other Admin WO draft', 'cancelled draft', 'submitted', 'cancelled submitted', 'other IC dept', 'rejected', 'in progress', 'billed', 'paid'];
+const MATRIX_WORK_ORDERS = ['draft', 'other Admin WO draft', 'cancelled draft', 'submitted', 'cancelled submitted', 'other IC dept', 'rejected', 'in progress', 'in review', 'awaiting BAST', 'closed', 'billed', 'paid'];
 
 /** Numbered, so seen by every internal user with work-orders.view. */
-const MATRIX_SUBMITTED = ['submitted', 'cancelled submitted', 'other IC dept', 'rejected', 'in progress', 'billed', 'paid'];
+const MATRIX_SUBMITTED = ['submitted', 'cancelled submitted', 'other IC dept', 'rejected', 'in progress', 'in review', 'awaiting BAST', 'closed', 'billed', 'paid'];
 
 /** Diajukan: the dashboard's "Menunggu Diterima". */
 const MATRIX_PENDING = ['submitted', 'other IC dept'];
 
-/** Past their target date while Diajukan or Dikerjakan. Rejected and paid are past their target date too, but do not count. */
-const MATRIX_OVERDUE_TARGET = [...MATRIX_PENDING, 'in progress'];
+/** Past their target date while Diajukan, Pelaksanaan, or Review Dokumen. The others are past their target date too, but do not count. */
+const MATRIX_OVERDUE_TARGET = [...MATRIX_PENDING, 'in progress', 'in review'];
 
-/** Past the payment due date while Penagihan. */
+/** Past the payment due date while Ditagih. */
 const MATRIX_OVERDUE_PAYMENT = ['billed'];
 
 /**
@@ -101,6 +104,9 @@ function visibilityWorld(string $userKey): array
         'other IC dept' => $factory()->requestedBy($b)->submitted()->create($overdue),
         'rejected' => $factory()->rejected()->create($overdue),
         'in progress' => $factory()->inProgress()->create($overdue),
+        'in review' => $factory()->inReview()->create($overdue),
+        'awaiting BAST' => $factory()->awaitingBastApproval()->create($overdue),
+        'closed' => $factory()->closed()->create($overdue),
         'billed' => $factory()->billed(['invoice_date' => '2026-08-25', 'due_date' => '2026-09-01'])->create($overdue),
         'paid' => $factory()->paid()->create($overdue),
     ];
@@ -254,7 +260,7 @@ it('shows invoices and downloads their files only on visible work orders', funct
         $workOrder = $workOrders[$key];
         $seen = in_array($key, $visible, true);
 
-        foreach ([WorkOrder::INVOICE, WorkOrder::BAST, WorkOrder::PAYMENT_PROOF] as $collection) {
+        foreach ([WorkOrder::INVOICE, WorkOrder::PAYMENT_PROOF] as $collection) {
             $media = app(AddAttachment::class)->handle($workOrder, $workOrder->attachmentCollections()[$collection], attachmentUpload('dokumen.pdf'), $workOrder->enteredBy);
 
             $this->actingAs($user)->get(route('attachments.show', $media))->assertStatus($seen ? 200 : 404);
@@ -265,7 +271,7 @@ it('shows invoices and downloads their files only on visible work orders', funct
         if ($seen) {
             $response->assertInertia(fn (Assert $page): Assert => $page
                 ->where('invoice.number', $workOrder->invoice?->number)
-                ->has('invoiceAttachments', 3));
+                ->has('invoiceAttachments', 2));
         }
     }
 })->with('visibility matrix');

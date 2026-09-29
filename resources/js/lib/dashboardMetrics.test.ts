@@ -25,14 +25,14 @@ describe('dashboardMetrics', () => {
                 href: '/work-orders?status=diajukan',
             },
             {
-                label: 'Dikerjakan',
+                label: 'Pelaksanaan',
                 value: 3,
-                href: '/work-orders?status=dikerjakan',
+                href: '/work-orders?status=pelaksanaan',
             },
             {
                 label: 'Menunggu Pembayaran',
                 value: 2,
-                href: '/work-orders?status=penagihan',
+                href: '/work-orders?payment=ditagih',
             },
             { label: 'Terlambat', value: 5, href: '/work-orders?overdue=1' },
         ]);

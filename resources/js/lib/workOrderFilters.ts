@@ -2,6 +2,7 @@ import { formatCalendarDateRange } from '@/lib/format';
 import type {
     CategoryOption,
     DepartmentOption,
+    PaymentStatusOption,
     WorkOrderStatusOption,
     WorkOrderUrgencyOption,
 } from '@/types';
@@ -11,6 +12,8 @@ export type WorkOrderFilters = {
     search: string;
     status: string;
     urgency: string;
+    /** Payment track of closed work orders: belum_ditagih, ditagih, or lunas. */
+    payment: string;
     /** Requester (client company) department id. */
     department: string;
     /** Target (executor company) department id. */
@@ -34,6 +37,7 @@ export const EMPTY_WORK_ORDER_FILTERS: WorkOrderFilters = {
     search: '',
     status: '',
     urgency: '',
+    payment: '',
     department: '',
     target: '',
     category: '',
@@ -51,6 +55,7 @@ export type WorkOrderFilterOptions = {
     statuses: WorkOrderStatusOption[];
     statusGroups: WorkOrderStatusGroupOption[];
     urgencies: WorkOrderUrgencyOption[];
+    paymentStatuses: PaymentStatusOption[];
     /** Null unless the user sees every department's work orders. */
     departments: DepartmentOption[] | null;
     /** Executor departments; every user may filter by them. */
@@ -63,6 +68,7 @@ export type WorkOrderFilterChipKey =
     | 'search'
     | 'status'
     | 'urgency'
+    | 'payment'
     | 'department'
     | 'target'
     | 'category'
@@ -108,6 +114,16 @@ export function workOrderFilterChips(
         chips.push({
             key: 'urgency',
             label: `Urgensi: ${urgency?.label ?? filters.urgency}`,
+        });
+    }
+
+    if (filters.payment) {
+        const payment = options.paymentStatuses.find(
+            (option) => option.value === filters.payment,
+        );
+        chips.push({
+            key: 'payment',
+            label: `Pembayaran: ${payment?.label ?? filters.payment}`,
         });
     }
 

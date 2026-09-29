@@ -51,8 +51,8 @@ async function render(props: { invoice: WorkOrderInvoice | null }) {
             open: false,
             workOrderId: 3,
             displayNumber: 'WO/PRD/2026/09/0001',
-            rules: { invoice: rules('invoice'), bast: rules('bast') },
-            files: { invoice: [file], bast: [] },
+            rules: rules('invoice'),
+            files: [file],
             ...props,
         },
         attachTo: document.body,
@@ -83,13 +83,13 @@ afterEach(() => {
 });
 
 describe('InvoiceDialog', () => {
-    it('issues an invoice dated today in WITA, and needs an invoice file first', async () => {
+    it('bills with an invoice dated today in WITA, and needs an invoice file first', async () => {
         await render({ invoice: null });
 
         expect(input('invoice-date')?.value).toBe('2026-09-26');
         expect(input('invoice-date')?.max).toBe('2026-09-26');
         expect(input('invoice-number')?.required).toBe(true);
-        expect(submit()?.textContent?.trim()).toBe('Tagihkan');
+        expect(submit()?.textContent?.trim()).toBe('Terbitkan invoice');
         expect(submit()?.disabled).toBe(true);
         expect(document.body.textContent).not.toContain('Berkas saat ini');
     });

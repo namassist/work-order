@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\PaymentStatus;
 use App\Enums\WorkOrderDeadline;
 use App\Enums\WorkOrderUrgency;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
@@ -10,8 +11,7 @@ use App\Http\Resources\WorkOrderResource;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\States\WorkOrder\Diajukan;
-use App\States\WorkOrder\Dikerjakan;
-use App\States\WorkOrder\Penagihan;
+use App\States\WorkOrder\Pelaksanaan;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\WorkOrderRequestOverview;
 use Carbon\CarbonInterface;
@@ -72,9 +72,10 @@ class DashboardController extends Controller
     }
 
     /**
-     * The stat strip's counts over the work orders the user may see: one
-     * per status the cards name, and "Terlambat" (WorkOrder::overdue())
-     * with its split by the date the work order is late against.
+     * The stat strip's counts over the work orders the user may see:
+     * Diajukan, Pelaksanaan, closed work orders waiting for payment (payment
+     * Ditagih), and "Terlambat" (WorkOrder::overdue()) with its split by the
+     * date the work order is late against.
      *
      * @return array{submitted: int, in_progress: int, billing: int, overdue: int, overdue_by: array<string, int>}
      */
@@ -84,9 +85,10 @@ class DashboardController extends Controller
             ->visibleTo($user)
             ->toBase()
             ->selectRaw('count(*) filter (where status = ?) as submitted', [Diajukan::getMorphClass()])
-            ->selectRaw('count(*) filter (where status = ?) as in_progress', [Dikerjakan::getMorphClass()])
-            ->selectRaw('count(*) filter (where status = ?) as billing', [Penagihan::getMorphClass()])
+            ->selectRaw('count(*) filter (where status = ?) as in_progress', [Pelaksanaan::getMorphClass()])
             ->first();
+
+        $billing = WorkOrder::query()->visibleTo($user)->inPaymentStatus(PaymentStatus::Ditagih)->count();
 
         $overdueBy = [];
 
@@ -97,7 +99,7 @@ class DashboardController extends Controller
         return [
             'submitted' => (int) $counts?->submitted,
             'in_progress' => (int) $counts?->in_progress,
-            'billing' => (int) $counts?->billing,
+            'billing' => $billing,
             // Each status has at most one deadline, so the groups never overlap.
             'overdue' => array_sum($overdueBy),
             'overdue_by' => $overdueBy,

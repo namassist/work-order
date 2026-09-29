@@ -21,7 +21,7 @@ class WorkOrderInvoiceFactory extends Factory
     public function definition(): array
     {
         return [
-            'work_order_id' => WorkOrder::factory()->inProgress(),
+            'work_order_id' => WorkOrder::factory()->closed(),
             'number' => fake()->unique()->numerify('INV/TEST/2026/####'),
             'invoice_date' => '2026-09-20',
             'amount' => null,

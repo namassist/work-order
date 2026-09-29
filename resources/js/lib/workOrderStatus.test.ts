@@ -9,8 +9,15 @@ describe('statusToneClass', () => {
         expect(statusToneClass('destructive')).toBe(
             'bg-destructive/10 text-destructive',
         );
-        expect(statusToneClass('billing')).toBe(
-            'bg-billing text-billing-foreground',
+        expect(statusToneClass('review')).toBe(
+            'bg-review text-review-foreground',
+        );
+        expect(statusToneClass('approval')).toBe(
+            'bg-approval text-approval-foreground',
+        );
+        // BAST Disetujui: an outline, never taken for Closed (filled success).
+        expect(statusToneClass('approved')).toBe(
+            'border-success bg-transparent text-success',
         );
         expect(statusToneClass('muted')).toBe(
             'border-border bg-transparent text-muted-foreground',
@@ -31,20 +38,26 @@ describe('statusChartColor', () => {
         expect(statusChartColor(status('ditolak', 'destructive'))).toBe(
             'var(--destructive)',
         );
-        expect(statusChartColor(status('dikerjakan', 'info'))).toBe(
+        expect(statusChartColor(status('pelaksanaan', 'info'))).toBe(
             'var(--info)',
         );
-        expect(statusChartColor(status('penagihan', 'billing'))).toBe(
-            'var(--billing)',
+        expect(statusChartColor(status('review_dokumen', 'review'))).toBe(
+            'var(--review)',
         );
-        expect(statusChartColor(status('selesai', 'success'))).toBe(
+        expect(statusChartColor(status('approval_bast', 'approval'))).toBe(
+            'var(--approval)',
+        );
+        expect(statusChartColor(status('closed', 'success'))).toBe(
             'var(--success)',
         );
     });
 
-    it('uses chart tokens where the badge colour is under 3:1 as a fill', () => {
+    it('uses chart tokens where the badge colour is under 3:1 as a fill, or an outline', () => {
         expect(statusChartColor(status('diajukan', 'warning'))).toBe(
             'var(--chart-submitted)',
+        );
+        expect(statusChartColor(status('bast_disetujui', 'approved'))).toBe(
+            'var(--chart-bast-approved)',
         );
     });
 

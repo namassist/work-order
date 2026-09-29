@@ -31,11 +31,23 @@ enum Permission: string
     case WorkOrdersView = 'work-orders.view';
     case WorkOrdersCreate = 'work-orders.create';
     case WorkOrdersUpdate = 'work-orders.update';
-    case WorkOrdersProcess = 'work-orders.process';
     case WorkOrdersDelete = 'work-orders.delete';
     case WorkOrdersRestore = 'work-orders.restore';
     case WorkOrdersExport = 'work-orders.export';
     case WorkOrdersComment = 'work-orders.comment';
+
+    /* Status changes (FLOW.md §5.1, §5.2), see WorkOrderStatus::transitions(). */
+    case WorkOrdersSubmit = 'work-orders.submit';
+    case WorkOrdersApprove = 'work-orders.approve';
+    case WorkOrdersSubmitReview = 'work-orders.submit-review';
+    case WorkOrdersReview = 'work-orders.review';
+    case WorkOrdersApproveBast = 'work-orders.approve-bast';
+    case WorkOrdersClose = 'work-orders.close';
+    case WorkOrdersCancel = 'work-orders.cancel';
+    case WorkOrdersCancelExecution = 'work-orders.cancel-execution';
+
+    /* The payment track of closed work orders (FLOW.md §10). */
+    case WorkOrdersBill = 'work-orders.bill';
     case WorkOrdersConfirmPayment = 'work-orders.confirm-payment';
 
     case WorkOrderCategoriesView = 'work-order-categories.view';
