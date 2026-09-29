@@ -1,222 +1,218 @@
-# WOrder: Work Order Flow Specification
+# WOrder: Work Order Flow Specification (v2)
 
-Single source of truth for the business flow. `CLAUDE.md` points here; implementation
-tasks reference sections of this file. Items marked **(Proposed)** are defaults chosen by the
-developer and still need confirmation from the business side.
+Single source of truth for the business flow. `CLAUDE.md` points here; implementation tasks
+reference sections of this file. Items marked **(Provisional)** are developer defaults that still
+need confirmation from the business side.
+
+v2 replaces v1 after the business process diagram (Business Process - Work Order Monitoring).
+Section 14 lists what changed from v1.
 
 ## 1. Purpose and parties
 
-WOrder tracks work orders from **IC** (client) to **Unggul** (executor), from request through
-execution and invoicing until payment is received.
+WOrder is an **internal Unggul application** for monitoring work orders received from **IC**,
+from input through approval, execution, daily reporting, BAST, closing and payment.
 
-- Direction is always **IC → Unggul**. Unggul never sends work orders to IC.
-- IC departments request work. Unggul departments execute it and invoice IC.
-- A WO is **closed** only when the work is done **and** payment has been received.
+- **All users are Unggul staff.** IC never logs in.
+- IC requests reach Unggul's **PIC Work Order** outside the application; the PIC informs the
+  **Admin WO**, who enters the WO in the application.
+- A WO is **closed** after its BAST is approved. Payment is tracked **separately** after closing (§10).
 
 ## 2. Companies and departments
 
-- `companies`: name, code, `is_client` flag, allowed email domains. Seeded: IC (client), Unggul (executor).
-  A table rather than a fixed enum, so another client company can be added as data later.
-- Every department belongs to exactly one company.
-- A WO's **requester department** must belong to a client company (IC).
-- A WO's **target department** must belong to the executor company (Unggul).
+- `companies` stays: IC (client) and Unggul (executor).
+- IC departments are used as the **requester department** of a WO (organisation data only; no IC accounts).
+- Registration (§3) accepts only executor-company email domains.
+- The client isolation code from v1 stays in place as a safeguard (and for a possible future
+  read-only IC access), but no client-scoped roles are assigned.
 
-## 3. Users, roles and registration
+## 3. Roles
 
-### Roles
+| Role | Does |
+|---|---|
+| Admin WO | Enters, submits, revises, resubmits and closes WOs; cancels before execution |
+| Lead Operational | Approves or rejects submitted WOs; cancels during execution. One person |
+| PIC Timesheet | Posts the daily reports during execution; submits for document review |
+| Rental | Reviews documents; returns for revision or submits the BAST |
+| Direktur | Approves BAST (approve only, no rejection) |
+| Finance | Manages the payment track after closing (§10) |
+| Viewer | Read-only |
+| System admin | Users, roles, master data, registrations, BAST templates, activity log |
 
-| Role                                            | Company | Can                                                                                                    |
-| ----------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
-| `pemohon`                                       | IC      | Create, edit, submit, revise, resubmit and cancel WOs for their own department                         |
-| `pelaksana` **(Proposed, replaces `approver`)** | Unggul  | Act on WOs addressed to their department: accept, reject, start, move to invoicing                     |
-| `keuangan`                                      | Unggul  | See all submitted WOs; confirm payment received (Penagihan → Selesai)                                  |
-| `koordinator` **(Proposed)**                    | Unggul  | Enter WOs on behalf of IC (`work-orders.create-on-behalf`) and act as the requester side for those WOs |
-| `viewer`                                        | Either  | Read-only within their visibility                                                                      |
-| `admin`                                         | Unggul  | Everything, including user and master data management and registration approval                        |
-
-A user can hold multiple roles, but only roles that fit their company.
-
-### Registration (self-service, admin-approved)
-
-1. Anyone can register with: name, email, password, company, department (filtered by company).
-2. The email domain must match one of the selected company's allowed domains
-   (both companies use their own domains on Microsoft 365 / Outlook). The company is pre-selected
-   from the email domain.
-3. New accounts are **pending**: after login they only see "Akun Anda sedang ditinjau admin".
-4. Admin reviews pending registrations (sidebar badge with count):
-    - **Approve:** assign role(s); may correct the department within the same company (the email
-      domain fixes the company). Role management (e.g. admin) is never granted on approval.
-    - Rejected registrations can be approved later (re-review); the account sees the rejection
-      reason on its status page and cannot register again with the same email.
-    - **Reject:** with a reason.
-5. No role is ever granted automatically.
-6. No forced password change (the user chose the password).
-7. Named rate limiter on registration, plus a kill switch (`REGISTRATION_ENABLED`). Registration,
-   approval and rejection are audit-logged.
-8. Admin-created accounts (existing flow with `DEFAULT_USER_PASSWORD` and forced change) remain.
+- "Admin WO" is deliberately not called "Admin", to avoid confusion with the system admin.
+- PIC Work Order has **no action** in the application **(Provisional:** optionally recorded on the WO as information, §4).
+- Field workers don't log in.
+- Registration with admin approval (v1 §3) stays, restricted to Unggul email domains.
 
 ## 4. Work order data
 
 Existing fields stay: number, title, description, category, urgency, target date, attachments.
-New fields:
 
-- **Requester department** (IC): always required.
-- **Requester account**: set when the requester has an account.
-- **Requester contact name**: set when entered on behalf of someone without an account
-  (e.g. "Pak Andi, Maintenance IC"). Exactly one of account or contact name is set.
-- **Entered by**: the user who created the WO (existing `created_by`).
-- **Target department** (Unggul): required before submission.
-
-Creation paths:
-
-- **IC user:** creates for their own department; requester = themselves.
-- **Unggul koordinator:** picks the IC department, then an IC account or a contact name.
-
-Categories do not change the flow; they are for classification only.
+- **Requester department** (an IC department): required.
+- **Requester contact name** (the IC person who made the request): required.
+- **Entered by**: the Admin WO who created it (`created_by`).
+- **PIC Work Order** **(Provisional)**: optional, informational.
+- **Target department**: no longer determines who acts. **(Provisional:** keep as an optional
+  informational field, or remove.)
 
 ## 5. Statuses and transitions
 
 ```
-Draft → Diajukan → Dikerjakan → Penagihan → Selesai
-          ↓   ↑
-        Ditolak
+Draft → Diajukan → Pelaksanaan → Review Dokumen → Approval BAST → BAST Disetujui → Closed
+          ↓   ↑                      ↓
+        Ditolak             back to Pelaksanaan (revisi data)
 
-Dibatalkan: from Draft, Diajukan or Ditolak
+Dibatalkan: see §5.2
+Payment track after Closed: §10
 ```
 
-"Requester side" = users of the requester department with `pemohon`, or the koordinator who
-entered the WO.
+### 5.1 Transitions
 
-| From → To                               | By                                 | Requirements                                                                                                |
-| --------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Draft → Diajukan                        | Requester side                     | Target department set. Number assigned on the first submission only                                         |
-| Diajukan → Dikerjakan                   | Pelaksana of the target department | Optional note                                                                                               |
-| Diajukan → Ditolak                      | Pelaksana of the target department | **Note required**                                                                                           |
-| Ditolak → Diajukan                      | Requester side                     | After revision; keeps the same number                                                                       |
-| Dikerjakan → Penagihan                  | Pelaksana of the target department | Invoice number, invoice date and **at least one invoice file** required; amount, due date and BAST optional |
-| Penagihan → Selesai                     | Keuangan (Unggul)                  | Payment date required; proof of payment optional                                                            |
-| Draft / Diajukan / Ditolak → Dibatalkan | Requester side                     | **Note required**                                                                                           |
+| From → To | By | Requirements |
+|---|---|---|
+| Draft → Diajukan | Admin WO | Required WO data complete. Number assigned on first submission |
+| Diajukan → Pelaksanaan | Lead Operational | – |
+| Diajukan → Ditolak | Lead Operational | **Note required** |
+| Ditolak → Diajukan | Admin WO | After revision; same number |
+| Pelaksanaan → Review Dokumen | PIC Timesheet | At least one daily report (§7) |
+| Review Dokumen → Pelaksanaan | Rental | **Note required** (data incomplete) |
+| Review Dokumen → Approval BAST | Rental | The application generates the BAST (§8) |
+| Approval BAST → BAST Disetujui | Direktur | Approve only; the final BAST PDF is generated with the approval |
+| BAST Disetujui → Closed | Admin WO | – |
 
-Every transition writes a status history row and an audit entry.
+### 5.2 Cancellation **(Provisional)**
 
-### Status properties
+- Admin WO: from Draft, Diajukan or Ditolak, **note required**.
+- Lead Operational: from Pelaksanaan or Review Dokumen, **note required**.
+- From Approval BAST onwards: no cancellation.
 
-| Status     | Requester can edit                    | Comments  | Attachments              | Overdue basis    | Final |
-| ---------- | ------------------------------------- | --------- | ------------------------ | ---------------- | ----- |
-| Draft      | Yes                                   | Yes       | Requester: dokumen       | none             | No    |
-| Diajukan   | No                                    | Yes       | none                     | target date      | No    |
-| Ditolak    | Yes, including the target department¹ | Yes       | Requester: dokumen       | none             | No    |
-| Dikerjakan | No                                    | Yes       | Pelaksana: BAST, dokumen | target date      | No    |
-| Penagihan  | No                                    | Yes       | Keuangan: bukti bayar    | payment due date | No    |
-| Selesai    | No                                    | Read-only | none                     | none             | Yes   |
-| Dibatalkan | No                                    | Read-only | none                     | none             | Yes   |
+### 5.3 Status properties
 
-¹ A common rejection reason is "wrong department", so in Ditolak the requester side may pick
-another target department before resubmitting (still an executor department; it cannot be cleared).
+| Status | Edit WO | Comments | Files | Overdue basis | Final |
+|---|---|---|---|---|---|
+| Draft | Admin WO | Yes | Admin WO: dokumen | – | No |
+| Diajukan | – | Yes | – | target date | No |
+| Ditolak | Admin WO | Yes | Admin WO: dokumen | – | No |
+| Pelaksanaan | – | Yes | PIC Timesheet: dokumen; daily reports (§7) | target date; missing daily report | No |
+| Review Dokumen | – | Yes | – | target date | No |
+| Approval BAST | – | Yes | – | – | No |
+| BAST Disetujui | – | Yes | – | – | No |
+| Closed | – | Read-only | Finance: payment track (§10) | payment due date (§10) | Yes (for the WO flow) |
+| Dibatalkan | – | Read-only | – | – | Yes |
 
-These map to the existing status flags (`isEditable`, `acceptsComments`,
-`countsAsOverdueWhenLate`, `requiresTargetDepartment`) plus new ones as needed. Every new status
-must set all flags. `requiresTargetDepartment` is true for every status after the first submission
-(Diajukan, Ditolak, Dikerjakan, Penagihan, Selesai), so a submitted WO never loses its target;
-it is false for Draft and Dibatalkan (a draft can be cancelled before a target is chosen).
+Every status sets every status flag (see `CLAUDE.md`). The number constraint covers every status
+after the first submission.
 
-## 6. Visibility and isolation
+## 6. Visibility
 
-- **IC users:** WOs of their own department (including ones entered by a koordinator).
-  Never another IC department's WOs.
-- **Pelaksana:** WOs addressed to their department, from Diajukan onward. **Drafts are never
-  visible to Unggul**, except to the koordinator who entered them.
-- **Koordinator:** WOs they entered, plus normal visibility of their own department.
-- **Keuangan and admin:** all WOs except other people's drafts (`view-all`).
-- Comments, attachments, timeline, dashboard counts and exports all follow the same WO visibility.
-- **IC users can never open** users, roles, departments, categories, companies, registrations,
-  or the activity log, and see no Unggul-internal navigation.
-- Other companies' WOs return 404 (existing `denyAsNotFound` convention).
+- All internal users with WO access see **every submitted WO**.
+- Drafts are visible to Admin WO users (and the system admin), not to other roles.
+- Comments, attachments, reports, BAST files, dashboard counts and exports follow the same rule.
+- The v1 client isolation stays enforced for any client-company account, even though none are issued.
 
-## 7. Deadlines and overdue
+## 7. Daily reports (timesheet)
 
-Deadlines are optional.
+The "timesheet" is a **daily progress report**; the detailed timesheet itself is an Excel file or a
+link kept outside the application.
 
-- **Target date** (existing): target for completing the work. Overdue while Diajukan or
-  Dikerjakan and past the target date (WITA).
-- **Payment due date** (new, optional, set when moving to Penagihan): overdue while Penagihan
-  and past the due date (WITA).
-- A WO without the relevant date is never overdue.
+- During **Pelaksanaan**, PIC Timesheet posts **one report per WO per working day** (WITA).
+- A report contains: the date, a short note, and **at least one** of:
+  - Excel file(s) (the existing attachment allowlist, private disk, access follows the WO)
+  - link(s) (http/https only)
+- A report can be edited on its own day; changes are audit-logged.
+- Discussion about the work uses the existing WO comments.
+- **Missing report:** a WO in Pelaksanaan with no report for today after the cutoff time is flagged
+  "Belum lapor" (list, detail, dashboard).
+- **(Provisional):** working days (default Monday–Friday), public holidays, cutoff time
+  (default 17:00 WITA), whether late (back-dated) reports are allowed and for how many days, and
+  whether links are restricted to company domains (e.g. SharePoint/OneDrive).
 
-## 8. Invoicing
+## 8. BAST
 
-- Invoice data: number and date (required), amount and due date (optional). The number is unique
-  across all invoices, whatever its casing. The invoice date is not in the future; the due date is
-  not before the invoice date (WITA). Amounts are rupiah with at most two decimals.
-- Attachment collections: `invoice` (required, at least one), `bast` (optional, may also be added
-  while Dikerjakan), `bukti_bayar` (optional, added by keuangan).
-- The invoice, its files and the move to Penagihan are saved together: a failed upload leaves no
-  invoice and no status change.
-- Keuangan confirms payment received with a payment date (not before the invoice date and not in
-  the future, WITA); the WO becomes Selesai.
-- **Correcting a wrong invoice:** while Penagihan (not yet paid), the pelaksana side corrects the
-  invoice in place: its data, and invoice or BAST files added or removed (one invoice file always
-  stays). Every correction is audit-logged with the values before and after. There is no "return to
-  pelaksana" status: whoever notices the mistake (IC or keuangan) says so in a comment.
-- **Segregation of duties:** the user who confirms the payment must not be the user who issued the
-  invoice or last corrected it. This holds for users on both sides too (e.g. an admin of the target
-  department). The rule is enforced by the server and the database, and the detail page shows the
-  reason instead of a usable button.
+- When Rental submits the BAST, the application **generates a BAST PDF** from the **active BAST
+  template** (§9) and the WO data, and assigns a BAST number (configurable format).
+- Direktur approval regenerates the **final** PDF including the approver's name and approval time.
+  The final PDF is immutable.
+- Each BAST stores **the template version it was generated from**, so later template changes never
+  alter issued BASTs.
+- **(Provisional):** the official BAST layout, letterhead and signature blocks; ask the business for
+  a sample.
 
-## 9. Comments
+## 9. BAST template management
 
-- Progress is reported through comments.
-- Rich text (WYSIWYG) with images and documents: Tiptap on the frontend, **HTML sanitized on the
-  server**, embedded files stored through the existing attachments module (private disk, access
-  follows the WO).
-- Existing rules stay: edit and delete by the author within the edit window; read-only on final
-  statuses; `work-orders.comment` permission to write.
+- A system admin page to manage BAST templates:
+  - a rich-text editor (reusing the comment editor stack, with an extended allowlist for headings,
+    tables, alignment and a letterhead image uploaded to the application)
+  - **placeholders** from a fixed allowlist, e.g. `{{nomor_bast}}`, `{{nomor_wo}}`, `{{judul}}`,
+    `{{departemen_pemohon}}`, `{{kontak_pemohon}}`, `{{tanggal_bast}}`, `{{nama_direktur}}`,
+    `{{tanggal_persetujuan}}`
+  - preview with a real WO
+  - **versioning**: publishing creates a new version; exactly one version is active
+- **Security:** templates are HTML with simple placeholder substitution and **escaped values**.
+  Templates are never compiled or evaluated as Blade/PHP (no server-side template injection).
+  Template HTML is sanitized on save like comments.
 
-## 10. Notifications (Proposed)
+## 10. Payment track (after Closed)
 
-In-app notifications at minimum:
+Finance manages a separate payment status on closed WOs:
 
-- New WO submitted → pelaksana of the target department
-- Rejected (with note) → requester side
-- Accepted / started → requester side
-- Moved to Penagihan → keuangan and requester side
-- Selesai → requester side
-- New comment → the other side of the WO
+```
+Belum ditagih → Ditagih → Lunas
+```
 
-Email notifications depend on the mail setup (see open points).
+- **Ditagih:** invoice number (unique, case-insensitive), invoice date, amount (optional),
+  payment due date (optional), and **at least one invoice file**.
+- **Lunas:** payment date (not before the invoice date, not in the future, WITA) and optional proof of payment.
+- The invoice can be corrected while Ditagih (audit-logged), as built in v1 step 3.
+- **Overdue:** Ditagih past its due date.
+- **Segregation of duties** (issuer ≠ confirmer) becomes a **setting, default off**, because the
+  process has a single Finance lane.
 
-## 11. Open points
+## 11. Deadlines and overdue
 
-- **Mail:** both companies use Microsoft 365. Is SMTP through Microsoft 365 available to the app?
-  That enables email verification, forgot password, and email notifications.
-- **Sign in with Microsoft (SSO):** possible later through Microsoft Entra ID; could replace
-  passwords and simplify registration.
-- Cancelling after Dikerjakan: allowed? By whom?
-- **Instalments (termin):** one invoice per WO for now. Should a WO be invoiced in several termin,
-  each with its own number, amount, due date and payment, and become Selesai only when all are
-  paid? The invoice data already lives in its own table with the payment on the invoice row, so
-  termin would add a sequence per WO rather than reshape the data.
-- Internal notes visible only to Unggul.
-- Whether pelaksana may change urgency or target date.
-- Which roles may export.
-- Whether the WO number should include the target department.
-- Correcting the requester of an on-behalf draft: only the koordinator who entered it may change
-  the requester account or contact name. If that koordinator is unavailable, nobody can correct it
-  (the IC side can still edit the other fields, submit, or cancel). Should another koordinator or
-  admin be allowed to take over?
+- **Target date:** late while Diajukan, Pelaksanaan or Review Dokumen and past the target date.
+- **Missing daily report:** §7.
+- **Payment due date:** late while Ditagih and past the due date.
+- A WO without the relevant date is never late on that basis.
 
-## 12. Implementation order
+## 12. Notifications (after the flow is rebuilt)
 
-0. This document (reviewed and confirmed)
-1. Cross-company foundation: companies, target department, requester vs entered-by,
-   on-behalf creation, visibility and IC isolation, roles, demo seeder
-   1b. Registration with admin approval and email domain rules
-2. Full status flow (Section 5)
-3. Invoicing (Section 8)
-4. Deadlines, dashboard, filters and export for the new statuses and fields
-5. Rich-text comments with images and documents
-6. Notifications
-7. Validation session with the business users
+Minimum in-app events: submitted (Lead Operational), rejected (Admin WO), approved (PIC Timesheet),
+missing daily report (PIC Timesheet), submitted for review (Rental), returned for revision
+(PIC Timesheet), BAST submitted (Direktur), BAST approved (Admin WO), closed (Finance),
+payment overdue (Finance). The actor is never notified of their own action.
+
+## 13. Open points
+
+- Official BAST format and a sample document.
+- Working days, holidays, report cutoff time, back-dated reports, link domain restriction (§7).
+- Whether PIC Work Order is recorded on the WO; keep or remove the target department (§4).
+- Cancellation rules (§5.2).
+- Mail (Microsoft 365 SMTP) and Microsoft sign-in (SSO).
+- Instalments (termin) for payment.
+
+## 14. What changed from v1
+
+- No IC users: IC is requester organisation data only; registration is Unggul-only.
+- Approval by **Lead Operational** instead of the target department accepting the WO.
+- **Pelaksanaan** replaces Dikerjakan, with **daily reports**.
+- New **Review Dokumen**, **Approval BAST** and **BAST Disetujui** stages, with a generated BAST and
+  editable BAST templates.
+- **Closed** after BAST approval; **payment is a separate track** (replaces the Penagihan and
+  Selesai statuses). The invoice table and correction flow are reused.
+- Visibility: all internal users see all submitted WOs; drafts only for Admin WO.
+- Segregation of duties for payment becomes an optional setting.
+
+## 15. Implementation order
+
+1. This document (reviewed and confirmed)
+2. Roles, visibility, simplified WO form (IC department + contact name), Unggul-only registration
+3. Status flow v2 (§5), cancellation, and the payment track (§10) reusing the invoice data
+4. Daily reports (§7)
+5. BAST templates, generation and approval (§8, §9)
+6. **Demo and validation with the business users**, especially daily reports and BAST
+7. Dashboard, filters and export for v2
+8. Notifications (§12)
 
 Each step: one branch and one PR, planned with `/ecc:orch-*` and stopped at Gate 1.
-Remove the matching **PROVISIONAL** notes from `CLAUDE.md` as each step lands.
+Migration note: v1 statuses Dikerjakan, Penagihan and Selesai map to the v2 flow in step 3; there is
+no production data, so the demo data may be regenerated.
