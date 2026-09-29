@@ -114,7 +114,10 @@ it('grants each action only with its permission', function (string $ability, Per
         ->and(unggulUser(...$others)->can($ability, [$workOrder, ...$arguments]))->toBeFalse();
 })->with([
     'update' => ['update', Permission::WorkOrdersUpdate],
-    'transition' => ['transition', Permission::WorkOrdersUpdate, ['diajukan']],
+    'transition' => ['transition', Permission::WorkOrdersSubmit, ['diajukan']],
+    'cancel' => ['transition', Permission::WorkOrdersCancel, ['dibatalkan']],
+    'bill' => ['bill', Permission::WorkOrdersBill],
+    'confirmPayment' => ['confirmPayment', Permission::WorkOrdersConfirmPayment],
     'delete' => ['delete', Permission::WorkOrdersDelete],
     'restore' => ['restore', Permission::WorkOrdersRestore],
 ]);

@@ -6,7 +6,9 @@ export type StatusTone =
     | 'secondary'
     | 'warning'
     | 'info'
-    | 'billing'
+    | 'review'
+    | 'approval'
+    | 'approved'
     | 'success'
     | 'destructive'
     | 'muted';
@@ -61,23 +63,29 @@ export type WorkOrderListItem = WorkOrder & {
     can: { update: boolean; delete: boolean; restore: boolean };
 };
 
-/** A status change this user may perform (FLOW.md §5). */
+/** A status change this user may perform (FLOW.md §5.1, §5.2). */
 export type WorkOrderTransition = {
     value: string;
     /** Button label, e.g. "Ajukan", or "Ajukan ulang" after a rejection. */
     label: string;
-    /** Rejecting or cancelling: a destructive button. */
+    /** Rejecting, returning for revision, or cancelling: a destructive button. */
     destructive: boolean;
     requires_note: boolean;
     /** E.g. "Alasan penolakan"; "Catatan" when nothing more specific fits. */
     note_label: string;
-    /** Entered through its own form instead of the note dialog. */
-    form: 'invoice' | 'payment' | null;
-    /** Why this user may not make the change (segregation of duties). */
-    blocked_reason: string | null;
 };
 
-/** The invoice of a work order (FLOW.md §8), from Penagihan on. */
+/**
+ * The payment track of a closed work order (FLOW.md §10): belum_ditagih,
+ * ditagih, or lunas. Not a status of the work order itself.
+ */
+export type PaymentStatusOption = {
+    value: 'belum_ditagih' | 'ditagih' | 'lunas';
+    label: string;
+    tone: string;
+};
+
+/** The invoice of a closed work order (FLOW.md §10), once Finance billed it. */
 export type WorkOrderInvoice = {
     number: string;
     /** Date-only values (Y-m-d); format with formatCalendarDate. */
@@ -93,7 +101,7 @@ export type WorkOrderInvoice = {
     paid_by: { name: string } | null;
 };
 
-/** The reason given when the work order was rejected or cancelled. */
+/** The reason given when the work order was rejected, returned for revision, or cancelled. */
 export type WorkOrderStatusNote = {
     label: string;
     note: string;
@@ -140,7 +148,7 @@ export type WorkOrderCommentSettings = {
     max_documents: number;
     /** Rules of the files uploaded while a comment is written. */
     uploads: { gambar: AttachmentRules; lampiran: AttachmentRules };
-    /** The status no longer accepts comments (e.g. Dibatalkan). */
+    /** The work order no longer accepts comments (Dibatalkan, or Closed and paid). */
     read_only: boolean;
 };
 

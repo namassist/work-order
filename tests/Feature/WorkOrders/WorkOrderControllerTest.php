@@ -118,11 +118,13 @@ describe('index', function () {
     });
 
     it('filters by the aktif status group: every active status, and nothing else', function () {
-        $active = collect(['submitted', 'rejected', 'inProgress', 'billed'])
+        $active = collect(['submitted', 'rejected', 'inProgress', 'inReview', 'awaitingBastApproval', 'bastApproved'])
             ->map(fn (string $state): int => WorkOrder::factory()->{$state}()->create(['requester_department_id' => $this->department->id])->id);
         ownWorkOrder();
-        WorkOrder::factory()->paid()->create(['requester_department_id' => $this->department->id]);
-        WorkOrder::factory()->cancelled()->create(['requester_department_id' => $this->department->id]);
+        // Closed is final for the flow, whatever its payment status.
+        foreach (['closed', 'billed', 'paid', 'cancelled'] as $state) {
+            WorkOrder::factory()->{$state}()->create(['requester_department_id' => $this->department->id]);
+        }
 
         $this->actingAs(staff())
             ->get(route('work-orders.index', ['status' => 'aktif']))
@@ -130,6 +132,30 @@ describe('index', function () {
                 ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->sort()->values()->all() === $active->sort()->values()->all())
                 ->where('filters.status', 'aktif')
                 ->where('statusGroups', [['value' => 'aktif', 'label' => 'Aktif']]));
+    });
+
+    it('filters by payment status: closed work orders only', function (string $payment, string $state) {
+        $match = WorkOrder::factory()->{$state}()->create(['requester_department_id' => $this->department->id]);
+        foreach (array_diff(['closed', 'billed', 'paid', 'bastApproved'], [$state]) as $other) {
+            WorkOrder::factory()->{$other}()->create(['requester_department_id' => $this->department->id]);
+        }
+
+        $this->actingAs(staff())
+            ->get(route('work-orders.index', ['payment' => $payment]))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->all() === [$match->id])
+                ->where('filters.payment', $payment)
+                ->where('paymentStatuses', fn ($options): bool => collect($options)->pluck('value')->all() === ['belum_ditagih', 'ditagih', 'lunas']));
+    })->with([
+        'Belum ditagih' => ['belum_ditagih', 'closed'],
+        'Ditagih' => ['ditagih', 'billed'],
+        'Lunas' => ['lunas', 'paid'],
+    ]);
+
+    it('rejects an unknown payment status', function () {
+        $this->actingAs(staff())
+            ->get(route('work-orders.index', ['payment' => 'dicicil']))
+            ->assertSessionHasErrors('payment');
     });
 
     it('filters by target department, offering every user the active executor departments', function () {
@@ -272,7 +298,10 @@ describe('index', function () {
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('stats', [
                     'total' => 5,
-                    'statuses' => ['draft' => 2, 'diajukan' => 2, 'ditolak' => 0, 'dikerjakan' => 0, 'penagihan' => 0, 'selesai' => 0, 'dibatalkan' => 1],
+                    'statuses' => [
+                        'draft' => 2, 'diajukan' => 2, 'ditolak' => 0, 'pelaksanaan' => 0, 'review_dokumen' => 0,
+                        'approval_bast' => 0, 'bast_disetujui' => 0, 'closed' => 0, 'dibatalkan' => 1,
+                    ],
                 ]));
     });
 
@@ -415,7 +444,7 @@ describe('create and store', function () {
 
 describe('show', function () {
     it('shows the work order with its timeline and available transitions', function () {
-        $user = staff(Permission::WorkOrdersUpdate);
+        $user = staff(Permission::WorkOrdersUpdate, Permission::WorkOrdersSubmit, Permission::WorkOrdersCancel);
         $workOrder = ownWorkOrder();
         $workOrder->statusHistories()->create(['to_status' => 'draft', 'user_id' => $user->id]);
 
@@ -428,8 +457,8 @@ describe('show', function () {
                 ->where('timeline.0.to', ['value' => 'draft', 'label' => 'Draft'])
                 ->where('timeline.0.user.name', $user->name)
                 ->where('transitions', [
-                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'form' => null, 'blocked_reason' => null],
-                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan', 'form' => null, 'blocked_reason' => null],
+                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan'],
+                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan'],
                 ])
                 ->where('waitingFor', null)
                 ->where('statusNote', null)
@@ -461,7 +490,7 @@ describe('show', function () {
         'cancelled' => [fn () => WorkOrder::factory()->cancelled()->create(['requester_department_id' => test()->department->id]), false],
     ]);
 
-    it('offers no transitions without the update permission', function () {
+    it('offers no transitions without a transition permission', function () {
         $this->actingAs(staff())
             ->get(route('work-orders.show', ownWorkOrder()))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('transitions', []));
@@ -698,7 +727,7 @@ describe('target department', function () {
     });
 
     it('lets a work order be submitted without a target', function () {
-        $user = staff(Permission::WorkOrdersUpdate);
+        $user = staff(Permission::WorkOrdersSubmit);
         $draft = ownWorkOrder();
 
         $this->actingAs($user)

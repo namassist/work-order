@@ -35,7 +35,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         ->name('work-orders.restore');
     Route::post('work-orders/{workOrder}/transitions', [WorkOrderTransitionController::class, 'store'])
         ->name('work-orders.transitions.store');
-    // Invoicing (FLOW.md §8): with uploads, so throttled like them.
+    // Invoicing (FLOW.md §10): with uploads, so throttled like them.
     Route::middleware('throttle:wo-invoice')->group(function (): void {
         Route::post('work-orders/{workOrder}/invoice', [WorkOrderInvoiceController::class, 'store'])
             ->name('work-orders.invoice.store');

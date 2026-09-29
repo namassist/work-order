@@ -32,12 +32,9 @@ class RolePermissionSeeder extends Seeder
      * (FLOW.md v2 §3), keyed by slug. Every initial role is for the executor
      * company: IC never logs in, so no role is assigned to client users.
      * Only executor roles may hold internal-only permissions (run() refuses
-     * anything else). PROVISIONAL until step 3 adds the v2 transitions:
-     * Admin WO is the requester side (work-orders.update), Lead Operational
-     * the executor side (work-orders.process), Finance confirms payment;
-     * PIC Timesheet, Rental, and Direktur only read and comment for now.
-     * Export for Admin WO, Lead Operational, Direktur, and Finance is
-     * provisional too.
+     * anything else). Each status change of FLOW.md §5.1 and §5.2 goes to the
+     * role §3 names for it, the payment track (§10) to Finance. PROVISIONAL:
+     * export for Admin WO, Lead Operational, Direktur, and Finance.
      *
      * @var array<string, array{label: string, scope: CompanyScope|null, permissions: list<Permission>}>
      */
@@ -50,6 +47,9 @@ class RolePermissionSeeder extends Seeder
                 Permission::WorkOrdersCreate,
                 Permission::WorkOrdersUpdate,
                 Permission::WorkOrdersDelete,
+                Permission::WorkOrdersSubmit,
+                Permission::WorkOrdersClose,
+                Permission::WorkOrdersCancel,
                 Permission::WorkOrdersComment,
                 Permission::WorkOrdersExport,
             ],
@@ -59,7 +59,8 @@ class RolePermissionSeeder extends Seeder
             'scope' => CompanyScope::Executor,
             'permissions' => [
                 Permission::WorkOrdersView,
-                Permission::WorkOrdersProcess,
+                Permission::WorkOrdersApprove,
+                Permission::WorkOrdersCancelExecution,
                 Permission::WorkOrdersComment,
                 Permission::WorkOrdersExport,
             ],
@@ -69,6 +70,7 @@ class RolePermissionSeeder extends Seeder
             'scope' => CompanyScope::Executor,
             'permissions' => [
                 Permission::WorkOrdersView,
+                Permission::WorkOrdersSubmitReview,
                 Permission::WorkOrdersComment,
             ],
         ],
@@ -77,6 +79,7 @@ class RolePermissionSeeder extends Seeder
             'scope' => CompanyScope::Executor,
             'permissions' => [
                 Permission::WorkOrdersView,
+                Permission::WorkOrdersReview,
                 Permission::WorkOrdersComment,
             ],
         ],
@@ -85,6 +88,7 @@ class RolePermissionSeeder extends Seeder
             'scope' => CompanyScope::Executor,
             'permissions' => [
                 Permission::WorkOrdersView,
+                Permission::WorkOrdersApproveBast,
                 Permission::WorkOrdersComment,
                 Permission::WorkOrdersExport,
             ],
@@ -94,6 +98,7 @@ class RolePermissionSeeder extends Seeder
             'scope' => CompanyScope::Executor,
             'permissions' => [
                 Permission::WorkOrdersView,
+                Permission::WorkOrdersBill,
                 Permission::WorkOrdersConfirmPayment,
                 Permission::WorkOrdersComment,
                 Permission::WorkOrdersExport,
@@ -118,13 +123,24 @@ class RolePermissionSeeder extends Seeder
     public const array V1_ROLES = ['pemohon', 'koordinator', 'pelaksana', 'keuangan'];
 
     /**
+     * Permissions no code checks any more. work-orders.process was the
+     * PROVISIONAL executor side of step 2 (FLOW.md v2 step 3 split it into
+     * approve and cancel-execution); a role still holding it would silently
+     * lose what it did, so the seeder refuses rather than guess the new grants.
+     *
+     * @var list<string>
+     */
+    public const array RETIRED_PERMISSIONS = ['work-orders.process'];
+
+    /**
      * Run the database seeds.
      *
-     * @throws LogicException when a v1 role still exists
+     * @throws LogicException when a v1 role or a retired permission still exists
      */
     public function run(): void
     {
         $this->ensureNoV1Roles();
+        $this->ensureNoRetiredPermissions();
 
         $registrar = app(PermissionRegistrar::class);
         $registrar->forgetCachedPermissions();
@@ -164,6 +180,19 @@ class RolePermissionSeeder extends Seeder
         if ($leftovers !== []) {
             throw new LogicException('The database still has the v1 roles ['.implode(', ', $leftovers).']. '
                 .'They cannot be upgraded in place to the v2 roles: start from a fresh database (see docs/DEPLOY.md).');
+        }
+    }
+
+    /**
+     * @throws LogicException when a retired permission still exists
+     */
+    private function ensureNoRetiredPermissions(): void
+    {
+        $leftovers = PermissionModel::query()->whereIn('name', self::RETIRED_PERMISSIONS)->orderBy('name')->pluck('name')->all();
+
+        if ($leftovers !== []) {
+            throw new LogicException('The database still has the retired permissions ['.implode(', ', $leftovers).']. '
+                .'Roles holding them cannot be upgraded in place to the v2 status flow: start from a fresh database (see docs/DEPLOY.md).');
         }
     }
 

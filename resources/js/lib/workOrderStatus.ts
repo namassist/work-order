@@ -8,7 +8,11 @@ const TONE_CLASSES: Record<StatusTone, string> = {
     secondary: 'bg-secondary text-secondary-foreground',
     warning: 'bg-warning text-warning-foreground',
     info: 'bg-info text-info-foreground',
-    billing: 'bg-billing text-billing-foreground',
+    review: 'bg-review text-review-foreground',
+    approval: 'bg-approval text-approval-foreground',
+    // BAST Disetujui: approved but not closed yet, so an outline of the
+    // success tone, never taken for Closed or Lunas (filled success).
+    approved: 'border-success bg-transparent text-success',
     success: 'bg-success text-success-foreground',
     destructive: 'bg-destructive/10 text-destructive',
     // Ended, nothing left to do: an outline in the muted text colour.
@@ -28,7 +32,9 @@ const TONE_CHART_COLORS: Record<StatusTone, string> = {
     secondary: 'var(--chart-5)',
     warning: 'var(--chart-submitted)',
     info: 'var(--info)',
-    billing: 'var(--billing)',
+    review: 'var(--review)',
+    approval: 'var(--approval)',
+    approved: 'var(--chart-bast-approved)',
     success: 'var(--success)',
     destructive: 'var(--destructive)',
     muted: 'var(--chart-cancelled)',

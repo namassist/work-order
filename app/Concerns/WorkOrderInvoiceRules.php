@@ -9,7 +9,7 @@ use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
- * Rules for the invoice form (FLOW.md §8), shared by issuing an invoice
+ * Rules for the invoice form (FLOW.md §10), shared by issuing an invoice
  * (BillWorkOrder) and correcting it (CorrectInvoice). Dates are calendar
  * days (Y-m-d) compared with today in the display timezone (WITA).
  */

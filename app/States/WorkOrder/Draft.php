@@ -2,9 +2,13 @@
 
 namespace App\States\WorkOrder;
 
-use App\Enums\WorkOrderSide;
+use App\Enums\Permission;
 use App\Models\WorkOrder;
 
+/**
+ * Entered by an Admin WO and not submitted yet: no number, visible only to
+ * Admin WO users (FLOW.md §6), deleted rather than cancelled.
+ */
 class Draft extends WorkOrderStatus
 {
     public static string $name = 'draft';
@@ -24,6 +28,14 @@ class Draft extends WorkOrderStatus
         return false;
     }
 
+    public static function transitions(): array
+    {
+        return [
+            new WorkOrderTransition(Diajukan::class, Permission::WorkOrdersSubmit, 'Ajukan'),
+            WorkOrderTransition::cancel(Permission::WorkOrdersCancel),
+        ];
+    }
+
     public function isEditable(): bool
     {
         return true;
@@ -34,18 +46,13 @@ class Draft extends WorkOrderStatus
         return true;
     }
 
-    public function attachmentSides(): array
+    public function attachmentPermissions(): array
     {
-        return [WorkOrder::DOCUMENTS => WorkOrderSide::Requester];
+        return [WorkOrder::DOCUMENTS => Permission::WorkOrdersUpdate];
     }
 
-    public function waitsOn(): WorkOrderSide
+    public function waitingMessage(): string
     {
-        return WorkOrderSide::Requester;
-    }
-
-    public function waitingMessage(WorkOrder $workOrder): string
-    {
-        return 'Menunggu Admin WO mengajukan.';
+        return __('Menunggu Admin WO mengajukan.');
     }
 }

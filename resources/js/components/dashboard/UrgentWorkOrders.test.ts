@@ -14,7 +14,7 @@ const workOrder: UrgentWorkOrder = {
     title: 'Pompa air mati',
     category: 'Perbaikan',
     requester_name: 'Eko Purnomo',
-    status: { value: 'dikerjakan', label: 'Dikerjakan', tone: 'info' },
+    status: { value: 'pelaksanaan', label: 'Pelaksanaan', tone: 'info' },
     submitted_at: '2026-09-20T01:00:00+00:00',
 };
 
@@ -40,7 +40,7 @@ describe('UrgentWorkOrders', () => {
         });
 
         expect(wrapper.get('[data-test="urgent-status"]').text()).toBe(
-            'Dikerjakan',
+            'Pelaksanaan',
         );
     });
 });

@@ -40,14 +40,25 @@ return [
             'max_files' => (int) env('WO_INVOICE_MAX_FILES', 5),
             'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
         ],
-        'bast' => [
-            'max_files' => (int) env('WO_BAST_MAX_FILES', 5),
-            'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
-        ],
         'bukti_bayar' => [
             'max_files' => (int) env('WO_PAYMENT_PROOF_MAX_FILES', 5),
             'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payment Track
+    |--------------------------------------------------------------------------
+    |
+    | Segregation of duties (FLOW.md §10): when on, whoever issued or last
+    | corrected an invoice may not confirm its payment. Off by default,
+    | because the process has a single Finance lane.
+    |
+    */
+
+    'payment' => [
+        'segregation_of_duties' => (bool) env('WO_PAYMENT_SEGREGATION', false),
     ],
 
     /*

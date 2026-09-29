@@ -12,8 +12,8 @@ use Spatie\ModelStates\Exceptions\CouldNotPerformTransition;
 beforeEach(function () {
     $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
     $this->department = Department::factory()->client()->create(['code' => 'IT']);
-    // An Admin WO: the requester side (PROVISIONAL mapping until step 3).
-    $this->user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::ActivityLogView);
+    // An Admin WO: submits and cancels before execution (FLOW.md §5.1, §5.2).
+    $this->user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::WorkOrdersSubmit, Permission::WorkOrdersCancel, Permission::ActivityLogView);
     $this->workOrder = WorkOrder::factory()->targeting(Department::factory()->create())->create(['requester_department_id' => $this->department->id]);
 });
 
@@ -21,7 +21,7 @@ it('numbers a draft on submission and records the change', function () {
     $this->actingAs($this->user)
         ->post(route('work-orders.transitions.store', $this->workOrder), ['status' => 'diajukan'])
         ->assertRedirect()
-        ->assertInertiaFlash('toast.message', 'Work order WO/IT/2026/09/0001 sekarang diajukan.');
+        ->assertInertiaFlash('toast.message', 'Status work order WO/IT/2026/09/0001 sekarang Diajukan.');
 
     expect($this->workOrder->refresh())
         ->number->toBe('WO/IT/2026/09/0001')
@@ -45,7 +45,7 @@ it('names a cancelled draft by its title, never "Draft"', function () {
     $this->actingAs($this->user)
         ->post(route('work-orders.transitions.store', $this->workOrder), ['status' => 'dibatalkan', 'note' => 'Tidak jadi.'])
         ->assertRedirect()
-        ->assertInertiaFlash('toast.message', "Work order 'Perbaikan pintu ruang arsip' sekarang dibatalkan.");
+        ->assertInertiaFlash('toast.message', "Status work order 'Perbaikan pintu ruang arsip' sekarang Dibatalkan.");
 });
 
 it('shows the status change with labels in the history panel', function () {
@@ -132,8 +132,8 @@ it('refuses a transition that became invalid after the page loaded', function ()
         ->status->getValue()->toBe('dibatalkan');
 });
 
-it('forbids transitions without the update permission', function () {
-    $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
+it('forbids transitions without the submit permission', function () {
+    $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate))
         ->post(route('work-orders.transitions.store', $this->workOrder), ['status' => 'diajukan'])
         ->assertForbidden();
 });
@@ -163,5 +163,8 @@ it('cancels a draft without a target department', function () {
 it('requires a number for exactly the statuses after the first submission', function () {
     expect(collect(WorkOrderStatus::options())->mapWithKeys(fn (array $option): array => [
         $option['value'] => WorkOrderStatus::fromName($option['value'])?->requiresNumber(),
-    ])->all())->toBe(['draft' => false, 'diajukan' => true, 'ditolak' => true, 'dikerjakan' => true, 'penagihan' => true, 'selesai' => true, 'dibatalkan' => false]);
+    ])->all())->toBe([
+        'draft' => false, 'diajukan' => true, 'ditolak' => true, 'pelaksanaan' => true, 'review_dokumen' => true,
+        'approval_bast' => true, 'bast_disetujui' => true, 'closed' => true, 'dibatalkan' => false,
+    ]);
 });

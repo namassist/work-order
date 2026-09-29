@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\WorkOrders;
 
+use App\Enums\PaymentStatus;
 use App\Enums\WorkOrderUrgency;
 use App\Models\User;
 use App\Models\WorkOrder;
@@ -57,6 +58,7 @@ class ListWorkOrdersRequest extends FormRequest
                 ...array_column(WorkOrderStatus::options(), 'value'),
             ])],
             'urgency' => ['nullable', Rule::enum(WorkOrderUrgency::class)],
+            'payment' => ['nullable', Rule::enum(PaymentStatus::class)],
             'department' => ['nullable', 'integer'],
             'target' => ['nullable', 'integer'],
             'category' => ['nullable', 'integer'],
@@ -71,7 +73,7 @@ class ListWorkOrdersRequest extends FormRequest
     /**
      * The validated filters and sort, with an empty string (or false) for each one not set.
      *
-     * @return array{search: string, status: string, urgency: string, department: string, target: string, category: string, overdue: bool, from: string, to: string, trashed: bool, sort: string}
+     * @return array{search: string, status: string, urgency: string, payment: string, department: string, target: string, category: string, overdue: bool, from: string, to: string, trashed: bool, sort: string}
      */
     public function filters(): array
     {
@@ -79,6 +81,7 @@ class ListWorkOrdersRequest extends FormRequest
             'search' => (string) $this->validated('search'),
             'status' => (string) $this->validated('status'),
             'urgency' => (string) $this->validated('urgency'),
+            'payment' => (string) $this->validated('payment'),
             'department' => (string) $this->validated('department'),
             'target' => (string) $this->validated('target'),
             'category' => (string) $this->validated('category'),
@@ -106,6 +109,7 @@ class ListWorkOrdersRequest extends FormRequest
             ->search($filters['search'])
             ->when($filters['status'], fn (Builder $query, string $status) => $query->whereIn('status', WorkOrderStatus::namesFor($status)))
             ->when($filters['urgency'], fn (Builder $query, string $urgency) => $query->where('urgency', $urgency))
+            ->when($filters['payment'], fn (Builder $query, string $payment) => $query->inPaymentStatus(PaymentStatus::from($payment)))
             ->when($filters['department'], fn (Builder $query, string $id) => $query->where('requester_department_id', (int) $id))
             ->when($filters['target'], fn (Builder $query, string $id) => $query->where('target_department_id', (int) $id))
             ->when($filters['category'], fn (Builder $query, string $id) => $query->where('work_order_category_id', (int) $id))

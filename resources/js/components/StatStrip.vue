@@ -19,19 +19,21 @@ export type StatItem = {
  * Statistics strip under a page panel's header: big number above its label,
  * a small monochrome icon top-right, cells split by 1px lines. Four columns
  * on desktop, 2×2 on tablets, one column on phones. More than four items
- * (the WO list: total plus every status, 8) stay in two columns on phones
- * instead of one tall column, and take four columns from lg (two rows of
- * four), so no row is left with empty cells. A cell with an `href` links to
- * the list its number counts.
+ * (the WO list: total plus every status, 10) stay in two columns on phones
+ * instead of one tall column, and take four or five columns from lg (two
+ * rows of five for the WO list), so no row is left with empty cells. A cell
+ * with an `href` links to the list its number counts.
  */
 const props = defineProps<{
     items: StatItem[];
 }>();
 
 const columns = computed(() =>
-    props.items.length > 4
-        ? 'grid-cols-2 lg:grid-cols-4'
-        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+    props.items.length <= 4
+        ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+        : props.items.length % 5 === 0
+          ? 'grid-cols-2 lg:grid-cols-5'
+          : 'grid-cols-2 lg:grid-cols-4',
 );
 </script>
 

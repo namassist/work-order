@@ -5,6 +5,8 @@ namespace App\Http\Controllers\WorkOrders;
 use App\Actions\Attachments\AddAttachment;
 use App\Actions\WorkOrders\CreateWorkOrder;
 use App\Actions\WorkOrders\InvoiceNotAllowed;
+use App\Enums\PaymentStatus;
+use App\Enums\Permission;
 use App\Enums\WorkOrderUrgency;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WorkOrders\ListWorkOrdersRequest;
@@ -17,8 +19,8 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
-use App\States\WorkOrder\Selesai;
 use App\States\WorkOrder\WorkOrderStatus;
+use App\States\WorkOrder\WorkOrderTransition;
 use App\Support\Attachments\AttachmentPanel;
 use App\Support\Comments\CommentHtml;
 use App\Support\WorkOrderTimeline;
@@ -71,6 +73,7 @@ class WorkOrderController extends Controller
             'statuses' => WorkOrderStatus::options(),
             'statusGroups' => WorkOrderStatus::groupOptions(),
             'urgencies' => WorkOrderUrgency::options(),
+            'paymentStatuses' => PaymentStatus::options(),
             'stats' => $this->statusCounts($user),
             // Requesting (client company) departments; only executor company
             // users see work orders of more than one (the v1 safeguard).
@@ -149,26 +152,31 @@ class WorkOrderController extends Controller
         $workOrder->load([...self::LIST_RELATIONS, 'invoice.issuer', 'invoice.corrector', 'invoice.payer']);
 
         $status = $workOrder->status;
-        $waitsOn = $status->waitsOn();
         $invoice = $workOrder->invoice;
+        $paymentStatus = $workOrder->paymentStatus();
 
         return Inertia::render('work-orders/Show', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
             'timeline' => WorkOrderTimeline::for($workOrder, $user, $request),
             // Only the transitions this user may perform (FLOW.md §5).
             'transitions' => array_values(array_map(
-                fn (string $to): array => $this->transitionOption($workOrder, $to, $user),
-                array_filter($status->transitionableStates(), fn (string $to): bool => $user->can('transition', [$workOrder, $to])),
+                $this->transitionOption(...),
+                array_filter($status->transitions(), fn (WorkOrderTransition $transition): bool => $user->can('transition', [$workOrder, $transition->toName()])),
             )),
-            // Tells everyone not on the side whose turn it is who the work order waits for.
-            'waitingFor' => $waitsOn !== null && ! $workOrder->isOnSide($user, $waitsOn) ? $status->waitingMessage($workOrder) : null,
+            'waitingFor' => $this->waitingFor($workOrder, $user),
             'statusNote' => $this->statusNote($workOrder),
             'can' => [
                 'update' => $user->can('update', $workOrder),
                 'delete' => $user->can('delete', $workOrder) && $workOrder->status->isDeletable(),
                 'comment' => $user->can('addComment', $workOrder) && $workOrder->status->acceptsComments(),
-                'correctInvoice' => $invoice !== null && ! $invoice->isPaid() && $user->can('correctInvoice', $workOrder),
+                'bill' => $paymentStatus === PaymentStatus::BelumDitagih && $user->can('bill', $workOrder),
+                'correctInvoice' => $paymentStatus === PaymentStatus::Ditagih && $user->can('bill', $workOrder),
+                'confirmPayment' => $paymentStatus === PaymentStatus::Ditagih && $user->can('confirmPayment', $workOrder),
             ],
+            // Why confirming the payment is refused, instead of letting the user try (segregation of duties).
+            'paymentBlockedReason' => $paymentStatus === PaymentStatus::Ditagih && $invoice?->segregationBlocks($user)
+                ? InvoiceNotAllowed::preparedByPayer()->getMessage()
+                : null,
             'comments' => [
                 'max_length' => CommentHtml::MAX_TEXT_LENGTH,
                 'max_images' => config()->integer('work_order.comments.images.max_files'),
@@ -181,27 +189,25 @@ class WorkOrderController extends Controller
                 ],
             ],
             'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
+            'paymentStatus' => $paymentStatus?->toOption(),
             'invoice' => $invoice ? new WorkOrderInvoiceResource($invoice->setRelation('workOrder', $workOrder))->resolve($request) : null,
             'invoiceAttachments' => $this->invoiceAttachments($workOrder, $user, $request),
             // For the invoice and payment forms, which upload with their data.
-            'invoiceRules' => collect([WorkOrder::INVOICE, WorkOrder::BAST, WorkOrder::PAYMENT_PROOF])
+            'invoiceRules' => collect([WorkOrder::INVOICE, WorkOrder::PAYMENT_PROOF])
                 ->mapWithKeys(fn (string $collection): array => [$collection => $workOrder->attachmentCollections()[$collection]->toFrontend()])
                 ->all(),
         ]);
     }
 
     /**
-     * The invoice's file panels (FLOW.md §8): the BAST from Dikerjakan on,
-     * since the target department may add it while it works; the invoice
-     * and proof of payment once there is an invoice.
+     * The invoice's file panels (FLOW.md §10): the invoice and proof of
+     * payment, once the closed work order was billed.
      *
      * @return array<string, array<string, mixed>>
      */
     private function invoiceAttachments(WorkOrder $workOrder, User $user, Request $request): array
     {
-        $collections = $workOrder->invoice !== null
-            ? [WorkOrder::INVOICE, WorkOrder::BAST, WorkOrder::PAYMENT_PROOF]
-            : ($workOrder->status->attachmentSideFor(WorkOrder::BAST) !== null ? [WorkOrder::BAST] : []);
+        $collections = $workOrder->invoice !== null ? [WorkOrder::INVOICE, WorkOrder::PAYMENT_PROOF] : [];
 
         return collect($collections)
             ->mapWithKeys(fn (string $collection): array => [$collection => AttachmentPanel::props($workOrder, $collection, $user, $request)])
@@ -387,38 +393,43 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string, form: string|null, blocked_reason: string|null}
+     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string}
      */
-    private function transitionOption(WorkOrder $workOrder, string $name, User $user): array
+    private function transitionOption(WorkOrderTransition $transition): array
     {
-        $state = WorkOrderStatus::fromName($name);
-
         return [
-            'value' => $name,
-            'label' => $state?->actionLabelFor($workOrder) ?? $name,
-            'destructive' => $state?->isDestructiveAction() ?? false,
-            'requires_note' => $state?->requiresNote() ?? false,
-            'note_label' => $state?->noteLabel() ?? 'Catatan',
-            'form' => $state?->transitionForm(),
-            // Shown instead of letting the user try (ConfirmWorkOrderPayment refuses it too).
-            'blocked_reason' => $name === Selesai::$name && $workOrder->invoice?->wasPreparedBy($user)
-                ? InvoiceNotAllowed::preparedByPayer()->getMessage()
-                : null,
+            'value' => $transition->toName(),
+            'label' => $transition->label,
+            'destructive' => $transition->isDestructive,
+            'requires_note' => $transition->requiresNote,
+            'note_label' => $transition->noteLabel,
         ];
     }
 
     /**
+     * Who the work order waits for, told to everyone who is not the one
+     * whose turn it is (holds none of the status's waitsOn() permissions).
+     */
+    private function waitingFor(WorkOrder $workOrder, User $user): ?string
+    {
+        $waitsOn = $workOrder->status->waitsOn();
+
+        if ($waitsOn === [] || (! $user->isClient() && array_any($waitsOn, fn (Permission $permission): bool => $user->checkPermissionTo($permission->value)))) {
+            return null;
+        }
+
+        return $workOrder->status->waitingMessage();
+    }
+
+    /**
      * The note given when the work order entered its current status, when
-     * that status requires one (the reason it was rejected or cancelled).
+     * the change that brought it there requires one: why it was rejected,
+     * returned for revision, or cancelled.
      *
      * @return array{label: string, note: string, user: string, created_at: string}|null
      */
     private function statusNote(WorkOrder $workOrder): ?array
     {
-        if (! $workOrder->status->requiresNote()) {
-            return null;
-        }
-
         $entry = $workOrder->statusHistories()
             ->reorder()
             ->latest('created_at')
@@ -427,12 +438,16 @@ class WorkOrderController extends Controller
             ->with('user')
             ->first();
 
-        if ($entry === null || blank($entry->note)) {
+        $transition = $entry?->from_status !== null
+            ? WorkOrderStatus::fromName($entry->from_status)?->transitionFor($workOrder->status->getValue())
+            : null;
+
+        if ($entry === null || $transition?->requiresNote !== true || blank($entry->note)) {
             return null;
         }
 
         return [
-            'label' => $workOrder->status->noteLabel(),
+            'label' => $transition->noteLabel,
             'note' => $entry->note,
             'user' => $entry->user->name,
             'created_at' => $entry->created_at->toIso8601String(),

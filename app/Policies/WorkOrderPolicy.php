@@ -3,7 +3,6 @@
 namespace App\Policies;
 
 use App\Enums\Permission;
-use App\Enums\WorkOrderSide;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
@@ -83,35 +82,35 @@ class WorkOrderPolicy
     }
 
     /**
-     * Determine whether the user can edit the work order: the requester side,
-     * while its status isEditable() (Draft and Ditolak).
+     * Determine whether the user can edit the work order: an Admin WO
+     * (work-orders.update), while its status isEditable() (Draft and Ditolak).
      */
     public function update(User $user, WorkOrder $workOrder): Response
     {
         return $this->ifVisible(
             $user,
             $workOrder,
-            $workOrder->status->isEditable() && $workOrder->isOnSide($user, WorkOrderSide::Requester),
+            $workOrder->status->isEditable() && $this->holds($user, Permission::WorkOrdersUpdate),
         );
     }
 
     /**
      * Determine whether the user can move the work order to the given status:
-     * the side that status names in performedBy() (FLOW.md §5). Whether the
-     * current status allows it is checked by the request and, under a lock,
-     * by TransitionWorkOrder.
+     * the holder of the permission its current status names for that change
+     * (WorkOrderStatus::transitions(), FLOW.md §5.1, §5.2). TransitionWorkOrder
+     * checks the status again under a lock.
      */
     public function transition(User $user, WorkOrder $workOrder, string $to): Response
     {
-        $side = WorkOrderStatus::fromName($to)?->performedBy();
+        $transition = $workOrder->status->transitionFor($to);
 
-        return $this->ifVisible($user, $workOrder, $side instanceof WorkOrderSide && $workOrder->isOnSide($user, $side));
+        return $this->ifVisible($user, $workOrder, $transition !== null && $this->holds($user, $transition->permission));
     }
 
     /**
-     * Determine whether the user acts for any side of the work order, so a
-     * status change it cannot make (e.g. from a page loaded before someone
-     * else changed the status) is answered with a validation message rather
+     * Determine whether the user makes any status change at all, so one it
+     * cannot make from the current status (e.g. from a page loaded before
+     * someone else changed it) is answered with a validation message rather
      * than a 403.
      */
     public function changeStatus(User $user, WorkOrder $workOrder): Response
@@ -119,24 +118,37 @@ class WorkOrderPolicy
         return $this->ifVisible(
             $user,
             $workOrder,
-            array_any(WorkOrderSide::cases(), fn (WorkOrderSide $side): bool => $workOrder->isOnSide($user, $side)),
+            array_any(WorkOrderStatus::transitionPermissions(), fn (Permission $permission): bool => $this->holds($user, $permission)),
         );
     }
 
     /**
-     * Determine whether the user can correct the invoice (FLOW.md §8): the
-     * executor side. Whether the work order still waits for payment
-     * (Penagihan) is checked by CorrectInvoice under a lock, which refuses
-     * with a message, since an open page can go stale.
+     * Determine whether the user can issue and correct the invoice of a
+     * closed work order (FLOW.md §10): Finance, with work-orders.bill.
+     * Whether the payment track allows it right now is checked by
+     * BillWorkOrder and CorrectInvoice under a lock, which refuse with a
+     * message, since an open page can go stale.
      */
-    public function correctInvoice(User $user, WorkOrder $workOrder): Response
+    public function bill(User $user, WorkOrder $workOrder): Response
     {
-        return $this->ifVisible($user, $workOrder, $workOrder->isOnSide($user, WorkOrderSide::Executor));
+        return $this->ifVisible($user, $workOrder, $this->holds($user, Permission::WorkOrdersBill));
+    }
+
+    /**
+     * Determine whether the user can confirm the payment of a billed work
+     * order (FLOW.md §10): Finance, with work-orders.confirm-payment. The
+     * payment track and segregation of duties are checked by
+     * ConfirmWorkOrderPayment under a lock.
+     */
+    public function confirmPayment(User $user, WorkOrder $workOrder): Response
+    {
+        return $this->ifVisible($user, $workOrder, $this->holds($user, Permission::WorkOrdersConfirmPayment));
     }
 
     /**
      * Determine whether the user can attach a file to the collection: the
-     * side the status names for it in attachmentSides() (FLOW.md §5).
+     * holder of the permission the status names for it in
+     * attachmentPermissions() (FLOW.md §5.3).
      */
     public function addAttachment(User $user, WorkOrder $workOrder, string $collection): Response
     {
@@ -145,18 +157,20 @@ class WorkOrderPolicy
 
     /**
      * Determine whether the user can remove an attachment from the work
-     * order: same rule as adding. Only the requester side removes files
-     * someone else uploaded (its own documents in Draft and Ditolak); the
-     * executor and finance sides remove only their user's own uploads, since
-     * the requester's documents are part of the request it accepted.
+     * order: same rule as adding. Only an Admin WO revising the request
+     * (collections guarded by work-orders.update) removes files someone else
+     * uploaded; everyone else removes only their own uploads, since the
+     * request's documents are part of what was approved.
      */
     public function deleteAttachment(User $user, WorkOrder $workOrder, Media $media): Response
     {
+        $collection = (string) $media->collection_name;
+
         return $this->ifVisible(
             $user,
             $workOrder,
-            $this->mayChangeAttachments($user, $workOrder, (string) $media->collection_name)
-                && ($workOrder->status->attachmentSideFor((string) $media->collection_name) === WorkOrderSide::Requester || $media->uploaded_by === $user->id),
+            $this->mayChangeAttachments($user, $workOrder, $collection)
+                && ($workOrder->status->attachmentPermissionFor($collection) === Permission::WorkOrdersUpdate || $media->uploaded_by === $user->id),
         );
     }
 
@@ -215,9 +229,19 @@ class WorkOrderPolicy
 
     private function mayChangeAttachments(User $user, WorkOrder $workOrder, string $collection): bool
     {
-        $side = $workOrder->status->attachmentSideFor($collection);
+        $permission = $workOrder->status->attachmentPermissionFor($collection);
 
-        return $side !== null && $workOrder->isOnSide($user, $side);
+        return $permission !== null && $this->holds($user, $permission);
+    }
+
+    /**
+     * Whether the user holds a permission that acts on work orders. Client
+     * company users never do: every such permission is internal-only
+     * (FLOW.md §2), which User::hasPermissionTo() enforces too.
+     */
+    private function holds(User $user, Permission $permission): bool
+    {
+        return ! $user->isClient() && $user->checkPermissionTo($permission->value);
     }
 
     private function isCommentAuthor(User $user, WorkOrder $workOrder, WorkOrderComment $comment): bool

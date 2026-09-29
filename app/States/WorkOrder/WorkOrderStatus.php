@@ -2,8 +2,8 @@
 
 namespace App\States\WorkOrder;
 
+use App\Enums\Permission;
 use App\Enums\WorkOrderDeadline;
-use App\Enums\WorkOrderSide;
 use App\Models\WorkOrder;
 use Spatie\ModelStates\State;
 use Spatie\ModelStates\StateConfig;
@@ -11,8 +11,8 @@ use Spatie\ModelStates\StateConfig;
 /**
  * Work order status (FLOW.md §5). Every state and allowed transition is
  * defined in this folder and nowhere else; the UI gets them from options()
- * and the available transitions of each WO. Who may perform a transition is
- * the side the destination status names in performedBy().
+ * and the available transitions of each WO. Each status lists the changes
+ * it may make in transitions(), each guarded by its own permission.
  *
  * @extends State<WorkOrder>
  */
@@ -24,89 +24,89 @@ abstract class WorkOrderStatus extends State
     public const string GROUP_ACTIVE = 'aktif';
 
     /**
+     * Every status, in flow order.
+     *
+     * @var list<class-string<self>>
+     */
+    private const array FLOW_ORDER = [
+        Draft::class,
+        Diajukan::class,
+        Ditolak::class,
+        Pelaksanaan::class,
+        ReviewDokumen::class,
+        ApprovalBast::class,
+        BastDisetujui::class,
+        Closed::class,
+        Dibatalkan::class,
+    ];
+
+    /**
+     * The state machine, built once from every status's transitions().
+     */
+    private static ?StateConfig $config = null;
+
+    /**
      * The status label shown in badges, lists, and the timeline.
      */
     abstract public function label(): string;
 
     /**
-     * The badge colour token from docs/DESIGN.md: secondary, warning, info,
-     * billing, success, destructive, or muted.
+     * The badge colour token from docs/DESIGN.md: secondary, warning,
+     * destructive, info, review, approval, approved, success, or muted.
      */
     abstract public function tone(): string;
 
     /**
      * Whether a work order in this status is still open work: submitted and
-     * not final (Diajukan, Ditolak, Dikerjakan, Penagihan). The list's
+     * not final (Diajukan through BAST Disetujui). The list's
      * "Aktif" status group and the dashboard's "WO Mendesak" read it, so
      * every new status must decide it.
      */
     abstract public function isActive(): bool;
 
     /**
-     * The label of the button that moves a work order into this status.
+     * The status changes a work order in this status may make, each with
+     * the permission that makes it (FLOW.md §5.1, §5.2). config() builds the
+     * state machine from these, so nothing else defines a transition. Static,
+     * because building the config may not create states (each state's
+     * constructor reads the config).
+     *
+     * @return list<WorkOrderTransition>
      */
-    public function actionLabel(): string
+    public static function transitions(): array
     {
-        return $this->label();
+        return [];
     }
 
     /**
-     * The label of that button for this work order, e.g. "Ajukan ulang"
-     * when it was submitted before.
+     * The allowed change to the given status, or null when this status
+     * cannot move there.
      */
-    public function actionLabelFor(WorkOrder $workOrder): string
+    public function transitionFor(string $to): ?WorkOrderTransition
     {
-        return $this->actionLabel();
+        return array_find(static::transitions(), fn (WorkOrderTransition $transition): bool => $transition->toName() === $to);
     }
 
     /**
-     * Whether the button that moves a work order into this status ends or
-     * turns it back (reject, cancel), so it gets a destructive style.
+     * The permissions of whoever's turn it is while a work order is in this
+     * status: those of its transitions other than cancelling. Empty when
+     * nobody has to act (final statuses).
+     *
+     * @return list<Permission>
      */
-    public function isDestructiveAction(): bool
+    public function waitsOn(): array
     {
-        return false;
+        return array_values(array_unique(array_map(
+            fn (WorkOrderTransition $transition): Permission => $transition->permission,
+            array_filter(static::transitions(), fn (WorkOrderTransition $transition): bool => ! $transition->isCancellation()),
+        ), SORT_REGULAR));
     }
 
     /**
-     * Whether moving into this status requires a note.
+     * Who the work order waits for, shown to users who hold none of the
+     * waitsOn() permissions.
      */
-    public function requiresNote(): bool
-    {
-        return false;
-    }
-
-    /**
-     * The label of the note given when moving into this status.
-     */
-    public function noteLabel(): string
-    {
-        return 'Catatan';
-    }
-
-    /**
-     * The side that moves a work order into this status (FLOW.md §5), or
-     * null for the initial status, which no transition enters.
-     */
-    public function performedBy(): ?WorkOrderSide
-    {
-        return null;
-    }
-
-    /**
-     * The side whose turn it is while a work order is in this status, or
-     * null when nobody has to act (final statuses).
-     */
-    public function waitsOn(): ?WorkOrderSide
-    {
-        return null;
-    }
-
-    /**
-     * Who the work order waits for, shown to users who are not on the side
-     * of waitsOn().
-     */
-    public function waitingMessage(WorkOrder $workOrder): ?string
+    public function waitingMessage(): ?string
     {
         return null;
     }
@@ -120,7 +120,7 @@ abstract class WorkOrderStatus extends State
     }
 
     /**
-     * Whether the work order's fields may still be edited or it may be deleted.
+     * Whether the work order's fields may still be edited.
      */
     public function isEditable(): bool
     {
@@ -137,41 +137,29 @@ abstract class WorkOrderStatus extends State
     }
 
     /**
-     * Which side may add and remove files in which attachment collection
-     * while a work order is in this status (FLOW.md §5 status properties).
-     * A collection that is not listed cannot be changed by anyone.
+     * Which permission may add and remove files in which attachment
+     * collection while a work order is in this status (FLOW.md §5.3). A
+     * collection that is not listed cannot be changed by anyone.
      *
-     * @return array<string, WorkOrderSide>
+     * @return array<string, Permission>
      */
-    public function attachmentSides(): array
+    public function attachmentPermissions(): array
     {
         return [];
     }
 
     /**
-     * The side that may change the collection's files in this status, or
-     * null when nobody may.
+     * The permission that may change the collection's files in this status,
+     * or null when nobody may.
      */
-    public function attachmentSideFor(string $collection): ?WorkOrderSide
+    public function attachmentPermissionFor(string $collection): ?Permission
     {
-        return $this->attachmentSides()[$collection] ?? null;
-    }
-
-    /**
-     * The form that collects what moving into this status needs, when the
-     * plain transition (a note at most) is not enough: 'invoice' for
-     * Penagihan (BillWorkOrder), 'payment' for Selesai
-     * (ConfirmWorkOrderPayment). Such a status is never entered through
-     * the plain transition endpoint.
-     */
-    public function transitionForm(): ?string
-    {
-        return null;
+        return $this->attachmentPermissions()[$collection] ?? null;
     }
 
     /**
      * Whether comments may be added, edited, or deleted. Final statuses keep
-     * their comments read-only.
+     * their comments read-only (Closed only once paid, FLOW.md §5.3).
      */
     public function acceptsComments(): bool
     {
@@ -180,10 +168,8 @@ abstract class WorkOrderStatus extends State
 
     /**
      * The date a work order in this status is late against once it has
-     * passed (FLOW.md §7, the dashboard's "Terlambat"), or null when it is
-     * never late in this status. Every new status must decide this: only
-     * submitted, non-final statuses have one; draft and final statuses never
-     * do.
+     * passed (FLOW.md §11, the dashboard's "Terlambat"), or null when it is
+     * never late in this status. Every new status must decide this.
      */
     public function deadline(): ?WorkOrderDeadline
     {
@@ -192,7 +178,7 @@ abstract class WorkOrderStatus extends State
 
     /**
      * Whether a work order in this status has a number: true for every
-     * status after the first submission (FLOW.md §5), backed by the
+     * status after the first submission (FLOW.md §5.3), backed by the
      * work_orders_submitted_number_check constraint; every new status must
      * decide it.
      */
@@ -203,15 +189,38 @@ abstract class WorkOrderStatus extends State
 
     public static function config(): StateConfig
     {
-        return parent::config()
-            ->default(Draft::class)
-            ->allowTransition(Draft::class, Diajukan::class)
-            ->allowTransition(Diajukan::class, Dikerjakan::class)
-            ->allowTransition(Diajukan::class, Ditolak::class)
-            ->allowTransition(Ditolak::class, Diajukan::class)
-            ->allowTransition(Dikerjakan::class, Penagihan::class)
-            ->allowTransition(Penagihan::class, Selesai::class)
-            ->allowTransition([Draft::class, Diajukan::class, Ditolak::class], Dibatalkan::class);
+        if (self::$config instanceof StateConfig) {
+            return self::$config;
+        }
+
+        $config = parent::config()->default(Draft::class);
+
+        foreach (self::FLOW_ORDER as $class) {
+            foreach ($class::transitions() as $transition) {
+                $config->allowTransition($class, $transition->to);
+            }
+        }
+
+        return self::$config = $config;
+    }
+
+    /**
+     * Every permission that makes some status change, for telling a user
+     * who acts on work orders at all from one who never does.
+     *
+     * @return list<Permission>
+     */
+    public static function transitionPermissions(): array
+    {
+        $permissions = [];
+
+        foreach (self::FLOW_ORDER as $class) {
+            foreach ($class::transitions() as $transition) {
+                $permissions[$transition->permission->value] = $transition->permission;
+            }
+        }
+
+        return array_values($permissions);
     }
 
     /**
@@ -326,15 +335,7 @@ abstract class WorkOrderStatus extends State
      */
     private static function inFlowOrder(): array
     {
-        return array_map(fn (string $class): self => new $class(new WorkOrder), [
-            Draft::class,
-            Diajukan::class,
-            Ditolak::class,
-            Dikerjakan::class,
-            Penagihan::class,
-            Selesai::class,
-            Dibatalkan::class,
-        ]);
+        return array_map(fn (string $class): self => new $class(new WorkOrder), self::FLOW_ORDER);
     }
 
     /**

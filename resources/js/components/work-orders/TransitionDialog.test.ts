@@ -9,18 +9,14 @@ const reject: WorkOrderTransition = {
     destructive: true,
     requires_note: true,
     note_label: 'Alasan penolakan',
-    form: null,
-    blocked_reason: null,
 };
 
 const accept: WorkOrderTransition = {
-    value: 'dikerjakan',
-    label: 'Kerjakan',
+    value: 'pelaksanaan',
+    label: 'Setujui',
     destructive: false,
     requires_note: false,
     note_label: 'Catatan',
-    form: null,
-    blocked_reason: null,
 };
 
 async function render(transition: WorkOrderTransition) {

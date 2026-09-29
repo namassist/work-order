@@ -31,7 +31,8 @@ export function overdueHint(counts: WorkOrderCounts): string | undefined {
 
 /**
  * The dashboard's stat strip: WOs waiting to be accepted (Diajukan), being
- * worked on (Dikerjakan), waiting for payment (Penagihan), and late
+ * carried out (Pelaksanaan), closed and waiting for payment (payment track
+ * Ditagih), and late
  * (WorkOrder::overdue(), with its breakdown). Each card opens the list with
  * the same filter. Undefined counts are still loading; null ones are not
  * available to the user.
@@ -55,11 +56,11 @@ export function dashboardMetrics(
         card('Menunggu Diterima', Hourglass, (c) => c.submitted, {
             status: 'diajukan',
         }),
-        card('Dikerjakan', Wrench, (c) => c.in_progress, {
-            status: 'dikerjakan',
+        card('Pelaksanaan', Wrench, (c) => c.in_progress, {
+            status: 'pelaksanaan',
         }),
         card('Menunggu Pembayaran', ReceiptText, (c) => c.billing, {
-            status: 'penagihan',
+            payment: 'ditagih',
         }),
         {
             ...card('Terlambat', AlarmClock, (c) => c.overdue, { overdue: 1 }),

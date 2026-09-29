@@ -2,10 +2,13 @@
 
 namespace App\States\WorkOrder;
 
+use App\Enums\Permission;
 use App\Enums\WorkOrderDeadline;
-use App\Enums\WorkOrderSide;
-use App\Models\WorkOrder;
 
+/**
+ * Submitted by an Admin WO, numbered on the first submission, and waiting
+ * for Lead Operational to approve or reject it.
+ */
 class Diajukan extends WorkOrderStatus
 {
     public static string $name = 'diajukan';
@@ -25,17 +28,13 @@ class Diajukan extends WorkOrderStatus
         return true;
     }
 
-    public function actionLabel(): string
+    public static function transitions(): array
     {
-        return 'Ajukan';
-    }
-
-    /**
-     * A rejected work order is resubmitted under the number it already has.
-     */
-    public function actionLabelFor(WorkOrder $workOrder): string
-    {
-        return $workOrder->wasSubmitted() ? 'Ajukan ulang' : $this->actionLabel();
+        return [
+            new WorkOrderTransition(Pelaksanaan::class, Permission::WorkOrdersApprove, 'Setujui'),
+            new WorkOrderTransition(Ditolak::class, Permission::WorkOrdersApprove, 'Tolak', requiresNote: true, noteLabel: 'Alasan penolakan', isDestructive: true),
+            WorkOrderTransition::cancel(Permission::WorkOrdersCancel),
+        ];
     }
 
     public function assignsNumber(): bool
@@ -53,17 +52,7 @@ class Diajukan extends WorkOrderStatus
         return true;
     }
 
-    public function performedBy(): WorkOrderSide
-    {
-        return WorkOrderSide::Requester;
-    }
-
-    public function waitsOn(): WorkOrderSide
-    {
-        return WorkOrderSide::Executor;
-    }
-
-    public function waitingMessage(WorkOrder $workOrder): string
+    public function waitingMessage(): string
     {
         return __('Menunggu persetujuan Lead Operational.');
     }

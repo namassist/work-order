@@ -30,9 +30,10 @@ class WorkOrderTransitionController extends Controller
             return back();
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Work order :number sekarang :status.', [
+        // The label as shown in badges: "Approval BAST" and "BAST Disetujui" do not lowercase well.
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Status work order :number sekarang :status.', [
             'number' => $workOrder->reference(),
-            'status' => mb_strtolower($workOrder->status->label()),
+            'status' => $workOrder->status->label(),
         ])]);
 
         return back();

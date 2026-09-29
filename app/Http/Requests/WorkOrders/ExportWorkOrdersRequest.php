@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\WorkOrders;
 
+use App\Enums\PaymentStatus;
 use App\Enums\WorkOrderUrgency;
 use App\Models\Department;
 use App\Models\WorkOrder;
@@ -34,6 +35,7 @@ class ExportWorkOrdersRequest extends ListWorkOrdersRequest
             'Cari' => $filters['search'],
             'Status' => $filters['status'] === '' ? '' : WorkOrderStatus::filterLabelFor($filters['status']),
             'Urgensi' => WorkOrderUrgency::tryFrom($filters['urgency'])?->label() ?? '',
+            'Pembayaran' => PaymentStatus::tryFrom($filters['payment'])?->label() ?? '',
             'Dept. pemohon' => $filters['department'] === '' ? '' : $this->codeOf(Department::withTrashed(), $filters['department']),
             'Dept. tujuan' => $filters['target'] === '' ? '' : $this->codeOf(Department::withTrashed(), $filters['target']),
             'Kategori' => $filters['category'] === '' ? '' : $this->codeOf(WorkOrderCategory::withTrashed(), $filters['category']),

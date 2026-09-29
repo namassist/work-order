@@ -3,8 +3,8 @@
 use App\Enums\AccountStatus;
 use App\Enums\AuditEvent;
 use App\Enums\CompanyScope;
+use App\Enums\PaymentStatus;
 use App\Enums\SystemRole;
-use App\Enums\WorkOrderSide;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Media;
@@ -15,6 +15,7 @@ use App\Models\WorkOrderComment;
 use App\Models\WorkOrderInvoice;
 use App\Models\WorkOrderStatusHistory;
 use App\States\WorkOrder\WorkOrderStatus;
+use App\States\WorkOrder\WorkOrderTransition;
 use App\Support\Comments\CommentHtml;
 use App\Support\DisplayDate;
 use Database\Seeders\DemoSeeder;
@@ -140,52 +141,79 @@ it('only lets people act on work orders they can see', function () {
         ->and($transitions->every(fn (WorkOrderStatusHistory $history): bool => $history->workOrder->isVisibleTo($history->user)))->toBeTrue();
 });
 
-it('lets only the side FLOW.md names make each status change', function () {
+it('lets only the role FLOW.md names make each status change', function () {
     $this->seed(DemoSeeder::class);
 
-    WorkOrderStatusHistory::query()->whereNotNull('from_status')->with(['workOrder', 'user'])->get()
-        ->each(function (WorkOrderStatusHistory $history): void {
-            $side = WorkOrderStatus::fromName($history->to_status)?->performedBy();
-            // PROVISIONAL mapping until step 3 (see CLAUDE.md).
-            $role = match ($side) {
-                WorkOrderSide::Requester => 'admin-wo',
-                WorkOrderSide::Executor => 'lead-operational',
-                WorkOrderSide::Finance => 'finance',
-                default => null,
-            };
+    // FLOW.md §3, §5.1, §5.2: the role that holds each transition's permission.
+    $roles = [
+        'work-orders.submit' => 'admin-wo',
+        'work-orders.cancel' => 'admin-wo',
+        'work-orders.close' => 'admin-wo',
+        'work-orders.approve' => 'lead-operational',
+        'work-orders.cancel-execution' => 'lead-operational',
+        'work-orders.submit-review' => 'pic-timesheet',
+        'work-orders.review' => 'rental',
+        'work-orders.approve-bast' => 'direktur',
+    ];
 
-            expect($side instanceof WorkOrderSide && $history->workOrder->isOnSide($history->user, $side) && $history->user->hasRole($role))
+    WorkOrderStatusHistory::query()->whereNotNull('from_status')->with(['workOrder', 'user'])->get()
+        ->each(function (WorkOrderStatusHistory $history) use ($roles): void {
+            $transition = WorkOrderStatus::fromName((string) $history->from_status)?->transitionFor($history->to_status);
+
+            expect($transition instanceof WorkOrderTransition
+                && $history->user->checkPermissionTo($transition->permission->value)
+                && $history->user->hasRole($roles[$transition->permission->value]))
                 ->toBeTrue("{$history->from_status} → {$history->to_status} by {$history->user->name}");
         });
 });
 
-it('rejects, resubmits under the same number, and carries out work orders', function () {
+it('takes work orders through every path of the flow', function () {
     $this->seed(DemoSeeder::class);
 
     $workOrders = WorkOrder::query()->with(['statusHistories', 'media'])->get();
     $paths = $workOrders->map(fn (WorkOrder $workOrder): string => $workOrder->statusHistories->pluck('to_status')->implode(' → '));
     $resubmitted = $workOrders->filter(fn (WorkOrder $workOrder): bool => $workOrder->statusHistories->pluck('to_status')->all() === ['draft', 'diajukan', 'ditolak', 'diajukan']);
-    $inProgress = $workOrders->filter(fn (WorkOrder $workOrder): bool => $workOrder->status->getValue() === 'dikerjakan');
+    $inProgress = $workOrders->filter(fn (WorkOrder $workOrder): bool => $workOrder->status->getValue() === 'pelaksanaan');
+    $executed = 'draft → diajukan → pelaksanaan';
+    $closed = "{$executed} → review_dokumen → approval_bast → bast_disetujui → closed";
 
-    expect($paths->countBy()->only([
-        'draft → diajukan → ditolak',
-        'draft → diajukan → ditolak → diajukan',
-        'draft → diajukan → ditolak → dibatalkan',
-        'draft → diajukan → dikerjakan',
-        'draft → diajukan → dikerjakan → penagihan',
-        'draft → diajukan → dikerjakan → penagihan → selesai',
-    ])->sortKeys()->all())->toBe([
-        'draft → diajukan → dikerjakan' => 8,
-        'draft → diajukan → dikerjakan → penagihan' => 6,
-        'draft → diajukan → dikerjakan → penagihan → selesai' => 4,
-        'draft → diajukan → ditolak' => 5,
-        'draft → diajukan → ditolak → diajukan' => 4,
+    expect($paths->countBy()->sortKeys()->all())->toBe(collect([
+        'draft' => 10,
+        'draft → diajukan' => 13,
+        'draft → diajukan → dibatalkan' => 2,
+        'draft → diajukan → ditolak' => 4,
+        'draft → diajukan → ditolak → diajukan' => 3,
         'draft → diajukan → ditolak → dibatalkan' => 2,
-    ])
+        'draft → dibatalkan' => 4,
+        $executed => 7,
+        "{$executed} → dibatalkan" => 1,
+        "{$executed} → review_dokumen" => 3,
+        "{$executed} → review_dokumen → approval_bast" => 3,
+        "{$executed} → review_dokumen → approval_bast → bast_disetujui" => 2,
+        $closed => 13,
+        "{$executed} → review_dokumen → dibatalkan" => 1,
+        "{$executed} → review_dokumen → pelaksanaan" => 2,
+    ])->sortKeys()->all())
         // Admin WO revises the description before resubmitting.
         ->and($resubmitted->every(fn (WorkOrder $workOrder): bool => str_ends_with((string) $workOrder->description, 'Revisi: lokasi dan foto kondisi sudah dilengkapi.')))->toBeTrue()
-        // Lead Operational adds progress photos while the work is carried out.
-        ->and($inProgress->filter(fn (WorkOrder $workOrder): bool => $workOrder->media->contains('uploaded_by', $workOrder->statusHistories->firstWhere('to_status', 'dikerjakan')->user_id)))->not->toBeEmpty();
+        // PIC Timesheet adds progress photos while the work is carried out.
+        ->and($inProgress->filter(fn (WorkOrder $workOrder): bool => $workOrder->media->contains(fn (Media $media): bool => $media->name === 'Foto_Progres.jpg'
+            && (bool) User::find($media->uploaded_by)?->hasRole('pic-timesheet'))))->not->toBeEmpty();
+});
+
+it('creates closed work orders in every payment status', function () {
+    $this->seed(DemoSeeder::class);
+
+    expect(WorkOrder::query()->with('invoice')->get()
+        ->map(fn (WorkOrder $workOrder): ?string => $workOrder->paymentStatus()?->value)
+        ->filter()
+        ->countBy()
+        ->sortKeys()
+        ->all())->toBe([
+            PaymentStatus::BelumDitagih->value => 3,
+            PaymentStatus::Ditagih->value => 6,
+            PaymentStatus::Lunas->value => 4,
+        ]);
 });
 
 it('creates work orders in every status over the last three months', function () {
@@ -206,11 +234,11 @@ it('creates work orders in every status over the last three months', function ()
 
     $overdue = $workOrders->load('invoice')->filter(fn (WorkOrder $workOrder): bool => $workOrder->isOverdue());
     expect($overdue->countBy(fn (WorkOrder $workOrder): string => $workOrder->status->getValue())->sortKeys()->all())
-        ->toBe(['diajukan' => 4, 'dikerjakan' => 2, 'penagihan' => 2])
+        ->toBe(['closed' => 2, 'diajukan' => 4, 'pelaksanaan' => 2])
         ->and(WorkOrder::query()->overdue()->pluck('id')->sort()->values()->all())->toBe($overdue->pluck('id')->sort()->values()->all());
 });
 
-it('invoices finished work orders and confirms payments through the real actions', function () {
+it('bills closed work orders and confirms payments through the real actions', function () {
     $this->seed(DemoSeeder::class);
 
     $invoices = WorkOrderInvoice::query()->with(['workOrder.statusHistories', 'workOrder.media', 'issuer', 'corrector', 'payer'])->get();
@@ -228,19 +256,22 @@ it('invoices finished work orders and confirms payments through the real actions
 
     $invoices->each(function (WorkOrderInvoice $invoice): void {
         $workOrder = $invoice->workOrder;
-        $billing = $workOrder->statusHistories->firstWhere('to_status', 'penagihan');
+        $issued = Activity::query()->forSubject($workOrder)->where('event', AuditEvent::InvoiceIssued->value)->sole();
 
-        // Issued by Lead Operational, who accepted the work, with at least one invoice file.
-        expect($invoice->issued_by)->toBe($workOrder->statusHistories->firstWhere('to_status', 'dikerjakan')->user_id)
-            ->and($invoice->issued_by)->toBe($billing->user_id)
-            ->and($invoice->invoice_date->toDateString())->toBe(DisplayDate::local($billing->created_at)->toDateString())
+        // Billed by Finance after closing, with at least one invoice file; the status stays Closed.
+        expect($workOrder->status->getValue())->toBe('closed')
+            ->and($invoice->issuer->hasRole('finance'))->toBeTrue()
+            ->and($issued->causer_id)->toBe($invoice->issued_by)
+            ->and($issued->created_at->greaterThan($workOrder->statusHistories->firstWhere('to_status', 'closed')->created_at))->toBeTrue()
+            ->and($invoice->invoice_date->toDateString())->toBe(DisplayDate::local($issued->created_at)->toDateString())
             ->and($workOrder->media->where('collection_name', WorkOrder::INVOICE))->not->toBeEmpty();
 
         if ($invoice->isPaid()) {
-            // Confirmed by Finance, never by whoever prepared the invoice.
+            $confirmed = Activity::query()->forSubject($workOrder)->where('event', AuditEvent::PaymentConfirmed->value)->sole();
+
             expect($invoice->payer->hasRole('finance'))->toBeTrue()
-                ->and($invoice->wasPreparedBy($invoice->payer))->toBeFalse()
-                ->and($invoice->paid_on?->toDateString())->toBe(DisplayDate::local($workOrder->statusHistories->firstWhere('to_status', 'selesai')->created_at)->toDateString());
+                ->and($confirmed->causer_id)->toBe($invoice->paid_by)
+                ->and($invoice->paid_on?->toDateString())->toBe(DisplayDate::local($confirmed->created_at)->toDateString());
         }
     });
 });
@@ -277,7 +308,9 @@ it('gives every work order a consistent status history', function () {
                 ->and($next->created_at->greaterThan($previous->created_at))->toBeTrue();
         });
 
-        $histories->whereIn('to_status', ['dibatalkan', 'ditolak'])
+        // Every change whose transition requires a note has one.
+        $histories->whereNotNull('from_status')
+            ->filter(fn (WorkOrderStatusHistory $history): bool => (bool) WorkOrderStatus::fromName((string) $history->from_status)?->transitionFor($history->to_status)?->requiresNote)
             ->each(fn (WorkOrderStatusHistory $history) => expect($history->note)->not->toBeEmpty());
     });
 });
@@ -332,8 +365,9 @@ it('adds comments from Admin WO and PIC Timesheet while the work order still too
         ->and($comments->whereNotNull('deleted_at'))->not->toBeEmpty();
 
     $comments->each(function (WorkOrderComment $comment): void {
-        // Dibatalkan and Selesai make comments read-only.
-        $cancelledAt = $comment->workOrder->statusHistories->first(fn (WorkOrderStatusHistory $history): bool => in_array($history->to_status, ['dibatalkan', 'selesai'], true))?->created_at;
+        // Dibatalkan and the payment (Lunas) make comments read-only.
+        $cancelledAt = $comment->workOrder->statusHistories->firstWhere('to_status', 'dibatalkan')?->created_at
+            ?? Activity::query()->forSubject($comment->workOrder)->where('event', AuditEvent::PaymentConfirmed->value)->first()?->created_at;
 
         // The PIC Timesheet of the target department, or the Admin WO who entered it.
         expect($comment->author->hasRole('pic-timesheet')

@@ -80,6 +80,13 @@ php artisan optimize
   department-based visibility gone, act on every work order. `RolePermissionSeeder` therefore refuses
   to run while any v1 role exists. Start from a fresh database instead (no production data exists
   yet); locally that is `php artisan migrate:fresh --seeder=DemoSeeder`.
+- **v2 status flow (FLOW.md v2 step 3): no in-place upgrade either.** The v1 statuses Dikerjakan,
+  Penagihan, and Selesai have no v2 counterpart, and step 2's `work-orders.process` was split into
+  new permissions no existing role holds. The step 3 migration refuses a database with work orders,
+  status history, or manual BAST files of the v1 flow, and `RolePermissionSeeder` refuses one that
+  still has `work-orders.process`. Start from a fresh database (no production data exists yet).
+- **Payment segregation** is off by default; set `WO_PAYMENT_SEGREGATION=true` to require that the
+  person who issued or last corrected an invoice never confirms its payment.
 - `php artisan optimize` caches config, routes, and events; rerun it whenever `.env` changes.
 - Queues: nothing is queued yet, so no worker is needed.
 

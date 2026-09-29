@@ -40,6 +40,7 @@ const filters = useListFilters(
         ...props.filters,
         status: props.filters.status || ALL,
         urgency: props.filters.urgency || ALL,
+        payment: props.filters.payment || ALL,
         sort: props.filters.sort || ALL,
         department: props.filters.department || ALL,
         target: props.filters.target || ALL,
@@ -93,6 +94,7 @@ const popoverCount = computed(
             filters.department !== ALL,
             filters.target !== ALL,
             filters.category !== ALL,
+            filters.payment !== ALL,
             filters.overdue,
             filters.from !== '' || filters.to !== '',
             filters.trashed,
@@ -125,6 +127,7 @@ const FILTER_KEYS: WorkOrderFilterChipKey[] = [
     'search',
     'status',
     'urgency',
+    'payment',
     'department',
     'target',
     'category',
@@ -206,6 +209,19 @@ const reset = () => FILTER_KEYS.forEach(clear);
                         :options="categoryOptions"
                     />
                 </FilterField>
+                <FilterField
+                    label="Pembayaran"
+                    for="filter-payment"
+                    data-test="filter-payment"
+                >
+                    <FilterSelect
+                        id="filter-payment"
+                        v-model="filters.payment"
+                        label="Filter status pembayaran"
+                        all-label="Semua"
+                        :options="paymentStatuses"
+                    />
+                </FilterField>
                 <FilterField label="Dibuat" for="filter-created">
                     <DateRangeFilter
                         id="filter-created"
@@ -279,6 +295,19 @@ const reset = () => FILTER_KEYS.forEach(clear);
                         label="Filter kategori"
                         all-label="Semua kategori"
                         :options="categoryOptions"
+                    />
+                </FilterField>
+                <FilterField
+                    label="Pembayaran"
+                    for="sheet-payment"
+                    data-test="sheet-payment"
+                >
+                    <FilterSelect
+                        id="sheet-payment"
+                        v-model="filters.payment"
+                        label="Filter status pembayaran"
+                        all-label="Semua"
+                        :options="paymentStatuses"
                     />
                 </FilterField>
                 <FilterField label="Dibuat" for="sheet-created">

@@ -20,9 +20,9 @@ import { calendarDateIn } from '@/lib/format';
 import type { AttachmentRules, WorkOrderInvoice } from '@/types';
 
 /**
- * Confirms the invoice was paid, closing the work order (Selesai, FLOW.md
- * §8): the payment date, from the invoice date up to today (WITA), and
- * optional proof of payment.
+ * Confirms the invoice was paid (payment Ditagih → Lunas, FLOW.md §10): the
+ * payment date, from the invoice date up to today (WITA), and optional
+ * proof of payment.
  */
 const props = defineProps<{
     workOrderId: number;
@@ -77,7 +77,7 @@ const submit = () => {
                     <DialogDescription>
                         Invoice
                         <span class="font-mono">{{ invoice.number }}</span>
-                        ditandai lunas dan work order selesai. Setelah itu work
+                        ditandai lunas. Setelah itu komentar dan berkas work
                         order tidak dapat diubah lagi.
                     </DialogDescription>
                 </DialogHeader>
@@ -110,9 +110,6 @@ const submit = () => {
                         :error="errorsFor('proof_files')"
                     />
                 </div>
-
-                <!-- "status": the work order moved on since the page loaded. -->
-                <InputError :message="errorsFor('status')" />
 
                 <DialogFooter class="gap-2">
                     <DialogClose as-child>

@@ -7,7 +7,9 @@ import {
     CircleDot,
     ClipboardList,
     Download,
+    FileCheck,
     FilePen,
+    FileSearch,
     History,
     Pencil,
     Plus,
@@ -15,6 +17,7 @@ import {
     RotateCcw,
     SearchX,
     Send,
+    Stamp,
     Trash2,
     Undo2,
     Wrench,
@@ -64,6 +67,7 @@ import type {
     CategoryOption,
     DepartmentOption,
     Paginated,
+    PaymentStatusOption,
     WorkOrderListItem,
     WorkOrderStatusOption,
     WorkOrderUrgencyOption,
@@ -75,6 +79,8 @@ const props = defineProps<{
     statuses: WorkOrderStatusOption[];
     statusGroups: WorkOrderStatusGroupOption[];
     urgencies: WorkOrderUrgencyOption[];
+    /** Payment track options (FLOW.md §10), for the Pembayaran filter. */
+    paymentStatuses: PaymentStatusOption[];
     /** Visible, non-deleted work orders per status, ignoring the filters. */
     stats: { total: number; statuses: Record<string, number> };
     /** Null unless the user sees every department's work orders. */
@@ -101,9 +107,11 @@ const statusIcons: Record<string, LucideIcon> = {
     draft: FilePen,
     diajukan: Send,
     ditolak: Undo2,
-    dikerjakan: Wrench,
-    penagihan: ReceiptText,
-    selesai: CircleCheckBig,
+    pelaksanaan: Wrench,
+    review_dokumen: FileSearch,
+    approval_bast: Stamp,
+    bast_disetujui: FileCheck,
+    closed: CircleCheckBig,
     dibatalkan: Ban,
 };
 
@@ -197,6 +205,7 @@ const openHistory = (workOrder: WorkOrderListItem) => {
             :statuses="statuses"
             :status-groups="statusGroups"
             :urgencies="urgencies"
+            :payment-statuses="paymentStatuses"
             :departments="departments"
             :target-departments="targetDepartments"
             :categories="categories"

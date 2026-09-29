@@ -11,42 +11,46 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Inertia\Support\SessionKey;
 
 /*
-| FLOW.md §5 as a matrix: every role posts every status change on a work
-| order in every status. Penagihan and Selesai are posted to their own forms
-| (invoice, payment) with valid data; every other status to the plain status
-| change. The work orders are entered by Admin WO X for a contact of IC
-| department A.
-|
-| PROVISIONAL mapping of the v1 statuses to the v2 roles until step 3: the
-| requester side is Admin WO (any of them, work-orders.update), the executor
-| side Lead Operational (work-orders.process), the finance side Finance
-| (work-orders.confirm-payment); departments no longer matter, and client
-| company users are on no side.
+| FLOW.md §5.1 and §5.2 as a matrix: every role posts every status change on
+| a work order in every status, and every payment track action (§10) on a
+| closed work order in every payment status. The work orders are entered by
+| Admin WO X for a contact of IC department A. Roles have the seeded grants
+| (RolePermissionSeeder::INITIAL_ROLES).
 |
 | Outcome per request:
-|   done     the status changed
-|   invalid  a validation error: the current status does not allow it (for a
-|            user on any side of the work order)
-|   403      visible, but the user is not on the side that makes this change
+|   done     the change was made
+|   invalid  refused with a message: the current status does not allow the
+|            change (for a user who makes some status change at all), or the
+|            payment track is not in the right state (a toast)
+|   403      visible, but the user lacks the permission for this change
 |   404      the user cannot see the work order
 */
 
-/** Who makes each allowed status change (FLOW.md §5). */
+/** The permission that makes each allowed status change (FLOW.md §5.1, §5.2). */
 const FLOW_TRANSITIONS = [
-    'draft' => ['diajukan' => 'requester', 'dibatalkan' => 'requester'],
-    'diajukan' => ['dikerjakan' => 'executor', 'ditolak' => 'executor', 'dibatalkan' => 'requester'],
-    'ditolak' => ['diajukan' => 'requester', 'dibatalkan' => 'requester'],
-    'dikerjakan' => ['penagihan' => 'executor'],
-    'penagihan' => ['selesai' => 'finance'],
-    'selesai' => [],
+    'draft' => ['diajukan' => 'work-orders.submit', 'dibatalkan' => 'work-orders.cancel'],
+    'diajukan' => ['pelaksanaan' => 'work-orders.approve', 'ditolak' => 'work-orders.approve', 'dibatalkan' => 'work-orders.cancel'],
+    'ditolak' => ['diajukan' => 'work-orders.submit', 'dibatalkan' => 'work-orders.cancel'],
+    'pelaksanaan' => ['review_dokumen' => 'work-orders.submit-review', 'dibatalkan' => 'work-orders.cancel-execution'],
+    'review_dokumen' => ['pelaksanaan' => 'work-orders.review', 'approval_bast' => 'work-orders.review', 'dibatalkan' => 'work-orders.cancel-execution'],
+    'approval_bast' => ['bast_disetujui' => 'work-orders.approve-bast'],
+    'bast_disetujui' => ['closed' => 'work-orders.close'],
+    'closed' => [],
     'dibatalkan' => [],
 ];
 
-const FLOW_DESTINATIONS = ['draft', 'diajukan', 'dikerjakan', 'ditolak', 'penagihan', 'selesai', 'dibatalkan'];
+const FLOW_DESTINATIONS = ['draft', 'diajukan', 'ditolak', 'pelaksanaan', 'review_dokumen', 'approval_bast', 'bast_disetujui', 'closed', 'dibatalkan'];
 
-const FLOW_SUBMITTED = ['diajukan', 'ditolak', 'dikerjakan', 'penagihan', 'selesai', 'dibatalkan'];
+const FLOW_SUBMITTED = ['diajukan', 'ditolak', 'pelaksanaan', 'review_dokumen', 'approval_bast', 'bast_disetujui', 'closed', 'dibatalkan'];
+
+/** Every permission that makes a status change. */
+const FLOW_TRANSITION_PERMISSIONS = [
+    'work-orders.submit', 'work-orders.approve', 'work-orders.submit-review', 'work-orders.review',
+    'work-orders.approve-bast', 'work-orders.close', 'work-orders.cancel', 'work-orders.cancel-execution',
+];
 
 /**
  * Builds the departments and users of the matrix, and returns the user under
@@ -88,9 +92,13 @@ function transitionWorld(string $userKey): array
             'draft' => $factory->create(),
             'diajukan' => $factory->submitted()->create(),
             'ditolak' => $factory->rejected()->create(),
-            'dikerjakan' => $factory->inProgress()->create(),
-            'penagihan' => $factory->billed()->create(),
-            'selesai' => $factory->paid()->create(),
+            'pelaksanaan' => $factory->inProgress()->create(),
+            'review_dokumen' => $factory->inReview()->create(),
+            'approval_bast' => $factory->awaitingBastApproval()->create(),
+            'bast_disetujui' => $factory->bastApproved()->create(),
+            'closed', 'belum_ditagih' => $factory->closed()->create(),
+            'ditagih' => $factory->billed()->create(),
+            'lunas' => $factory->paid()->create(),
             'dibatalkan' => $factory->submitted()->cancelled()->create(),
         };
     };
@@ -101,46 +109,27 @@ function transitionWorld(string $userKey): array
 $everyStatus = array_keys(FLOW_TRANSITIONS);
 
 dataset('transition matrix users', [
-    // user, sides the user is on, statuses in which the user sees the work order
-    'admin' => ['admin', ['requester', 'executor', 'finance'], $everyStatus],
-    'Admin WO (entered it)' => ['Admin WO (entered it)', ['requester'], $everyStatus],
-    'another Admin WO' => ['another Admin WO', ['requester'], $everyStatus],
-    'Lead Operational' => ['Lead Operational', ['executor'], FLOW_SUBMITTED],
-    'PIC Timesheet' => ['PIC Timesheet', [], FLOW_SUBMITTED],
-    'Rental' => ['Rental', [], FLOW_SUBMITTED],
-    'Direktur' => ['Direktur', [], FLOW_SUBMITTED],
-    'Finance' => ['Finance', ['finance'], FLOW_SUBMITTED],
+    // user, the work order permissions it acts with, statuses in which it sees the work order
+    'admin' => ['admin', [...FLOW_TRANSITION_PERMISSIONS, 'work-orders.bill', 'work-orders.confirm-payment'], $everyStatus],
+    'Admin WO (entered it)' => ['Admin WO (entered it)', ['work-orders.submit', 'work-orders.close', 'work-orders.cancel'], $everyStatus],
+    'another Admin WO' => ['another Admin WO', ['work-orders.submit', 'work-orders.close', 'work-orders.cancel'], $everyStatus],
+    'Lead Operational' => ['Lead Operational', ['work-orders.approve', 'work-orders.cancel-execution'], FLOW_SUBMITTED],
+    'PIC Timesheet' => ['PIC Timesheet', ['work-orders.submit-review'], FLOW_SUBMITTED],
+    'Rental' => ['Rental', ['work-orders.review'], FLOW_SUBMITTED],
+    'Direktur' => ['Direktur', ['work-orders.approve-bast'], FLOW_SUBMITTED],
+    'Finance' => ['Finance', ['work-orders.bill', 'work-orders.confirm-payment'], FLOW_SUBMITTED],
     'Viewer' => ['Viewer', [], FLOW_SUBMITTED],
     'internal without a role' => ['internal without a role', [], []],
-    // The v1 safeguard shows it its department's work orders, but it acts for no side.
+    // The v1 safeguard shows it its department's work orders, but it holds no internal-only permission.
     'IC A with every permission' => ['IC A with every permission', [], $everyStatus],
 ]);
 
-/**
- * Posts the status change the way the detail page does: Penagihan and
- * Selesai through their own forms, with valid data.
- */
-function postStatusChange(User $user, WorkOrder $workOrder, string $to): TestResponse
-{
-    $request = test()->actingAs($user)->from(route('work-orders.index'));
-
-    return match ($to) {
-        'penagihan' => $request->post(route('work-orders.invoice.store', $workOrder), [
-            'invoice_number' => 'INV-'.Str::random(8),
-            'invoice_date' => '2026-09-25',
-            'invoice_files' => [attachmentUpload('dokumen.pdf')],
-        ]),
-        'selesai' => $request->post(route('work-orders.payment.store', $workOrder), ['paid_on' => '2026-09-25']),
-        default => $request->post(route('work-orders.transitions.store', $workOrder), ['status' => $to, 'note' => 'Alasan.']),
-    };
-}
-
-it('allows each status change only to its side, from the statuses FLOW.md allows', function (string $userKey, array $sides, array $visible) {
-    Storage::fake('attachments');
+it('allows each status change only with its permission, from the statuses FLOW.md allows', function (string $userKey, array $permissions, array $visible) {
     // Dozens of status changes in one frozen minute; throttling has its own tests.
     $this->withoutMiddleware(ThrottleRequests::class);
 
     ['user' => $user, 'workOrder' => $makeWorkOrder] = transitionWorld($userKey);
+    $changesStatus = array_intersect($permissions, FLOW_TRANSITION_PERMISSIONS) !== [];
 
     foreach (FLOW_TRANSITIONS as $from => $allowed) {
         foreach (FLOW_DESTINATIONS as $to) {
@@ -149,18 +138,19 @@ it('allows each status change only to its side, from the statuses FLOW.md allows
 
             $expected = match (true) {
                 ! in_array($from, $visible, true) => '404',
-                ! isset($allowed[$to]) => $sides !== [] ? 'invalid' : '403',
-                in_array($allowed[$to], $sides, true) => 'done',
+                ! isset($allowed[$to]) => $changesStatus ? 'invalid' : '403',
+                in_array($allowed[$to], $permissions, true) => 'done',
                 default => '403',
             };
 
             $this->flushSession();
-            $response = postStatusChange($user, $workOrder, $to);
+            $response = $this->actingAs($user)
+                ->from(route('work-orders.index'))
+                ->post(route('work-orders.transitions.store', $workOrder), ['status' => $to, 'note' => 'Alasan.']);
 
-            $outcome = match ($response->getStatusCode()) {
-                302 => session()->has('errors') ? 'invalid' : 'done',
-                default => (string) $response->getStatusCode(),
-            };
+            $outcome = $response->getStatusCode() === 302
+                ? (session()->has('errors') ? 'invalid' : 'done')
+                : (string) $response->getStatusCode();
 
             expect($outcome)->toBe($expected, "{$userKey}: {$from} → {$to}");
             $workOrder->refresh();
@@ -174,6 +164,75 @@ it('allows each status change only to its side, from the statuses FLOW.md allows
 
             if ($number !== null) {
                 expect($workOrder->number)->toBe($number);
+            }
+        }
+    }
+})->with('transition matrix users');
+
+/** Which payment status each payment track action needs, and the permission that makes it (FLOW.md §10). */
+const PAYMENT_ACTIONS = [
+    'bill' => ['belum_ditagih', 'work-orders.bill'],
+    'correct' => ['ditagih', 'work-orders.bill'],
+    'confirm' => ['ditagih', 'work-orders.confirm-payment'],
+];
+
+/**
+ * Posts a payment track action the way the detail page does, with valid data.
+ */
+function postPaymentAction(User $user, WorkOrder $workOrder, string $action): TestResponse
+{
+    $request = test()->actingAs($user)->from(route('work-orders.index'));
+
+    return match ($action) {
+        'bill' => $request->post(route('work-orders.invoice.store', $workOrder), [
+            'invoice_number' => 'INV-'.Str::random(8),
+            'invoice_date' => '2026-09-25',
+            'invoice_files' => [attachmentUpload('dokumen.pdf')],
+        ]),
+        // The factory's invoice has no file, so the correction adds one.
+        'correct' => $request->patch(route('work-orders.invoice.update', $workOrder), [
+            'invoice_number' => 'INV-'.Str::random(8),
+            'invoice_date' => '2026-09-21',
+            'invoice_files' => [attachmentUpload('dokumen.pdf')],
+        ]),
+        'confirm' => $request->post(route('work-orders.payment.store', $workOrder), ['paid_on' => '2026-09-25']),
+    };
+}
+
+it('allows each payment track action only with its permission, in the payment status it needs', function (string $userKey, array $permissions, array $visible) {
+    Storage::fake('attachments');
+    $this->withoutMiddleware(ThrottleRequests::class);
+
+    ['user' => $user, 'workOrder' => $makeWorkOrder] = transitionWorld($userKey);
+
+    foreach (PAYMENT_ACTIONS as $action => [$needs, $permission]) {
+        // Not closed yet (BAST Disetujui) and every payment status.
+        foreach (['bast_disetujui', 'belum_ditagih', 'ditagih', 'lunas'] as $state) {
+            $workOrder = $makeWorkOrder($state);
+            $before = [$workOrder->invoice?->number, $workOrder->invoice?->paid_on?->toDateString()];
+
+            $expected = match (true) {
+                ! in_array($state === 'bast_disetujui' ? 'bast_disetujui' : 'closed', $visible, true) => '404',
+                ! in_array($permission, $permissions, true) => '403',
+                $state === $needs => 'done',
+                default => 'invalid',
+            };
+
+            $this->flushSession();
+            $response = postPaymentAction($user, $workOrder, $action);
+
+            $outcome = match (true) {
+                $response->getStatusCode() !== 302 => (string) $response->getStatusCode(),
+                session()->has('errors') => 'invalid',
+                data_get(session(SessionKey::FLASH_DATA), 'toast.type') === 'error' => 'invalid',
+                default => 'done',
+            };
+
+            expect($outcome)->toBe($expected, "{$userKey}: {$action} while {$state}");
+            $workOrder->refresh()->load('invoice');
+
+            if ($outcome !== 'done') {
+                expect([$workOrder->invoice?->number, $workOrder->invoice?->paid_on?->toDateString()])->toBe($before, "{$userKey}: {$action} while {$state} changed the invoice");
             }
         }
     }

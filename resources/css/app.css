@@ -51,6 +51,7 @@
     --color-chart-5: var(--chart-5);
     --color-chart-submitted: var(--chart-submitted);
     --color-chart-cancelled: var(--chart-cancelled);
+    --color-chart-bast-approved: var(--chart-bast-approved);
 
     --color-sidebar: var(--sidebar);
     --color-sidebar-foreground: var(--sidebar-foreground);
@@ -70,8 +71,10 @@
     --color-warning-foreground: var(--warning-foreground);
     --color-info: var(--info);
     --color-info-foreground: var(--info-foreground);
-    --color-billing: var(--billing);
-    --color-billing-foreground: var(--billing-foreground);
+    --color-review: var(--review);
+    --color-review-foreground: var(--review-foreground);
+    --color-approval: var(--approval);
+    --color-approval-foreground: var(--approval-foreground);
 }
 
 /*
@@ -145,10 +148,14 @@
     --warning-foreground: #1a1a1a;
     --info: #2b6cb0;
     --info-foreground: #fdfdfc;
-    /* Penagihan: muted violet. Text 5.57:1; as a chart series 5.57:1 on --card,
-       ΔE 27 from the nearest status series (Dikerjakan's --info). */
-    --billing: #7a5a92;
-    --billing-foreground: #fdfdfc;
+    /* Review Dokumen: cyan. Text 5.26:1; as a chart series 5.26:1 on --card,
+       ΔE 27.5 from the nearest status series (Pelaksanaan's --info). */
+    --review: #0e7490;
+    --review-foreground: #fdfdfc;
+    /* Approval BAST: muted violet. Text 5.57:1; as a chart series 5.57:1 on --card,
+       ΔE 27 from --info. */
+    --approval: #7a5a92;
+    --approval-foreground: #fdfdfc;
 
     --chart-1: #1c322d;
     --chart-2: #ebb552;
@@ -160,6 +167,9 @@
     --chart-submitted: #b9851f;
     /* Dibatalkan series: dark neutral, 12.46:1 on --card, 2.51:1 against --chart-5 (Draft). */
     --chart-cancelled: #33332f;
+    /* BAST Disetujui series (its badge is a --success outline): olive green,
+       4.91:1 on --card, ΔE 36.7 from --success (Closed). */
+    --chart-bast-approved: #4d7c0f;
 
     /* Sidebar hijau brand */
     --sidebar: #1c322d;
@@ -210,9 +220,12 @@
     --warning-foreground: #141414;
     --info: #7db3e8;
     --info-foreground: #141414;
+    /* Text 9.40:1; as a chart series 8.70:1 on --card, ΔE 26.2 from --info. */
+    --review: #67c7d6;
+    --review-foreground: #141414;
     /* Text 8.17:1; as a chart series 7.55:1 on --card, ΔE 26 from --info. */
-    --billing: #bea2d4;
-    --billing-foreground: #141414;
+    --approval: #bea2d4;
+    --approval-foreground: #141414;
 
     --chart-1: #ebb552;
     --chart-2: #5fbf8f;
@@ -222,6 +235,8 @@
     --chart-submitted: #ebb552;
     /* Darker than Draft's --chart-5 here too: 3.18:1 on --card, 2.11:1 against --chart-5. */
     --chart-cancelled: #6b6b66;
+    /* 10.35:1 on --card, ΔE 29.4 from --success (Closed). */
+    --chart-bast-approved: #a3d977;
 
     --sidebar: #1c322d;
     --sidebar-foreground: #ededea;

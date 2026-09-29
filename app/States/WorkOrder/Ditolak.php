@@ -2,13 +2,12 @@
 
 namespace App\States\WorkOrder;
 
-use App\Enums\WorkOrderSide;
+use App\Enums\Permission;
 use App\Models\WorkOrder;
 
 /**
- * Rejected by the target department with a reason. The requester side
- * revises it, possibly picking another target department, and resubmits it
- * under the same number, or cancels it.
+ * Rejected by Lead Operational with a reason. An Admin WO revises it and
+ * resubmits it under the same number, or cancels it.
  */
 class Ditolak extends WorkOrderStatus
 {
@@ -29,24 +28,12 @@ class Ditolak extends WorkOrderStatus
         return true;
     }
 
-    public function actionLabel(): string
+    public static function transitions(): array
     {
-        return 'Tolak';
-    }
-
-    public function isDestructiveAction(): bool
-    {
-        return true;
-    }
-
-    public function requiresNote(): bool
-    {
-        return true;
-    }
-
-    public function noteLabel(): string
-    {
-        return 'Alasan penolakan';
+        return [
+            new WorkOrderTransition(Diajukan::class, Permission::WorkOrdersSubmit, 'Ajukan ulang'),
+            WorkOrderTransition::cancel(Permission::WorkOrdersCancel),
+        ];
     }
 
     public function isEditable(): bool
@@ -59,23 +46,13 @@ class Ditolak extends WorkOrderStatus
         return true;
     }
 
-    public function performedBy(): WorkOrderSide
+    public function attachmentPermissions(): array
     {
-        return WorkOrderSide::Executor;
+        return [WorkOrder::DOCUMENTS => Permission::WorkOrdersUpdate];
     }
 
-    public function attachmentSides(): array
+    public function waitingMessage(): string
     {
-        return [WorkOrder::DOCUMENTS => WorkOrderSide::Requester];
-    }
-
-    public function waitsOn(): WorkOrderSide
-    {
-        return WorkOrderSide::Requester;
-    }
-
-    public function waitingMessage(WorkOrder $workOrder): string
-    {
-        return 'Menunggu Admin WO merevisi dan mengajukan ulang.';
+        return __('Menunggu Admin WO merevisi dan mengajukan ulang.');
     }
 }

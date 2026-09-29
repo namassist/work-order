@@ -78,7 +78,7 @@ it('bumps the work order when a comment is posted, edited, or deleted', function
 it('bumps the work order on a status change', function () {
     $workOrder = watchWorkOrder(WorkOrder::factory()->targeting(Department::factory()->create())->create(['requester_department_id' => $this->department->id]));
 
-    app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $this->user);
+    app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', adminUser());
 
     expectTouchedNow();
     expect(newWorkOrderEvents())->toBe(['status_changed']);
