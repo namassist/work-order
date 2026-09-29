@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Permission;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\User;
@@ -12,13 +13,17 @@ use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 
 /*
-| FLOW.md §5 as a matrix: every kind of user posts every status change on a
-| work order in every status. Penagihan and Selesai are posted to their own
-| forms (invoice, payment) with valid data; every other status to the plain
-| status change. The work orders are entered by koordinator K
-| on behalf of pemohon A (IC department A) and addressed to Unggul
-| department T, so both the IC requester and the koordinator are on the
-| requester side.
+| FLOW.md §5 as a matrix: every role posts every status change on a work
+| order in every status. Penagihan and Selesai are posted to their own forms
+| (invoice, payment) with valid data; every other status to the plain status
+| change. The work orders are entered by Admin WO X for a contact of IC
+| department A.
+|
+| PROVISIONAL mapping of the v1 statuses to the v2 roles until step 3: the
+| requester side is Admin WO (any of them, work-orders.update), the executor
+| side Lead Operational (work-orders.process), the finance side Finance
+| (work-orders.confirm-payment); departments no longer matter, and client
+| company users are on no side.
 |
 | Outcome per request:
 |   done     the status changed
@@ -56,31 +61,28 @@ function transitionWorld(string $userKey): array
 
     $ic = Company::factory()->client()->create(['code' => 'IC']);
     $unggul = Company::factory()->create(['code' => 'UGL']);
-    $department = fn (Company $company, string $code): Department => Department::factory()->for($company)->create(['code' => $code]);
-    [$a, $b] = [$department($ic, 'ICA'), $department($ic, 'ICB')];
-    [$k, $t, $u, $keu, $it] = [$department($unggul, 'KOR'), $department($unggul, 'TGT'), $department($unggul, 'OTH'), $department($unggul, 'KEU'), $department($unggul, 'IT')];
+    $a = Department::factory()->for($ic)->create(['code' => 'ICA']);
+    $ops = Department::factory()->for($unggul)->create(['code' => 'OPS']);
 
-    $user = fn (Department $in, string $role): User => User::factory()->for($in)->create()->assignRole($role);
-    $pemohonA = $user($a, 'pemohon');
-    $koordinator = $user($k, 'koordinator');
+    $user = fn (string $role, Department $in): User => User::factory()->for($in)->create()->assignRole($role);
+    $adminWo = $user('admin-wo', $ops);
 
     $users = [
-        'IC pemohon A' => fn (): User => $pemohonA,
-        'IC viewer A' => fn (): User => $user($a, 'viewer'),
-        'IC pemohon B' => fn (): User => $user($b, 'pemohon'),
-        'koordinator K (entered it)' => fn (): User => $koordinator,
-        'another koordinator in K' => fn (): User => $user($k, 'koordinator'),
-        'pelaksana T' => fn (): User => $user($t, 'pelaksana'),
-        'koordinator in T' => fn (): User => $user($t, 'koordinator'),
-        'viewer T' => fn (): User => $user($t, 'viewer'),
-        'admin in T' => fn (): User => $user($t, 'admin'),
-        'pelaksana U' => fn (): User => $user($u, 'pelaksana'),
-        'keuangan' => fn (): User => $user($keu, 'keuangan'),
-        'admin in IT' => fn (): User => $user($it, 'admin'),
+        'admin' => fn (): User => $user('admin', $ops),
+        'Admin WO (entered it)' => fn (): User => $adminWo,
+        'another Admin WO' => fn (): User => $user('admin-wo', $ops),
+        'Lead Operational' => fn (): User => $user('lead-operational', $ops),
+        'PIC Timesheet' => fn (): User => $user('pic-timesheet', $ops),
+        'Rental' => fn (): User => $user('rental', $ops),
+        'Direktur' => fn (): User => $user('direktur', $ops),
+        'Finance' => fn (): User => $user('finance', $ops),
+        'Viewer' => fn (): User => $user('viewer', $ops),
+        'internal without a role' => fn (): User => User::factory()->for($ops)->create(),
+        'IC A with every permission' => fn (): User => User::factory()->for($a)->create()->givePermissionTo(Permission::values()),
     ];
 
-    $workOrder = function (string $status) use ($koordinator, $pemohonA, $t): WorkOrder {
-        $factory = WorkOrder::factory()->onBehalf($koordinator, $pemohonA)->targeting($t);
+    $workOrder = function (string $status) use ($adminWo, $a): WorkOrder {
+        $factory = WorkOrder::factory()->by($adminWo)->requestedBy($a);
 
         return match ($status) {
             'draft' => $factory->create(),
@@ -96,20 +98,22 @@ function transitionWorld(string $userKey): array
     return ['user' => $users[$userKey](), 'workOrder' => $workOrder];
 }
 
+$everyStatus = array_keys(FLOW_TRANSITIONS);
+
 dataset('transition matrix users', [
     // user, sides the user is on, statuses in which the user sees the work order
-    'IC pemohon A' => ['IC pemohon A', ['requester'], array_keys(FLOW_TRANSITIONS)],
-    'IC viewer A' => ['IC viewer A', [], array_keys(FLOW_TRANSITIONS)],
-    'IC pemohon B' => ['IC pemohon B', [], []],
-    'koordinator K (entered it)' => ['koordinator K (entered it)', ['requester'], array_keys(FLOW_TRANSITIONS)],
-    'another koordinator in K' => ['another koordinator in K', [], []],
-    'pelaksana T' => ['pelaksana T', ['executor'], FLOW_SUBMITTED],
-    'koordinator in T (no work-orders.process)' => ['koordinator in T', [], FLOW_SUBMITTED],
-    'viewer T' => ['viewer T', [], FLOW_SUBMITTED],
-    'admin in T' => ['admin in T', ['executor', 'finance'], FLOW_SUBMITTED],
-    'pelaksana U' => ['pelaksana U', [], []],
-    'keuangan' => ['keuangan', ['finance'], FLOW_SUBMITTED],
-    'admin in IT' => ['admin in IT', ['finance'], FLOW_SUBMITTED],
+    'admin' => ['admin', ['requester', 'executor', 'finance'], $everyStatus],
+    'Admin WO (entered it)' => ['Admin WO (entered it)', ['requester'], $everyStatus],
+    'another Admin WO' => ['another Admin WO', ['requester'], $everyStatus],
+    'Lead Operational' => ['Lead Operational', ['executor'], FLOW_SUBMITTED],
+    'PIC Timesheet' => ['PIC Timesheet', [], FLOW_SUBMITTED],
+    'Rental' => ['Rental', [], FLOW_SUBMITTED],
+    'Direktur' => ['Direktur', [], FLOW_SUBMITTED],
+    'Finance' => ['Finance', ['finance'], FLOW_SUBMITTED],
+    'Viewer' => ['Viewer', [], FLOW_SUBMITTED],
+    'internal without a role' => ['internal without a role', [], []],
+    // The v1 safeguard shows it its department's work orders, but it acts for no side.
+    'IC A with every permission' => ['IC A with every permission', [], $everyStatus],
 ]);
 
 /**

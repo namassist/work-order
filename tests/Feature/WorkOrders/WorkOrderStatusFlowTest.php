@@ -30,9 +30,9 @@ beforeEach(function () {
 
     $this->requesterDepartment = Department::factory()->client()->create(['code' => 'PRD']);
     $this->target = Department::factory()->create(['code' => 'ENG']);
-    $this->pemohon = User::factory()->for($this->requesterDepartment)->create()->assignRole('pemohon');
-    $this->pelaksana = User::factory()->for($this->target)->create()->assignRole('pelaksana');
-    $this->workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->create();
+    $this->adminWo = User::factory()->for(Department::factory()->create(['code' => 'OPS']))->create()->assignRole('admin-wo');
+    $this->lead = User::factory()->for($this->target)->create()->assignRole('lead-operational');
+    $this->workOrder = WorkOrder::factory()->by($this->adminWo)->requestedBy($this->requesterDepartment)->targeting($this->target)->create();
 });
 
 /**
@@ -54,7 +54,7 @@ it('sets every status property per FLOW.md §5', function () {
             'deletable' => $state?->isDeletable(),
             'comments' => $state?->acceptsComments(),
             'deadline' => $state?->deadline()?->value,
-            'target' => $state?->requiresTargetDepartment(),
+            'numbered' => $state?->requiresNumber(),
             'note' => $state?->requiresNote(),
             'number' => $state?->assignsNumber(),
             'attachments' => array_map(fn (WorkOrderSide $side): string => $side->value, $state?->attachmentSides() ?? []),
@@ -65,13 +65,13 @@ it('sets every status property per FLOW.md §5', function () {
     });
 
     expect($properties->all())->toBe([
-        'draft' => ['tone' => 'secondary', 'active' => false, 'editable' => true, 'deletable' => true, 'comments' => true, 'deadline' => null, 'target' => false, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => null, 'waits' => 'requester', 'form' => null],
-        'diajukan' => ['tone' => 'warning', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'target' => true, 'note' => false, 'number' => true, 'attachments' => [], 'by' => 'requester', 'waits' => 'executor', 'form' => null],
-        'ditolak' => ['tone' => 'destructive', 'active' => true, 'editable' => true, 'deletable' => false, 'comments' => true, 'deadline' => null, 'target' => true, 'note' => true, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => 'executor', 'waits' => 'requester', 'form' => null],
-        'dikerjakan' => ['tone' => 'info', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'target' => true, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'executor', 'bast' => 'executor'], 'by' => 'executor', 'waits' => 'executor', 'form' => null],
-        'penagihan' => ['tone' => 'billing', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'payment_due_date', 'target' => true, 'note' => false, 'number' => false, 'attachments' => ['bukti_bayar' => 'finance'], 'by' => 'executor', 'waits' => 'finance', 'form' => 'invoice'],
-        'selesai' => ['tone' => 'success', 'active' => false, 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'target' => true, 'note' => false, 'number' => false, 'attachments' => [], 'by' => 'finance', 'waits' => null, 'form' => 'payment'],
-        'dibatalkan' => ['tone' => 'muted', 'active' => false, 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'target' => false, 'note' => true, 'number' => false, 'attachments' => [], 'by' => 'requester', 'waits' => null, 'form' => null],
+        'draft' => ['tone' => 'secondary', 'active' => false, 'editable' => true, 'deletable' => true, 'comments' => true, 'deadline' => null, 'numbered' => false, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => null, 'waits' => 'requester', 'form' => null],
+        'diajukan' => ['tone' => 'warning', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'numbered' => true, 'note' => false, 'number' => true, 'attachments' => [], 'by' => 'requester', 'waits' => 'executor', 'form' => null],
+        'ditolak' => ['tone' => 'destructive', 'active' => true, 'editable' => true, 'deletable' => false, 'comments' => true, 'deadline' => null, 'numbered' => true, 'note' => true, 'number' => false, 'attachments' => ['dokumen' => 'requester'], 'by' => 'executor', 'waits' => 'requester', 'form' => null],
+        'dikerjakan' => ['tone' => 'info', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'numbered' => true, 'note' => false, 'number' => false, 'attachments' => ['dokumen' => 'executor', 'bast' => 'executor'], 'by' => 'executor', 'waits' => 'executor', 'form' => null],
+        'penagihan' => ['tone' => 'billing', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'payment_due_date', 'numbered' => true, 'note' => false, 'number' => false, 'attachments' => ['bukti_bayar' => 'finance'], 'by' => 'executor', 'waits' => 'finance', 'form' => 'invoice'],
+        'selesai' => ['tone' => 'success', 'active' => false, 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'numbered' => true, 'note' => false, 'number' => false, 'attachments' => [], 'by' => 'finance', 'waits' => null, 'form' => 'payment'],
+        'dibatalkan' => ['tone' => 'muted', 'active' => false, 'editable' => false, 'deletable' => false, 'comments' => false, 'deadline' => null, 'numbered' => false, 'note' => true, 'number' => false, 'attachments' => [], 'by' => 'requester', 'waits' => null, 'form' => null],
     ]);
 });
 
@@ -79,40 +79,40 @@ it('calls a status active exactly when it is submitted and not final', function 
     $state = WorkOrderStatus::fromName($status);
     $isFinal = WorkOrderStatus::config()->transitionableStates($status) === [];
 
-    expect($state?->isActive())->toBe($state?->requiresTargetDepartment() && ! $isFinal);
+    expect($state?->isActive())->toBe($state?->requiresNumber() && ! $isFinal);
 })->with(fn (): array => WorkOrderStatus::flowOrder());
 
 it('refuses a work order without a number in every status after the first submission', function (string $status) {
-    $factory = WorkOrder::factory()->by($this->pemohon)->targeting($this->target);
+    $factory = WorkOrder::factory()->by($this->adminWo)->targeting($this->target);
 
     expect(fn () => DB::transaction(fn () => $factory->create(['status' => $status, 'number' => null])))
         ->toThrow(QueryException::class, 'work_orders_submitted_number_check');
 })->with(fn (): array => array_values(array_filter(
     array_column(WorkOrderStatus::options(), 'value'),
-    fn (string $status): bool => (bool) WorkOrderStatus::fromName($status)?->requiresTargetDepartment(),
+    fn (string $status): bool => (bool) WorkOrderStatus::fromName($status)?->requiresNumber(),
 )));
 
 describe('notes', function () {
     it('requires a reason to reject', function () {
-        $this->workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->submitted()->create();
+        $this->workOrder = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->submitted()->create();
 
-        moveTo($this->pelaksana, $this->workOrder, 'ditolak')->assertSessionHasErrors(['note' => 'Catatan wajib diisi.']);
+        moveTo($this->lead, $this->workOrder, 'ditolak')->assertSessionHasErrors(['note' => 'Catatan wajib diisi.']);
 
         expect($this->workOrder->refresh()->status->getValue())->toBe('diajukan');
     });
 
     it('requires a reason to cancel a rejected work order', function () {
-        $rejected = WorkOrder::factory()->by($this->pemohon)->rejected()->create();
+        $rejected = WorkOrder::factory()->by($this->adminWo)->rejected()->create();
 
-        moveTo($this->pemohon, $rejected, 'dibatalkan')->assertSessionHasErrors('note');
+        moveTo($this->adminWo, $rejected, 'dibatalkan')->assertSessionHasErrors('note');
 
         expect($rejected->refresh()->status->getValue())->toBe('ditolak');
     });
 
     it('accepts a work order with or without a note', function (?string $note) {
-        $this->workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->submitted()->create();
+        $this->workOrder = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->submitted()->create();
 
-        moveTo($this->pelaksana, $this->workOrder, 'dikerjakan', $note)->assertSessionHasNoErrors();
+        moveTo($this->lead, $this->workOrder, 'dikerjakan', $note)->assertSessionHasNoErrors();
 
         expect($this->workOrder->refresh()->status->getValue())->toBe('dikerjakan')
             ->and($this->workOrder->statusHistories()->where('to_status', 'dikerjakan')->sole()->note)->toBe($note);
@@ -121,13 +121,13 @@ describe('notes', function () {
 
 describe('resubmission', function () {
     it('keeps the number and does not advance the counter', function () {
-        moveTo($this->pemohon, $this->workOrder, 'diajukan')->assertSessionHasNoErrors();
-        moveTo($this->pelaksana, $this->workOrder, 'ditolak', 'Salah departemen.')->assertSessionHasNoErrors();
-        moveTo($this->pemohon, $this->workOrder, 'diajukan')
+        moveTo($this->adminWo, $this->workOrder, 'diajukan')->assertSessionHasNoErrors();
+        moveTo($this->lead, $this->workOrder, 'ditolak', 'Salah departemen.')->assertSessionHasNoErrors();
+        moveTo($this->adminWo, $this->workOrder, 'diajukan')
             ->assertInertiaFlash('toast.message', 'Work order WO/PRD/2026/09/0001 sekarang diajukan.');
 
-        $next = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->create();
-        moveTo($this->pemohon, $next, 'diajukan');
+        $next = WorkOrder::factory()->by($this->adminWo)->requestedBy($this->requesterDepartment)->targeting($this->target)->create();
+        moveTo($this->adminWo, $next, 'diajukan');
 
         expect($this->workOrder->refresh())
             ->number->toBe('WO/PRD/2026/09/0001')
@@ -143,11 +143,11 @@ describe('resubmission', function () {
 
     it('labels the resubmit button and shows the rejection reason', function () {
         $action = app(TransitionWorkOrder::class);
-        $action->handle($this->workOrder, 'diajukan', $this->pemohon);
+        $action->handle($this->workOrder, 'diajukan', $this->adminWo);
         $this->travel(5)->minutes();
-        $action->handle($this->workOrder, 'ditolak', $this->pelaksana, 'Salah departemen, ajukan ke GA.');
+        $action->handle($this->workOrder, 'ditolak', $this->lead, 'Salah departemen, ajukan ke GA.');
 
-        $this->actingAs($this->pemohon)
+        $this->actingAs($this->adminWo)
             ->get(route('work-orders.show', $this->workOrder))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('transitions.0.value', 'diajukan')
@@ -157,7 +157,7 @@ describe('resubmission', function () {
                 ->where('statusNote', [
                     'label' => 'Alasan penolakan',
                     'note' => 'Salah departemen, ajukan ke GA.',
-                    'user' => $this->pelaksana->name,
+                    'user' => $this->lead->name,
                     'created_at' => '2026-09-25T02:05:00+00:00',
                 ])
                 ->where('can.update', true)
@@ -167,21 +167,21 @@ describe('resubmission', function () {
 
 describe('revising a rejected work order', function () {
     beforeEach(function () {
-        $this->rejected = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->rejected()->create();
+        $this->rejected = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->rejected()->create();
         $this->payload = fn (array $overrides = []): array => [
             'title' => $this->rejected->title,
             'work_order_category_id' => $this->rejected->work_order_category_id,
             'urgency' => 'normal',
+            'requester_name' => $this->rejected->requester_name,
             'target_department_id' => $this->target->id,
             ...$overrides,
         ];
     });
 
-    it('lets the requester side change the target department', function () {
+    it('lets the requester side change the informational target department', function () {
         $ga = Department::factory()->create(['code' => 'GA']);
-        $gaPelaksana = User::factory()->for($ga)->create()->assignRole('pelaksana');
 
-        $this->actingAs($this->pemohon)
+        $this->actingAs($this->adminWo)
             ->put(route('work-orders.update', $this->rejected), ($this->payload)(['target_department_id' => $ga->id, 'title' => 'Direvisi']))
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('work-orders.show', $this->rejected));
@@ -189,29 +189,28 @@ describe('revising a rejected work order', function () {
         expect($this->rejected->refresh())
             ->target_department_id->toBe($ga->id)
             ->title->toBe('Direvisi')
-            // Visibility follows the new target: the old department no longer sees it.
-            ->and($this->pelaksana->can('view', $this->rejected))->toBeFalse()
-            ->and($gaPelaksana->can('view', $this->rejected))->toBeTrue();
+            // The target no longer decides who sees it (FLOW.md v2 §6).
+            ->and($this->lead->can('view', $this->rejected))->toBeTrue();
     });
 
-    it('never clears the target department', function () {
-        $this->actingAs($this->pemohon)
+    it('may clear the target department, which is informational only', function () {
+        $this->actingAs($this->adminWo)
             ->put(route('work-orders.update', $this->rejected), ($this->payload)(['target_department_id' => null]))
-            ->assertSessionHasErrors(['target_department_id' => 'Work order yang sudah diajukan harus tetap punya departemen tujuan.']);
+            ->assertSessionHasNoErrors();
 
-        expect($this->rejected->refresh()->target_department_id)->toBe($this->target->id);
+        expect($this->rejected->refresh()->target_department_id)->toBeNull();
     });
 
-    it('refuses edits by the target department', function () {
-        $this->actingAs($this->pelaksana)
+    it('refuses edits by Lead Operational', function () {
+        $this->actingAs($this->lead)
             ->put(route('work-orders.update', $this->rejected), ($this->payload)(['title' => 'Diubah pelaksana']))
             ->assertForbidden();
     });
 
     it('refuses edits once submitted or in progress', function (string $state) {
-        $workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->{$state}()->create();
+        $workOrder = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->{$state}()->create();
 
-        $this->actingAs($this->pemohon)
+        $this->actingAs($this->adminWo)
             ->put(route('work-orders.update', $workOrder), ($this->payload)(['work_order_category_id' => $workOrder->work_order_category_id]))
             ->assertForbidden();
     })->with(['submitted', 'inProgress']);
@@ -228,10 +227,10 @@ describe('revising a rejected work order', function () {
 
 describe('attachments', function () {
     it('lets only the side of attachmentSides() add documents', function (string $state, bool $requester, bool $executor) {
-        $workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->{$state}()->create();
+        $workOrder = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->{$state}()->create();
 
-        expect($this->pemohon->can('addAttachment', [$workOrder, WorkOrder::DOCUMENTS]))->toBe($requester)
-            ->and($this->pelaksana->can('addAttachment', [$workOrder, WorkOrder::DOCUMENTS]))->toBe($executor);
+        expect($this->adminWo->can('addAttachment', [$workOrder, WorkOrder::DOCUMENTS]))->toBe($requester)
+            ->and($this->lead->can('addAttachment', [$workOrder, WorkOrder::DOCUMENTS]))->toBe($executor);
     })->with([
         'Diajukan' => ['submitted', false, false],
         'Ditolak' => ['rejected', true, false],
@@ -240,32 +239,32 @@ describe('attachments', function () {
     ]);
 
     it('changes only the collections the status names for the side', function () {
-        $other = new Media()->forceFill(['collection_name' => 'bast', 'uploaded_by' => $this->pemohon->id]);
+        $other = new Media()->forceFill(['collection_name' => 'bast', 'uploaded_by' => $this->adminWo->id]);
 
-        expect($this->pemohon->can('addAttachment', [$this->workOrder, 'bast']))->toBeFalse()
-            ->and($this->pemohon->can('deleteAttachment', [$this->workOrder, $other]))->toBeFalse();
+        expect($this->adminWo->can('addAttachment', [$this->workOrder, 'bast']))->toBeFalse()
+            ->and($this->adminWo->can('deleteAttachment', [$this->workOrder, $other]))->toBeFalse();
     });
 
     it('lets the requester side add documents to a draft', function () {
-        expect($this->pemohon->can('addAttachment', [$this->workOrder, WorkOrder::DOCUMENTS]))->toBeTrue();
+        expect($this->adminWo->can('addAttachment', [$this->workOrder, WorkOrder::DOCUMENTS]))->toBeTrue();
     });
 
-    it('lets the target department upload while in progress and remove only its own uploads', function () {
+    it('lets Lead Operational upload while in progress and remove only their own uploads', function () {
         Storage::fake('attachments');
-        $workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->inProgress()->create();
-        $colleague = User::factory()->for($this->target)->create()->assignRole('pelaksana');
-        $requesterFile = app(AddAttachment::class)->handle($workOrder, $workOrder->documentsCollection(), attachmentUpload('dokumen.pdf'), $this->pemohon);
+        $workOrder = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->inProgress()->create();
+        $colleague = User::factory()->for($this->target)->create()->assignRole('lead-operational');
+        $requesterFile = app(AddAttachment::class)->handle($workOrder, $workOrder->documentsCollection(), attachmentUpload('dokumen.pdf'), $this->adminWo);
 
-        $this->actingAs($this->pelaksana)
+        $this->actingAs($this->lead)
             ->post(route('attachments.store', ['work-order', $workOrder->id, 'dokumen']), ['file' => attachmentUpload('foto.jpg')])
             ->assertSessionHasNoErrors();
-        $own = $workOrder->attachmentsIn('dokumen')->firstWhere('uploaded_by', $this->pelaksana->id);
+        $own = $workOrder->attachmentsIn('dokumen')->firstWhere('uploaded_by', $this->lead->id);
 
         $this->actingAs($colleague)->delete(route('attachments.destroy', $own))->assertForbidden();
-        $this->actingAs($this->pelaksana)->delete(route('attachments.destroy', $requesterFile))->assertForbidden();
-        $this->actingAs($this->pemohon)->delete(route('attachments.destroy', $own))->assertForbidden();
+        $this->actingAs($this->lead)->delete(route('attachments.destroy', $requesterFile))->assertForbidden();
+        $this->actingAs($this->adminWo)->delete(route('attachments.destroy', $own))->assertForbidden();
 
-        $this->actingAs($this->pelaksana)
+        $this->actingAs($this->lead)
             ->get(route('work-orders.show', $workOrder))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('attachments.can.upload', true)
@@ -274,7 +273,7 @@ describe('attachments', function () {
                     $own->uuid => true,
                 ]));
 
-        $this->actingAs($this->pelaksana)->delete(route('attachments.destroy', $own))->assertRedirect();
+        $this->actingAs($this->lead)->delete(route('attachments.destroy', $own))->assertRedirect();
 
         expect($workOrder->attachmentsIn('dokumen')->pluck('id')->all())->toBe([$requesterFile->id]);
     });
@@ -282,11 +281,12 @@ describe('attachments', function () {
 
 describe('detail page', function () {
     it('tells each user who the work order waits for', function (string $state, string $viewer, ?string $waitingFor, array $transitions) {
-        $workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->{$state}()->create();
+        $workOrder = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->{$state}()->create();
         $users = [
-            'pemohon' => $this->pemohon,
-            'pelaksana' => $this->pelaksana,
-            'keuangan' => User::factory()->for(Department::factory())->create()->assignRole('keuangan'),
+            'Admin WO' => $this->adminWo,
+            'Lead Operational' => $this->lead,
+            'Finance' => User::factory()->for(Department::factory())->create()->assignRole('finance'),
+            'Viewer' => User::factory()->for(Department::factory())->create()->assignRole('viewer'),
         ];
 
         $this->actingAs($users[$viewer])
@@ -295,53 +295,54 @@ describe('detail page', function () {
                 ->where('waitingFor', $waitingFor)
                 ->where('transitions', fn ($options): bool => collect($options)->pluck('value')->all() === $transitions));
     })->with([
-        'Diajukan, pelaksana' => ['submitted', 'pelaksana', null, ['dikerjakan', 'ditolak']],
-        'Diajukan, pemohon' => ['submitted', 'pemohon', 'Menunggu pelaksana ENG memproses.', ['dibatalkan']],
-        'Diajukan, keuangan' => ['submitted', 'keuangan', 'Menunggu pelaksana ENG memproses.', []],
-        'Ditolak, pelaksana' => ['rejected', 'pelaksana', 'Menunggu pemohon merevisi dan mengajukan ulang.', []],
-        'Dikerjakan, pemohon' => ['inProgress', 'pemohon', 'Sedang dikerjakan oleh ENG.', []],
-        'Dikerjakan, pelaksana' => ['inProgress', 'pelaksana', null, ['penagihan']],
-        'Dikerjakan, keuangan' => ['inProgress', 'keuangan', 'Sedang dikerjakan oleh ENG.', []],
-        'Penagihan, pemohon' => ['billed', 'pemohon', 'Menunggu konfirmasi pembayaran oleh keuangan.', []],
-        'Penagihan, pelaksana' => ['billed', 'pelaksana', 'Menunggu konfirmasi pembayaran oleh keuangan.', []],
-        'Penagihan, keuangan' => ['billed', 'keuangan', null, ['selesai']],
-        'Selesai, keuangan' => ['paid', 'keuangan', null, []],
-        'Dibatalkan, pemohon' => ['cancelled', 'pemohon', null, []],
+        'Diajukan, Lead Operational' => ['submitted', 'Lead Operational', null, ['dikerjakan', 'ditolak']],
+        'Diajukan, Admin WO' => ['submitted', 'Admin WO', 'Menunggu persetujuan Lead Operational.', ['dibatalkan']],
+        'Diajukan, Finance' => ['submitted', 'Finance', 'Menunggu persetujuan Lead Operational.', []],
+        'Diajukan, Viewer' => ['submitted', 'Viewer', 'Menunggu persetujuan Lead Operational.', []],
+        'Ditolak, Lead Operational' => ['rejected', 'Lead Operational', 'Menunggu Admin WO merevisi dan mengajukan ulang.', []],
+        'Dikerjakan, Admin WO' => ['inProgress', 'Admin WO', 'Sedang dikerjakan.', []],
+        'Dikerjakan, Lead Operational' => ['inProgress', 'Lead Operational', null, ['penagihan']],
+        'Dikerjakan, Finance' => ['inProgress', 'Finance', 'Sedang dikerjakan.', []],
+        'Penagihan, Admin WO' => ['billed', 'Admin WO', 'Menunggu konfirmasi pembayaran oleh Finance.', []],
+        'Penagihan, Lead Operational' => ['billed', 'Lead Operational', 'Menunggu konfirmasi pembayaran oleh Finance.', []],
+        'Penagihan, Finance' => ['billed', 'Finance', null, ['selesai']],
+        'Selesai, Finance' => ['paid', 'Finance', null, []],
+        'Dibatalkan, Admin WO' => ['cancelled', 'Admin WO', null, []],
     ]);
 
     it('labels the reject and cancel notes', function () {
-        $this->workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->submitted()->create();
+        $this->workOrder = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->submitted()->create();
 
-        $this->actingAs($this->pelaksana)
+        $this->actingAs($this->lead)
             ->get(route('work-orders.show', $this->workOrder))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('transitions', [
-                    ['value' => 'dikerjakan', 'label' => 'Kerjakan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'requires_target_department' => true, 'form' => null, 'blocked_reason' => null],
-                    ['value' => 'ditolak', 'label' => 'Tolak', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan penolakan', 'requires_target_department' => true, 'form' => null, 'blocked_reason' => null],
+                    ['value' => 'dikerjakan', 'label' => 'Kerjakan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'form' => null, 'blocked_reason' => null],
+                    ['value' => 'ditolak', 'label' => 'Tolak', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan penolakan', 'form' => null, 'blocked_reason' => null],
                 ]));
     });
 });
 
 it('shows the new transitions in the timeline and the Riwayat', function () {
     $action = app(TransitionWorkOrder::class);
-    $action->handle($this->workOrder, 'diajukan', $this->pemohon);
+    $action->handle($this->workOrder, 'diajukan', $this->adminWo);
     $this->travel(1)->minutes();
-    $action->handle($this->workOrder, 'ditolak', $this->pelaksana, 'Salah kategori.');
+    $action->handle($this->workOrder, 'ditolak', $this->lead, 'Salah kategori.');
     $this->travel(1)->minutes();
-    $action->handle($this->workOrder, 'diajukan', $this->pemohon);
+    $action->handle($this->workOrder, 'diajukan', $this->adminWo);
     $this->travel(1)->minutes();
-    $action->handle($this->workOrder, 'dikerjakan', $this->pelaksana, 'Mulai besok.');
+    $action->handle($this->workOrder, 'dikerjakan', $this->lead, 'Mulai besok.');
 
-    $this->actingAs($this->pemohon)
+    $this->actingAs($this->adminWo)
         ->get(route('work-orders.show', $this->workOrder))
         ->assertInertia(fn (Assert $page): Assert => $page
             ->where('timeline', fn ($entries): bool => collect($entries)->map(fn (array $entry): array => [
                 $entry['from']['label'] ?? null, $entry['to']['label'], $entry['user']['name'], $entry['note'],
             ])->all() === [
-                ['Draft', 'Diajukan', $this->pemohon->name, null],
-                ['Diajukan', 'Ditolak', $this->pelaksana->name, 'Salah kategori.'],
-                ['Ditolak', 'Diajukan', $this->pemohon->name, null],
-                ['Diajukan', 'Dikerjakan', $this->pelaksana->name, 'Mulai besok.'],
+                ['Draft', 'Diajukan', $this->adminWo->name, null],
+                ['Diajukan', 'Ditolak', $this->lead->name, 'Salah kategori.'],
+                ['Ditolak', 'Diajukan', $this->adminWo->name, null],
+                ['Diajukan', 'Dikerjakan', $this->lead->name, 'Mulai besok.'],
             ]));
 
     $this->actingAs(adminUser())

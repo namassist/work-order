@@ -114,7 +114,7 @@ const open = (workOrder: WorkOrder) =>
                     >
                         <WorkOrderTitleCell :work-order="workOrder" />
                         <TableCell class="hidden md:table-cell">
-                            <PersonName :name="workOrder.requester.name" />
+                            <PersonName :name="workOrder.requester_name" />
                         </TableCell>
                         <TableCell class="hidden font-mono xl:table-cell">
                             {{ workOrder.category.code }}

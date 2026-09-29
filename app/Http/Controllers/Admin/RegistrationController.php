@@ -13,6 +13,7 @@ use App\Http\Requests\Admin\ApproveRegistrationRequest;
 use App\Http\Requests\Admin\RejectRegistrationRequest;
 use App\Models\Department;
 use App\Models\User;
+use App\Support\RoleLabel;
 use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,7 +45,7 @@ class RegistrationController extends Controller
 
         $registrations = User::query()
             ->registrations()
-            ->with(['department:id,company_id,code,name,deleted_at', 'department.company:id,name,is_client,deleted_at', 'reviewer:id,name', 'roles:id,name'])
+            ->with(['department:id,company_id,code,name,deleted_at', 'department.company:id,name,is_client,deleted_at', 'reviewer:id,name', 'roles:id,name,label'])
             ->where('account_status', $status->value)
             ->search($filters['search'] ?? null)
             // Oldest waiting first; reviewed ones latest review first.
@@ -64,7 +65,7 @@ class RegistrationController extends Controller
                     'name' => $user->department->company->name,
                     'scope' => CompanyScope::of($user->department->company)->value,
                 ],
-                'roles' => $user->roles->pluck('name')->sort()->values()->all(),
+                'roles' => $user->roles->sortBy('name')->map(RoleLabel::option(...))->values()->all(),
                 'registered_at' => $user->registered_at?->toIso8601String(),
                 'reviewed_at' => $user->reviewed_at?->toIso8601String(),
                 'reviewer' => $user->reviewer?->name,
@@ -171,9 +172,9 @@ class RegistrationController extends Controller
     /**
      * Roles an approval may grant: every role except those holding role
      * management (ApproveRegistrationRequest), with the company scope each
-     * one fits (null: any company).
+     * one fits (null: any company) and its label.
      *
-     * @return list<array{name: string, company_scope: string|null}>
+     * @return list<array{name: string, label: string, company_scope: string|null}>
      */
     private function grantableRoles(): array
     {
@@ -183,7 +184,7 @@ class RegistrationController extends Controller
             ->orderBy('name')
             ->get()
             ->map(fn (Role $role): array => [
-                'name' => $role->name,
+                ...RoleLabel::option($role),
                 'company_scope' => CompanyScope::tryFrom((string) $role->getAttribute('company_scope'))?->value,
             ])
             ->all());

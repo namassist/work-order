@@ -43,7 +43,7 @@ class Selesai extends WorkOrderStatus
         return false;
     }
 
-    public function requiresTargetDepartment(): bool
+    public function requiresNumber(): bool
     {
         return true;
     }

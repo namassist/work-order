@@ -26,12 +26,12 @@ function urgentWorkOrder(array $attributes = []): WorkOrder
 
 describe('storage', function () {
     it('defaults a new work order to normal', function () {
-        $requester = userInDepartment($this->department, Permission::WorkOrdersCreate);
-
         $workOrder = app(CreateWorkOrder::class)->handle([
             'title' => 'Lampu mati',
             'work_order_category_id' => $this->category->id,
-        ], $requester);
+            'requester_department_id' => $this->department->id,
+            'requester_name' => 'Pak Andi',
+        ], unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate));
 
         expect($workOrder->urgency)->toBe(WorkOrderUrgency::Normal)
             ->and($workOrder->fresh()->urgency)->toBe(WorkOrderUrgency::Normal);
@@ -46,7 +46,7 @@ describe('storage', function () {
         DB::table('work_orders')->insert([
             'title' => 'Sebelum urgensi',
             'requester_department_id' => $this->department->id,
-            'requester_id' => $existing->created_by,
+            'requester_name' => 'Pak Andi',
             'work_order_category_id' => $this->category->id,
             'created_by' => $existing->created_by,
             'status' => 'draft',
@@ -61,11 +61,13 @@ describe('storage', function () {
 
 describe('form', function () {
     it('saves the urgency chosen on create', function () {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->post(route('work-orders.store'), [
                 'title' => 'Genset mati',
                 'work_order_category_id' => $this->category->id,
                 'urgency' => 'mendesak',
+                'requester_department_id' => $this->department->id,
+                'requester_name' => 'Pak Andi',
             ])
             ->assertRedirect();
 
@@ -73,11 +75,13 @@ describe('form', function () {
     });
 
     it('requires a known urgency', function (?string $urgency) {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->post(route('work-orders.store'), [
                 'title' => 'Genset mati',
                 'work_order_category_id' => $this->category->id,
                 'urgency' => $urgency,
+                'requester_department_id' => $this->department->id,
+                'requester_name' => 'Pak Andi',
             ])
             ->assertSessionHasErrors('urgency');
 
@@ -90,11 +94,13 @@ describe('form', function () {
     it('changes the urgency of a draft', function () {
         $workOrder = urgentWorkOrder(['work_order_category_id' => $this->category->id]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersUpdate))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate))
             ->put(route('work-orders.update', $workOrder), [
                 'title' => $workOrder->title,
                 'work_order_category_id' => $this->category->id,
                 'urgency' => 'tinggi',
+                'requester_department_id' => $this->department->id,
+                'requester_name' => 'Pak Andi',
             ])
             ->assertRedirect(route('work-orders.show', $workOrder));
 
@@ -108,7 +114,7 @@ describe('form', function () {
             'number' => 'WO/IT/2026/09/0001',
         ]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersUpdate))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate))
             ->put(route('work-orders.update', $workOrder), [
                 'title' => $workOrder->title,
                 'work_order_category_id' => $this->category->id,
@@ -120,7 +126,7 @@ describe('form', function () {
     });
 
     it('offers the urgency options on the create form', function () {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->get(route('work-orders.create'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('urgencies', [
@@ -136,7 +142,7 @@ describe('list', function () {
     it('shows each work order\'s urgency', function () {
         urgentWorkOrder(['urgency' => 'mendesak']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->get(route('work-orders.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('workOrders.data.0.urgency', ['value' => 'mendesak', 'label' => 'Mendesak'])
@@ -147,7 +153,7 @@ describe('list', function () {
         $urgent = urgentWorkOrder(['urgency' => 'mendesak']);
         urgentWorkOrder(['urgency' => 'normal']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->get(route('work-orders.index', ['urgency' => 'mendesak']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->has('workOrders.data', 1)
@@ -162,7 +168,7 @@ describe('list', function () {
         $high = urgentWorkOrder(['urgency' => 'tinggi', 'created_at' => now()->subDays(2)]);
         $urgentNew = urgentWorkOrder(['urgency' => 'mendesak', 'created_at' => now()->subMinute()]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->get(route('work-orders.index', ['sort' => 'urgensi']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->all() === [
@@ -175,7 +181,7 @@ describe('list', function () {
         $older = urgentWorkOrder(['urgency' => 'mendesak', 'created_at' => now()->subDay()]);
         $newer = urgentWorkOrder(['urgency' => 'rendah']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->get(route('work-orders.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('workOrders.data.0.id', $newer->id)
@@ -184,7 +190,7 @@ describe('list', function () {
     });
 
     it('rejects an unknown urgency filter or sort', function (array $query, string $field) {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->get(route('work-orders.index', $query))
             ->assertSessionHasErrors($field);
     })->with([

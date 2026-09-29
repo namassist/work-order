@@ -238,10 +238,10 @@ const openHistory = (registration: Registration) => {
                         <div v-else class="flex flex-wrap gap-1">
                             <Badge
                                 v-for="role in registration.roles"
-                                :key="role"
+                                :key="role.name"
                                 variant="outline"
                             >
-                                {{ role }}
+                                {{ role.label }}
                             </Badge>
                         </div>
                         <p

@@ -23,7 +23,8 @@ class WorkOrderFactory extends Factory
 {
     /**
      * Define the model's default state: a draft without a target, entered by
-     * its requester in a new client company (IC) department.
+     * a new executor company (Unggul) user for a contact of a new client
+     * company (IC) department (FLOW.md v2 §4).
      *
      * @return array<string, mixed>
      */
@@ -33,40 +34,33 @@ class WorkOrderFactory extends Factory
             'title' => fake()->sentence(4),
             'description' => fake()->optional()->paragraph(),
             'requester_department_id' => Department::factory()->client(),
+            'requester_name' => fake()->name(),
+            'pic_name' => null,
             'target_department_id' => null,
             'work_order_category_id' => WorkOrderCategory::factory(),
-            'created_by' => fn (array $attributes): int => User::factory()->create(['department_id' => $attributes['requester_department_id']])->id,
-            'requester_id' => fn (array $attributes): int => $attributes['created_by'],
-            'requester_name' => null,
+            'created_by' => User::factory(),
             'status' => Draft::class,
             'target_date' => null,
         ];
     }
 
     /**
-     * A work order entered by the given user for their own department.
+     * A work order entered by the given user (an Admin WO).
      */
     public function by(User $user): static
     {
         return $this->state(fn (array $attributes): array => [
             'created_by' => $user->id,
-            'requester_id' => $user->id,
-            'requester_name' => null,
-            'requester_department_id' => $user->department_id,
         ]);
     }
 
     /**
-     * A work order entered by a koordinator on behalf of an IC account, or
-     * of someone without one (a contact name).
+     * A work order requested by the given (IC) department.
      */
-    public function onBehalf(User $enteredBy, ?User $account = null, string $contactName = 'Pak Andi'): static
+    public function requestedBy(Department $department): static
     {
         return $this->state(fn (array $attributes): array => [
-            'created_by' => $enteredBy->id,
-            'requester_id' => $account?->id,
-            'requester_name' => $account instanceof User ? null : $contactName,
-            'requester_department_id' => $account->department_id ?? $attributes['requester_department_id'],
+            'requester_department_id' => $department->id,
         ]);
     }
 
@@ -81,20 +75,19 @@ class WorkOrderFactory extends Factory
     }
 
     /**
-     * A submitted work order with a number, addressed to a new executor
-     * department unless a target is already set.
+     * A submitted work order with a number (its target stays as set: it is
+     * informational only).
      */
     public function submitted(): static
     {
         return $this->state(fn (array $attributes): array => [
             'status' => Diajukan::class,
             'number' => fake()->unique()->numerify('WO/TEST/2026/09/####'),
-            'target_department_id' => $attributes['target_department_id'] ?? Department::factory(),
         ]);
     }
 
     /**
-     * A submitted work order its target department rejected.
+     * A submitted work order Lead Operational rejected.
      */
     public function rejected(): static
     {
@@ -104,7 +97,7 @@ class WorkOrderFactory extends Factory
     }
 
     /**
-     * A submitted work order its target department is carrying out.
+     * A submitted work order being carried out.
      */
     public function inProgress(): static
     {
@@ -114,7 +107,7 @@ class WorkOrderFactory extends Factory
     }
 
     /**
-     * A work order its target department invoiced (Penagihan), with an
+     * An invoiced work order (Penagihan), with an
      * unpaid invoice (no files) issued by a new user unless the given
      * attributes say otherwise.
      *

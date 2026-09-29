@@ -37,12 +37,13 @@ class WorkOrderController extends Controller
     /**
      * What WorkOrderResource shows.
      */
-    public const array LIST_RELATIONS = ['requesterDepartment', 'targetDepartment', 'category', 'requester', 'enteredBy'];
+    public const array LIST_RELATIONS = ['requesterDepartment', 'targetDepartment', 'category', 'enteredBy'];
 
     /**
-     * The fillable fields the create and edit forms send.
+     * The fillable fields the create and edit forms send (the requester
+     * department only until the first submission, see WorkOrderRequesterRules).
      */
-    private const array FORM_FIELDS = ['title', 'description', 'work_order_category_id', 'target_department_id', 'urgency', 'target_date'];
+    private const array FORM_FIELDS = ['title', 'description', 'requester_department_id', 'requester_name', 'pic_name', 'work_order_category_id', 'target_department_id', 'urgency', 'target_date'];
 
     /**
      * List the work orders the user may see, with search, filters, and pagination.
@@ -71,13 +72,14 @@ class WorkOrderController extends Controller
             'statusGroups' => WorkOrderStatus::groupOptions(),
             'urgencies' => WorkOrderUrgency::options(),
             'stats' => $this->statusCounts($user),
-            // Only users who see other departments can filter by (requesting, so client company) department.
-            'departments' => $user->can('viewAllDepartments', WorkOrder::class)
-                ? Department::query()
+            // Requesting (client company) departments; only executor company
+            // users see work orders of more than one (the v1 safeguard).
+            'departments' => $user->isClient()
+                ? null
+                : Department::query()
                     ->whereRelation('company', 'is_client', true)
                     ->orderBy('code')
-                    ->get(['id', 'code', 'name'])
-                : null,
+                    ->get(['id', 'code', 'name']),
             'targetDepartments' => $this->filterableTargetDepartments($user),
             'categories' => WorkOrderCategory::orderBy('code')->get(['id', 'code', 'name']),
             'can' => [
@@ -92,19 +94,12 @@ class WorkOrderController extends Controller
     /**
      * Show the form for creating a work order.
      */
-    public function create(Request $request): Response
+    public function create(): Response
     {
         Gate::authorize('create', WorkOrder::class);
 
-        /** @var User $user */
-        $user = $request->user();
-
-        $onBehalf = $user->can('createOnBehalf', WorkOrder::class);
-
         return Inertia::render('work-orders/Create', [
-            // An IC user enters it for their own department; a koordinator picks one.
-            'department' => $onBehalf ? null : $user->department->only(['id', 'code', 'name']),
-            'requesterDepartments' => $onBehalf ? $this->selectableRequesterDepartments() : null,
+            'requesterDepartments' => $this->selectableRequesterDepartments(),
             'targetDepartments' => $this->selectableTargetDepartments(),
             'categories' => $this->selectableCategories(),
             'urgencies' => WorkOrderUrgency::options(),
@@ -113,9 +108,8 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * Store a new draft work order, with the documents attached on the form:
-     * for the IC user's own department, or on behalf of the IC department and
-     * requester a koordinator picked.
+     * Store a new draft work order for the IC department and contact the
+     * Admin WO entered, with the documents attached on the form.
      */
     public function store(StoreWorkOrderRequest $request, CreateWorkOrder $createWorkOrder, AddAttachment $addAttachment): RedirectResponse
     {
@@ -123,18 +117,7 @@ class WorkOrderController extends Controller
         $user = $request->user();
 
         $workOrder = DB::transaction(function () use ($request, $user, $createWorkOrder, $addAttachment): WorkOrder {
-            $workOrder = $request->isOnBehalf()
-                ? $createWorkOrder->handle(
-                    $request->safe()->only(self::FORM_FIELDS),
-                    $user,
-                    Department::findOrFail($request->integer('requester_department_id')),
-                    // The same accounts the validation and the picker allow.
-                    $request->filled('requester_id')
-                        ? User::query()->activeRequesterIn($request->integer('requester_department_id'))->findOrFail($request->integer('requester_id'))
-                        : null,
-                    $request->validated('requester_name'),
-                )
-                : $createWorkOrder->handle($request->safe()->only(self::FORM_FIELDS), $user);
+            $workOrder = $createWorkOrder->handle($request->safe()->only(self::FORM_FIELDS), $user);
 
             $documents = $workOrder->documentsCollection();
 
@@ -239,13 +222,9 @@ class WorkOrderController extends Controller
 
         return Inertia::render('work-orders/Edit', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
+            // The requester department changes only until the first submission.
+            'requesterDepartments' => $workOrder->wasSubmitted() ? null : $this->selectableRequesterDepartments($workOrder),
             'targetDepartments' => $this->selectableTargetDepartments($workOrder),
-            // Only for the koordinator who entered this draft on someone's behalf.
-            'requesterCorrection' => $user->can('updateRequester', $workOrder) ? [
-                'department_id' => $workOrder->requester_department_id,
-                'account' => $workOrder->requester?->only(['id', 'name', 'email']),
-                'contact_name' => $workOrder->requester_name,
-            ] : null,
             'categories' => $this->selectableCategories($workOrder),
             'urgencies' => WorkOrderUrgency::options(),
             'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
@@ -257,15 +236,12 @@ class WorkOrderController extends Controller
      */
     public function update(UpdateWorkOrderRequest $request, WorkOrder $workOrder): RedirectResponse
     {
-        $workOrder->fill($request->safe()->only(self::FORM_FIELDS));
+        // An empty department passes `prohibited` once submitted; never let it reach the model.
+        $fields = $workOrder->wasSubmitted()
+            ? array_diff(self::FORM_FIELDS, ['requester_department_id'])
+            : self::FORM_FIELDS;
 
-        if ($request->correctsRequester()) {
-            $byAccount = $request->validated('requester_mode') === UpdateWorkOrderRequest::REQUESTER_ACCOUNT;
-            $workOrder->requester_id = $byAccount ? $request->integer('requester_id') : null;
-            $workOrder->requester_name = $byAccount ? null : $request->validated('requester_name');
-        }
-
-        $workOrder->save();
+        $workOrder->fill($request->safe()->only($fields))->save();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Work order diperbarui.')]);
 
@@ -315,16 +291,19 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * Departments a koordinator can enter work orders for: active ones of a
-     * client company (FLOW.md §2).
+     * Departments an Admin WO can enter work orders for: active ones of a
+     * client company (FLOW.md §2), plus the work order's current one even if
+     * it was deactivated or deleted.
      *
      * @return Collection<int, Department>
      */
-    private function selectableRequesterDepartments(): Collection
+    private function selectableRequesterDepartments(?WorkOrder $workOrder = null): Collection
     {
-        return Department::query()
+        return Department::withTrashed()
             ->whereRelation('company', 'is_client', true)
-            ->where('is_active', true)
+            ->where(fn (Builder $query) => $query
+                ->where(fn (Builder $query) => $query->where('is_active', true)->whereNull('deleted_at'))
+                ->when($workOrder?->requester_department_id, fn (Builder $query, int $id) => $query->orWhere('id', $id)))
             ->orderBy('code')
             ->get(['id', 'code', 'name']);
     }
@@ -332,8 +311,7 @@ class WorkOrderController extends Controller
     /**
      * Departments a work order can be addressed to (FLOW.md §2): active ones
      * of the executor company, plus the work order's current target even if
-     * it was deactivated or deleted. Only id, code, and name, since client
-     * company users see this list too.
+     * it was deactivated or deleted. Only id, code, and name.
      *
      * @return Collection<int, Department>
      */
@@ -409,7 +387,7 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string, requires_target_department: bool, form: string|null, blocked_reason: string|null}
+     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string, form: string|null, blocked_reason: string|null}
      */
     private function transitionOption(WorkOrder $workOrder, string $name, User $user): array
     {
@@ -421,7 +399,6 @@ class WorkOrderController extends Controller
             'destructive' => $state?->isDestructiveAction() ?? false,
             'requires_note' => $state?->requiresNote() ?? false,
             'note_label' => $state?->noteLabel() ?? 'Catatan',
-            'requires_target_department' => $state?->requiresTargetDepartment() ?? false,
             'form' => $state?->transitionForm(),
             // Shown instead of letting the user try (ConfirmWorkOrderPayment refuses it too).
             'blocked_reason' => $name === Selesai::$name && $workOrder->invoice?->wasPreparedBy($user)

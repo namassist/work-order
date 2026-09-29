@@ -12,7 +12,8 @@ use Spatie\ModelStates\Exceptions\CouldNotPerformTransition;
 beforeEach(function () {
     $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
     $this->department = Department::factory()->client()->create(['code' => 'IT']);
-    $this->user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate, Permission::ActivityLogView);
+    // An Admin WO: the requester side (PROVISIONAL mapping until step 3).
+    $this->user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::ActivityLogView);
     $this->workOrder = WorkOrder::factory()->targeting(Department::factory()->create())->create(['requester_department_id' => $this->department->id]);
 });
 
@@ -132,25 +133,24 @@ it('refuses a transition that became invalid after the page loaded', function ()
 });
 
 it('forbids transitions without the update permission', function () {
-    $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+    $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
         ->post(route('work-orders.transitions.store', $this->workOrder), ['status' => 'diajukan'])
         ->assertForbidden();
 });
 
-it('refuses to submit a draft without a target department', function () {
+it('submits a draft without a target department: it is informational only', function () {
     $draft = WorkOrder::factory()->create(['requester_department_id' => $this->department->id]);
 
     $this->actingAs($this->user)
         ->post(route('work-orders.transitions.store', $draft), ['status' => 'diajukan'])
-        ->assertSessionHasErrors(['status' => 'Pilih departemen tujuan sebelum mengajukan.']);
+        ->assertSessionHasNoErrors();
 
     expect($draft->refresh())
-        ->status->getValue()->toBe('draft')
-        ->number->toBeNull()
-        ->and($draft->statusHistories()->where('to_status', 'diajukan')->exists())->toBeFalse();
+        ->status->getValue()->toBe('diajukan')
+        ->number->toBe('WO/IT/2026/09/0001');
 });
 
-it('still cancels a draft without a target department', function () {
+it('cancels a draft without a target department', function () {
     $draft = WorkOrder::factory()->create(['requester_department_id' => $this->department->id]);
 
     $this->actingAs($this->user)
@@ -160,8 +160,8 @@ it('still cancels a draft without a target department', function () {
     expect($draft->refresh()->status->getValue())->toBe('dibatalkan');
 });
 
-it('requires a target department for exactly the statuses after the first submission', function () {
+it('requires a number for exactly the statuses after the first submission', function () {
     expect(collect(WorkOrderStatus::options())->mapWithKeys(fn (array $option): array => [
-        $option['value'] => WorkOrderStatus::fromName($option['value'])?->requiresTargetDepartment(),
+        $option['value'] => WorkOrderStatus::fromName($option['value'])?->requiresNumber(),
     ])->all())->toBe(['draft' => false, 'diajukan' => true, 'ditolak' => true, 'dikerjakan' => true, 'penagihan' => true, 'selesai' => true, 'dibatalkan' => false]);
 });

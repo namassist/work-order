@@ -102,7 +102,7 @@ test('each card counts its status over the work orders the user may see', functi
                 ->where('workOrderCounts', dashboardCounts(['submitted' => 2, 'in_progress' => 1, 'billing' => 3]))));
 });
 
-test('an executor user\'s cards count only work orders addressed to their department', function () {
+test('an executor user\'s cards count every submitted work order, whatever its target', function () {
     $target = Department::factory()->create();
     WorkOrder::factory()->targeting($target)->submitted()->create();
     WorkOrder::factory()->targeting($target)->inProgress()->create();
@@ -113,13 +113,13 @@ test('an executor user\'s cards count only work orders addressed to their depart
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
-                ->where('workOrderCounts', dashboardCounts(['submitted' => 1, 'in_progress' => 1]))));
+                ->where('workOrderCounts', dashboardCounts(['submitted' => 2, 'in_progress' => 1]))));
 });
 
-test('work order counts span every department with work-orders.view-all', function () {
+test('work order counts span every requester department for an executor user', function () {
     WorkOrder::factory()->submitted()->count(2)->create();
 
-    $this->actingAs(userWithPermissions(Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
+    $this->actingAs(userWithPermissions(Permission::WorkOrdersView))
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->loadDeferredProps(fn (Assert $reload): AssertableInertia => $reload
@@ -256,7 +256,7 @@ function workOrderSubmittedAt(string $moment, array $attributes): WorkOrder
     test()->travelTo(Carbon::parse($moment, 'UTC'));
     $workOrder = WorkOrder::factory()->targeting(Department::factory()->create())->create($attributes);
 
-    return app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $workOrder->requester);
+    return app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $workOrder->enteredBy);
 }
 
 test('the urgent list shows up to five visible active mendesak work orders, oldest submission first', function () {
@@ -271,10 +271,10 @@ test('the urgent list shows up to five visible active mendesak work orders, olde
     workOrderSubmittedAt('2026-09-19 00:00', [...$urgent, 'title' => 'Terhapus'])->delete();
     workOrderSubmittedAt('2026-09-19 00:00', [...$urgent, 'title' => 'Departemen lain', 'requester_department_id' => Department::factory()->create()->id]);
     $cancelled = workOrderSubmittedAt('2026-09-19 00:00', [...$urgent, 'title' => 'Dibatalkan']);
-    app(TransitionWorkOrder::class)->handle($cancelled, 'dibatalkan', $cancelled->requester, 'Batal');
+    app(TransitionWorkOrder::class)->handle($cancelled, 'dibatalkan', $cancelled->enteredBy, 'Batal');
     WorkOrder::factory()->create([...$urgent, 'title' => 'Draft']);
 
-    $first = WorkOrder::query()->where('title', 'Pertama')->with(['category', 'requester'])->sole();
+    $first = WorkOrder::query()->where('title', 'Pertama')->with('category')->sole();
 
     $this->actingAs(userInDepartment($department, Permission::WorkOrdersView))
         ->get(route('dashboard'))
@@ -287,7 +287,7 @@ test('the urgent list shows up to five visible active mendesak work orders, olde
                     'number' => $first->number,
                     'title' => 'Pertama',
                     'category' => $first->category->name,
-                    'requester' => ['id' => $first->requester->id, 'name' => $first->requester->name],
+                    'requester_name' => $first->requester_name,
                     'status' => ['value' => 'diajukan', 'label' => 'Diajukan', 'tone' => 'warning'],
                     'submitted_at' => '2026-09-20T01:00:00+00:00',
                 ])));
@@ -400,7 +400,7 @@ test('the recent list rows match the work order list', function () {
                 ->where('recentWorkOrders.0.display_number', $workOrder->number)
                 ->where('recentWorkOrders.0.status.value', 'diajukan')
                 ->where('recentWorkOrders.0.urgency.value', 'mendesak')
-                ->where('recentWorkOrders.0.requester', ['id' => $workOrder->requester->id, 'name' => $workOrder->requester->name])
+                ->where('recentWorkOrders.0.requester_name', $workOrder->requester_name)
                 ->where('recentWorkOrders.0.category.code', $workOrder->category->code)
                 ->where('recentWorkOrders.0.updated_at', '2026-09-25T02:00:00+00:00')));
 });
@@ -425,12 +425,13 @@ test('a comment or a status change moves a work order to the top of the recent l
         ->assertInertia(expectRecentWorkOrderIds([$submitted->id, $commented->id, $untouched->id]));
 });
 
-test('the recent list spans every department\'s submitted work orders with work-orders.view-all', function () {
+test('the recent list spans every submitted work order, but no drafts, for an executor user without work-orders.create', function () {
     $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
     $older = WorkOrder::factory()->submitted()->create(['updated_at' => now()->subHour()]);
     $newer = WorkOrder::factory()->submitted()->create();
+    WorkOrder::factory()->create();
 
-    $this->actingAs(userWithPermissions(Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
+    $this->actingAs(userWithPermissions(Permission::WorkOrdersView))
         ->get(route('dashboard'))
         ->assertInertia(expectRecentWorkOrderIds([$newer->id, $older->id]));
 });

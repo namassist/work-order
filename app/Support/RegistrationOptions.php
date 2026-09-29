@@ -2,13 +2,15 @@
 
 namespace App\Support;
 
+use App\Actions\Fortify\CreateNewUser;
 use App\Models\Company;
 use App\Models\Department;
 
 /**
- * What the public registration page may know: active companies that have an
- * email domain (id, name, domains) and their active departments (id, code,
- * name, company). Nothing else, since anyone can open the page.
+ * What the public registration page may know: the active executor companies
+ * that have an email domain (id, name, domains) and their active departments
+ * (id, code, name, company). Client companies never appear: IC never logs in
+ * (FLOW.md v2 §3). Nothing else, since anyone can open the page.
  */
 class RegistrationOptions
 {
@@ -20,10 +22,7 @@ class RegistrationOptions
      */
     public static function forRegisterPage(): array
     {
-        $companies = Company::query()
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'email_domains'])
+        $companies = CreateNewUser::registrableCompanies()
             ->filter(fn (Company $company): bool => $company->email_domains !== [])
             ->values();
 

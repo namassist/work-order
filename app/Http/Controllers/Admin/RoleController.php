@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreRoleRequest;
 use App\Http\Requests\Admin\UpdateRoleRequest;
 use App\Models\User;
+use App\Support\RoleLabel;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -37,7 +38,7 @@ class RoleController extends Controller
             ->get()
             ->map(fn (Role $role): array => [
                 'id' => $role->id,
-                'name' => $role->name,
+                ...RoleLabel::option($role),
                 'users_count' => $role->users_count,
                 'permissions_count' => $role->permissions_count,
                 'company_scope' => $this->scopeOf($role)?->toOption(),
@@ -70,6 +71,7 @@ class RoleController extends Controller
         $role = DB::transaction(function () use ($request): Role {
             $role = new Role([
                 'name' => $request->validated('name'),
+                'label' => $request->validated('label'),
                 'guard_name' => 'web',
                 'company_scope' => $request->validated('company_scope'),
             ]);
@@ -80,7 +82,7 @@ class RoleController extends Controller
             return $role;
         });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Role :name dibuat.', ['name' => $role->name])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Role :name dibuat.', ['name' => RoleLabel::of($role)])]);
 
         return to_route('admin.roles.index');
     }
@@ -96,6 +98,7 @@ class RoleController extends Controller
             'role' => [
                 'id' => $role->id,
                 'name' => $role->name,
+                'label' => $role->getAttribute('label'),
                 'company_scope' => $this->scopeOf($role)?->value,
                 'permissions' => $role->permissions()->pluck('name')->all(),
                 'is_system' => $role->name === SystemRole::Admin->value,
@@ -113,13 +116,14 @@ class RoleController extends Controller
             $before = $this->auditState($role);
             $role->update([
                 'name' => $request->validated('name'),
+                'label' => $request->validated('label'),
                 'company_scope' => $request->validated('company_scope'),
             ]);
             $role->syncPermissions($request->validated('permissions'));
             $this->logAuditChange($role, AuditEvent::Updated, $before, $this->auditState($role));
         });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Role :name diperbarui.', ['name' => $role->name])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Role :name diperbarui.', ['name' => RoleLabel::of($role)])]);
 
         return to_route('admin.roles.index');
     }
@@ -134,7 +138,7 @@ class RoleController extends Controller
 
         $message = match (true) {
             $role->name === SystemRole::Admin->value => __('Role admin tidak boleh dihapus.'),
-            User::withTrashed()->whereHas('roles', fn ($query) => $query->whereKey($role->getKey()))->exists() => __('Role :name masih dipakai oleh pengguna (termasuk pengguna terhapus) dan tidak boleh dihapus.', ['name' => $role->name]),
+            User::withTrashed()->whereHas('roles', fn ($query) => $query->whereKey($role->getKey()))->exists() => __('Role :name masih dipakai oleh pengguna (termasuk pengguna terhapus) dan tidak boleh dihapus.', ['name' => RoleLabel::of($role)]),
             default => null,
         };
 
@@ -149,7 +153,7 @@ class RoleController extends Controller
             $role->delete();
         });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Role :name dihapus.', ['name' => $role->name])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Role :name dihapus.', ['name' => RoleLabel::of($role)])]);
 
         return to_route('admin.roles.index');
     }
@@ -157,12 +161,13 @@ class RoleController extends Controller
     /**
      * The role as recorded in the audit log.
      *
-     * @return array{name: string, company_scope: string|null, permissions: list<string>}
+     * @return array{name: string, label: string|null, company_scope: string|null, permissions: list<string>}
      */
     private function auditState(Role $role): array
     {
         return [
             'name' => $role->name,
+            'label' => $role->getAttribute('label'),
             'company_scope' => $this->scopeOf($role)?->value,
             'permissions' => array_values(PermissionModel::query()
                 ->whereRelation('roles', 'roles.id', $role->id)

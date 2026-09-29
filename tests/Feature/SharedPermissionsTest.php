@@ -8,14 +8,12 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 it('shares the permissions granted through roles with the frontend', function () {
     $this->seed(RolePermissionSeeder::class);
-    $user = User::factory()->create()->assignRole('keuangan');
+    $user = User::factory()->create()->assignRole('finance');
 
     $this->actingAs($user)
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('auth.permissions', [
-            Permission::DepartmentsView->value,
             Permission::WorkOrdersView->value,
-            Permission::WorkOrdersViewAll->value,
             Permission::WorkOrdersExport->value,
             Permission::WorkOrdersComment->value,
             Permission::WorkOrdersConfirmPayment->value,

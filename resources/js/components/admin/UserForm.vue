@@ -196,7 +196,7 @@ const submit = () => {
                             :for="`role-${role.name}`"
                             :class="{ 'text-muted-foreground': !fits(role) }"
                         >
-                            {{ role.name }}
+                            {{ role.label }}
                             <span
                                 v-if="!fits(role) && role.company_scope"
                                 class="text-xs font-normal"

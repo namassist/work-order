@@ -41,9 +41,11 @@ use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
- * Demo data for local development and visual checks: the IC and Unggul
- * companies with their departments, accounts for every role, categories, and work orders spread over the last three
- * months. Work orders go through CreateWorkOrder, AddAttachment,
+ * Demo data for local development and visual checks (FLOW.md v2): the IC
+ * and Unggul companies with their departments, Unggul accounts for every
+ * role (IC never logs in; its departments and contacts are requester data
+ * only), categories, and work orders spread over the last three months.
+ * Work orders go through CreateWorkOrder, AddAttachment,
  * TransitionWorkOrder, and the comment actions at their historical moments,
  * in chronological order, so numbers, status history, the timeline, and the
  * activity log match real use.
@@ -78,7 +80,8 @@ class DemoSeeder extends Seeder
 
     /**
      * Departments as code => [name, company code]. IC departments request
-     * work orders; Unggul departments carry them out.
+     * work orders (requester data only); Unggul departments are where the
+     * staff work.
      *
      * @var array<string, array{0: string, 1: string}>
      */
@@ -91,12 +94,13 @@ class DemoSeeder extends Seeder
         'GA' => ['General Affair', 'UGL'],
         'IT' => ['Information Technology', 'UGL'],
         'KEU' => ['Keuangan', 'UGL'],
+        'DIR' => ['Direksi', 'UGL'],
     ];
 
     /**
      * The Unggul department that handles each category: the work order's
-     * target department, whose pelaksana discuss and cancel it. Some drafts
-     * have no target yet (see planWorkOrders()).
+     * informational target department (FLOW.md v2 §4), whose PIC Timesheet
+     * discusses the work. Some drafts have no target (see planWorkOrders()).
      *
      * @var array<string, string>
      */
@@ -122,13 +126,6 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * Accounts as [name, department code, role, must change password]. IC
-     * departments have pemohon (and some a viewer); ENG, GA, and IT have a
-     * pelaksana; GA has the koordinator; KEU has keuangan.
-     *
-     * @var list<array{0: string, 1: string, 2: string, 3: bool}>
-     */
-    /**
      * Accounts for local visual checks (Playwright): signed in with a fixed
      * password written here, never DEFAULT_USER_PASSWORD, so no secret has to
      * be read from .env. Demo data only: the seeder refuses production. Kept
@@ -138,7 +135,10 @@ class DemoSeeder extends Seeder
      */
     public const array VISUAL_CHECK_ACCOUNTS = [
         'visual@worder.test' => ['Visual Check Admin', 'IT', 'admin'],
-        'visual.keuangan@worder.test' => ['Visual Check Keuangan', 'KEU', 'keuangan'],
+        'visual.adminwo@worder.test' => ['Visual Check Admin WO', 'GA', 'admin-wo'],
+        'visual.lead@worder.test' => ['Visual Check Lead Operational', 'ENG', 'lead-operational'],
+        'visual.finance@worder.test' => ['Visual Check Finance', 'KEU', 'finance'],
+        'visual.viewer@worder.test' => ['Visual Check Viewer', 'IT', 'viewer'],
     ];
 
     /**
@@ -146,44 +146,63 @@ class DemoSeeder extends Seeder
      */
     public const string VISUAL_CHECK_PASSWORD = 'visual-check-local';
 
+    /**
+     * Unggul accounts as [name, department code, role slug, must change
+     * password], one or more for every role of FLOW.md v2 §3. Lead
+     * Operational is one person.
+     *
+     * @var list<array{0: string, 1: string, 2: string, 3: bool}>
+     */
     private const array USERS = [
         ['Administrator', 'IT', 'admin', false],
-        ['Rizky Pratama', 'IT', 'pelaksana', false],
+        ['Dewi Lestari', 'GA', 'admin-wo', false],
+        ['Ratna Wijaya', 'GA', 'admin-wo', false],
+        ['Bambang Hartono', 'ENG', 'lead-operational', false],
+        ['Fajar Nugroho', 'ENG', 'pic-timesheet', false],
+        ['Hendra Gunawan', 'GA', 'pic-timesheet', false],
+        ['Rizky Pratama', 'IT', 'pic-timesheet', false],
+        ['Agus Setiawan', 'GA', 'rental', false],
+        ['Hartono Wijaya', 'DIR', 'direktur', false],
+        ['Sri Wahyuni', 'KEU', 'finance', false],
+        ['Budi Santoso', 'KEU', 'finance', false],
         ['Andi Saputra', 'IT', 'viewer', true],
-        ['Bambang Hartono', 'ENG', 'pelaksana', false],
-        ['Fajar Nugroho', 'ENG', 'pelaksana', false],
-        ['Hendra Gunawan', 'GA', 'pelaksana', false],
-        ['Dewi Lestari', 'GA', 'koordinator', false],
         ['Wulan Sari', 'GA', 'viewer', false],
-        ['Sri Wahyuni', 'KEU', 'keuangan', false],
-        ['Budi Santoso', 'KEU', 'keuangan', false],
         ['Rina Kurniawati', 'KEU', 'viewer', false],
-        ['Eko Purnomo', 'PRD', 'pemohon', false],
-        ['Indah Permatasari', 'PRD', 'pemohon', false],
-        ['Arif Hidayat', 'PRD', 'pemohon', false],
-        ['Slamet Riyadi', 'PRD', 'viewer', false],
-        ['Putri Rahmawati', 'HRD', 'pemohon', false],
-        ['Maya Anggraini', 'HRD', 'pemohon', false],
-        ['Lukman Hakim', 'HRD', 'viewer', true],
-        ['Nur Aini', 'LOG', 'pemohon', false],
-        ['Rudi Hermawan', 'LOG', 'pemohon', false],
-        ['Dimas Prasetyo', 'MTC', 'pemohon', false],
-        ['Yoga Firmansyah', 'MTC', 'pemohon', true],
-        ['Teguh Wibowo', 'MTC', 'pemohon', false],
     ];
 
     /**
-     * Self-registrations (FLOW.md §3) as [name, department code, days ago,
-     * rejection reason or null]: three pending from both companies and one
-     * rejected, for the Pendaftaran page and its sidebar badge.
+     * The IC people who request work orders, per IC department: contact
+     * names only, since IC never logs in (FLOW.md v2 §1, §4).
+     *
+     * @var array<string, list<string>>
+     */
+    private const array REQUESTER_CONTACTS = [
+        'PRD' => ['Eko Purnomo', 'Indah Permatasari', 'Arif Hidayat'],
+        'HRD' => ['Putri Rahmawati', 'Maya Anggraini'],
+        'LOG' => ['Nur Aini', 'Rudi Hermawan'],
+        'MTC' => ['Dimas Prasetyo', 'Yoga Firmansyah', 'Teguh Wibowo'],
+    ];
+
+    /**
+     * Unggul staff IC contacted about a request (PIC Work Order, optional and
+     * informational), recorded on every third work order.
+     *
+     * @var list<string>
+     */
+    private const array PIC_NAMES = ['Wulan Sari', 'Hendra Gunawan', 'Fajar Nugroho'];
+
+    /**
+     * Self-registrations (FLOW.md §3, Unggul email domains only) as [name,
+     * department code, days ago, rejection reason or null]: three pending
+     * and one rejected, for the Pendaftaran page and its sidebar badge.
      *
      * @var list<array{0: string, 1: string, 2: int, 3: string|null}>
      */
     private const array REGISTRATIONS = [
-        ['Galih Saputra', 'PRD', 2, null],
-        ['Siti Marlina', 'LOG', 1, null],
-        ['Yusuf Maulana', 'ENG', 3, null],
-        ['Tono Sugiarto', 'HRD', 6, 'Tidak terdaftar sebagai karyawan HRD. Hubungi atasan Anda untuk konfirmasi.'],
+        ['Galih Saputra', 'ENG', 2, null],
+        ['Siti Marlina', 'GA', 1, null],
+        ['Yusuf Maulana', 'IT', 3, null],
+        ['Tono Sugiarto', 'KEU', 6, 'Tidak terdaftar sebagai karyawan KEU. Hubungi atasan Anda untuk konfirmasi.'],
     ];
 
     /**
@@ -261,8 +280,8 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * Reasons the target department rejects a work order that the requester
-     * then revises and resubmits, or leaves waiting.
+     * Reasons Lead Operational rejects a work order that Admin WO then
+     * revises and resubmits, or leaves waiting.
      *
      * @var list<string>
      */
@@ -273,14 +292,8 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * The rejection when a work order went to the wrong department; :department
-     * is the department it belongs to.
-     */
-    private const string WRONG_DEPARTMENT_NOTE = 'Bukan lingkup departemen kami. Mohon ajukan ke departemen :department.';
-
-    /**
-     * What the requester adds to the description before resubmitting a work
-     * order rejected for another reason.
+     * What Admin WO adds to the description before resubmitting a rejected
+     * work order.
      */
     private const string REVISION = ' Revisi: lokasi dan foto kondisi sudah dilengkapi.';
 
@@ -293,7 +306,7 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * Optional notes when the target department accepts a work order.
+     * Optional notes when Lead Operational accepts a work order.
      *
      * @var list<string|null>
      */
@@ -305,8 +318,10 @@ class DemoSeeder extends Seeder
     ];
 
     /**
-     * Comment threads between the handling pelaksana and the requester,
-     * in order. A work order gets the first one to three messages of one.
+     * Comment threads between the target department's PIC Timesheet
+     * ('pelaksana') and the Admin WO who entered the work order
+     * ('requester'), in order. A work order gets the first one to three
+     * messages of one.
      *
      * @var list<list<array{0: 'pelaksana'|'requester', 1: string}>>
      */
@@ -341,20 +356,13 @@ Nanti saya kabari lagi.'],
     ];
 
     /**
-     * People without an account whom the koordinator enters work orders for.
-     *
-     * @var list<string>
-     */
-    private const array CONTACTS = ['Pak Andi', 'Bu Ratna', 'Pak Darto', 'Bu Yuni'];
-
-    /**
-     * Posted by the requester on the first work order with comments, then
+     * Posted by the Admin WO on the first work order with comments, then
      * deleted a minute later, so the timeline shows "Komentar dihapus".
      */
     private const string MISTAKEN_COMMENT = 'Maaf, komentar ini untuk WO lain.';
 
     /**
-     * The pelaksana's progress report on some accepted work orders: a
+     * The PIC Timesheet's progress report on some accepted work orders: a
      * formatted comment with an inline photo (%s) and a document attached.
      */
     private const string PROGRESS_REPORT = '<p><strong>Laporan progres</strong></p>'
@@ -386,26 +394,15 @@ Nanti saya kabari lagi.'],
     ];
 
     /**
-     * Paths through Dikerjakan: accepted by the target department's pelaksana.
+     * Paths through Dikerjakan: accepted by Lead Operational.
      */
     private const array ACCEPTED_PATHS = ['in_progress', 'in_progress_overdue', 'billed', 'billed_overdue', 'paid'];
 
     /**
-     * Paths through Penagihan: invoiced by the pelaksana who accepted it.
+     * Paths through Penagihan: invoiced by Lead Operational (PROVISIONAL
+     * until step 3 moves invoicing to Finance's payment track).
      */
     private const array BILLED_PATHS = ['billed', 'billed_overdue', 'paid'];
-
-    /**
-     * How many of the resubmitted and of the rejected work orders first went
-     * to the wrong department. Resubmitted ones are then moved to the right
-     * one; rejected ones still wait for the requester to do so.
-     *
-     * @var array<string, int>
-     */
-    private const array WRONG_DEPARTMENT = [
-        'resubmitted' => 2,
-        'rejected' => 1,
-    ];
 
     /**
      * How many work orders get each urgency: 10% rendah, 60% normal, 20%
@@ -636,7 +633,7 @@ Nanti saya kabari lagi.'],
     {
         foreach (self::REGISTRATIONS as [$name, $departmentCode, $daysAgo, $rejectionReason]) {
             $department = $departments[$departmentCode];
-            $email = self::emailFor($name, 'pemohon', self::COMPANIES[self::DEPARTMENTS[$departmentCode][1]][2]);
+            $email = self::emailFor($name, 'registration', self::COMPANIES[self::DEPARTMENTS[$departmentCode][1]][2]);
 
             if (User::withTrashed()->withEmail($email)->exists()) {
                 continue;
@@ -651,7 +648,6 @@ Nanti saya kabari lagi.'],
                 'email' => $email,
                 'password' => $password,
                 'password_confirmation' => $password,
-                'company_id' => $department->company_id,
                 'department_id' => $department->id,
             ]);
 
@@ -673,10 +669,14 @@ Nanti saya kabari lagi.'],
      */
     private function planWorkOrders(Collection $users, Collection $categories): array
     {
-        $requesters = $users->filter(fn (User $user): bool => $user->hasRole('pemohon'))->values()->all();
-        $pelaksanaByDepartment = $users
-            ->filter(fn (User $user): bool => $user->hasRole('pelaksana'))
+        $withRole = fn (string $role): array => $users->filter(fn (User $user): bool => $user->hasRole($role))->values()->all();
+        $adminWos = $withRole('admin-wo');
+        $lead = $users->sole(fn (User $user): bool => $user->hasRole('lead-operational'));
+        $finance = $withRole('finance');
+        $picByDepartment = $users
+            ->filter(fn (User $user): bool => $user->hasRole('pic-timesheet'))
             ->groupBy(fn (User $user): string => $user->department->code);
+        $requesterDepartments = Department::query()->whereIn('code', array_keys(self::REQUESTER_CONTACTS))->get()->keyBy('code');
 
         $paths = $this->faker->shuffleArray(collect(self::PATHS)->flatMap(fn (int $count, string $path): array => array_fill(0, $count, $path))->all());
         $urgencies = $this->faker->shuffleArray(collect(self::URGENCIES)->flatMap(fn (int $count, string $urgency): array => array_fill(0, $count, $urgency))->all());
@@ -685,51 +685,39 @@ Nanti saya kabari lagi.'],
         $created = [];
         $events = [];
         $withComments = 0;
-        $wrongDepartmentLeft = self::WRONG_DEPARTMENT;
-
-        $koordinator = $users->first(fn (User $user): bool => $user->hasRole('koordinator'));
-        $keuangan = $users->filter(fn (User $user): bool => $user->hasRole('keuangan'))->values()->all();
         /** @var array<string, int> $billedPerPath */
         $billedPerPath = [];
 
         foreach ($paths as $index => $path) {
-            /** @var User $requester */
-            $requester = $this->faker->randomElement($requesters);
-            // Every sixth work order is entered by the koordinator on behalf of
-            // IC, every other one of those for a contact without an account.
-            // The koordinator then acts as the requester side of it.
-            $onBehalf = $index % 6 === 5;
-            $contactName = $onBehalf && $index % 12 === 11
-                ? self::CONTACTS[intdiv($index, 12) % count(self::CONTACTS)].', '.$requester->department->name
-                : null;
-            $actor = $onBehalf ? $koordinator : $requester;
+            // Admin WO enters every work order for an IC department and contact
+            // (FLOW.md v2 §4), and acts as its requester side afterwards.
+            /** @var User $actor */
+            $actor = $this->faker->randomElement($adminWos);
+            /** @var string $departmentCode */
+            $departmentCode = $this->faker->randomElement(array_keys(self::REQUESTER_CONTACTS));
+            $requesterDepartment = $requesterDepartments[$departmentCode];
+            /** @var string $contactName */
+            $contactName = $this->faker->randomElement(self::REQUESTER_CONTACTS[$departmentCode]);
             /** @var string $categoryCode */
             $categoryCode = $this->faker->randomElement(array_keys(self::TEMPLATES));
-            /** @var User $pelaksana */
-            $pelaksana = $this->faker->randomElement($pelaksanaByDepartment[self::CATEGORY_DEPARTMENTS[$categoryCode]]->all());
-            // A work order sent to the wrong department is handled (rejected) by a
-            // pelaksana there.
-            $wrongDepartment = ($wrongDepartmentLeft[$path] ?? 0) > 0;
-            if ($wrongDepartment) {
-                $wrongDepartmentLeft[$path]--;
-            }
-            $handler = $wrongDepartment
-                ? $this->faker->randomElement($pelaksanaByDepartment->except(self::CATEGORY_DEPARTMENTS[$categoryCode])->flatten()->all())
-                : $pelaksana;
+            $targetDepartmentCode = self::CATEGORY_DEPARTMENTS[$categoryCode];
+            /** @var User $pic */
+            $pic = $this->faker->randomElement($picByDepartment[$targetDepartmentCode]->all());
 
             $createdAt = $this->creationMoment($path);
-            $attributes = $this->workOrderAttributes($path, $categoryCode, $requester, $createdAt)
+            $attributes = $this->workOrderAttributes($path, $categoryCode, $requesterDepartment, $createdAt)
                 + [
+                    'requester_department_id' => $requesterDepartment->id,
+                    'requester_name' => $contactName,
+                    'pic_name' => $index % 3 === 0 ? self::PIC_NAMES[intdiv($index, 3) % count(self::PIC_NAMES)] : null,
                     'work_order_category_id' => $categories[$categoryCode]->id,
                     'urgency' => $urgencies[$index],
-                    // Every third draft is still missing its target, as a draft may be.
-                    'target_department_id' => $path === 'draft' && $index % 3 === 0 ? null : $handler->department_id,
+                    // Informational only; every third draft leaves it empty.
+                    'target_department_id' => $path === 'draft' && $index % 3 === 0 ? null : $pic->department_id,
                 ];
 
-            $events[] = ['at' => $createdAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $attributes, $requester, $actor, $onBehalf, $contactName): void {
-                $created[$index] = $onBehalf
-                    ? $this->createWorkOrder->handle($attributes, $actor, $requester->department, $contactName === null ? $requester : null, $contactName)
-                    : $this->createWorkOrder->handle($attributes, $requester);
+            $events[] = ['at' => $createdAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $attributes, $actor): void {
+                $created[$index] = $this->createWorkOrder->handle($attributes, $actor);
             }];
 
             if ($index % 4 === 0) {
@@ -762,9 +750,9 @@ Nanti saya kabari lagi.'],
 
             $events[] = $this->transitionEvent($created, $index, $submittedAt, $actor, Diajukan::getMorphClass());
 
-            // Comments start once the work order is submitted, when the target
-            // department's pelaksana can see it, and end before a cancellation,
-            // which makes them read-only.
+            // Comments start once the work order is submitted, when every
+            // role sees it, and end before a cancellation, which makes them
+            // read-only.
             if (in_array($path, ['submitted', 'overdue', 'in_progress', 'in_progress_overdue', 'billed', 'billed_overdue', 'paid', 'cancelled_submitted'], true) && in_array($index % 5, [1, 2, 3], true)) {
                 // Selesai, like a cancellation, makes them read-only.
                 $until = match ($path) {
@@ -772,7 +760,7 @@ Nanti saya kabari lagi.'],
                     'paid' => $paidAt,
                     default => CarbonImmutable::now()->subHour(),
                 };
-                array_push($events, ...$this->planComments($created, $index, $submittedAt, $until, $actor, $pelaksana, $withComments++ === 0));
+                array_push($events, ...$this->planComments($created, $index, $submittedAt, $until, $actor, $pic, $withComments++ === 0));
             }
 
             if ($path === 'cancelled_submitted') {
@@ -780,17 +768,17 @@ Nanti saya kabari lagi.'],
             }
 
             if (in_array($path, self::ACCEPTED_PATHS, true)) {
-                array_push($events, ...$this->planAcceptance($created, $index, $decidedAt, $pelaksana));
+                array_push($events, ...$this->planAcceptance($created, $index, $decidedAt, $lead, $pic));
             }
 
             if (in_array($path, self::BILLED_PATHS, true)) {
                 $billedPerPath[$path] = ($billedPerPath[$path] ?? 0) + 1;
-                array_push($events, ...$this->planBilling($created, $index, $path, $billedPerPath[$path], $billedAt, $pelaksana));
+                array_push($events, ...$this->planBilling($created, $index, $path, $billedPerPath[$path], $billedAt, $lead));
             }
 
             if ($path === 'paid') {
                 /** @var User $confirmer */
-                $confirmer = $this->faker->randomElement($keuangan);
+                $confirmer = $this->faker->randomElement($finance);
                 // Every other payment comes with the transfer receipt: counted among the
                 // paid work orders, not by position in the shuffled plan, so exactly half do.
                 $withProof = $billedPerPath[$path] % 2 === 0;
@@ -801,18 +789,13 @@ Nanti saya kabari lagi.'],
             }
 
             if (in_array($path, ['rejected', 'resubmitted', 'rejected_cancelled'], true)) {
-                $note = $wrongDepartment
-                    ? __(self::WRONG_DEPARTMENT_NOTE, ['department' => self::CATEGORY_DEPARTMENTS[$categoryCode]])
-                    : $this->faker->randomElement(self::REJECT_NOTES);
-                $events[] = $this->transitionEvent($created, $index, $decidedAt, $handler, Ditolak::getMorphClass(), $note);
+                $events[] = $this->transitionEvent($created, $index, $decidedAt, $lead, Ditolak::getMorphClass(), $this->faker->randomElement(self::REJECT_NOTES));
             }
 
             if ($path === 'resubmitted') {
-                $events[] = ['at' => $revisedAt, 'actor' => $actor, 'run' => function () use (&$created, $index, $wrongDepartment, $pelaksana): void {
+                $events[] = ['at' => $revisedAt, 'actor' => $actor, 'run' => function () use (&$created, $index): void {
                     $workOrder = $created[$index]->refresh();
-                    $workOrder->update($wrongDepartment
-                        ? ['target_department_id' => $pelaksana->department_id]
-                        : ['description' => $workOrder->description.self::REVISION]);
+                    $workOrder->update(['description' => $workOrder->description.self::REVISION]);
                 }];
                 $events[] = $this->transitionEvent($created, $index, $revisedAt->addMinutes(2), $actor, Diajukan::getMorphClass());
             }
@@ -841,29 +824,29 @@ Nanti saya kabari lagi.'],
     }
 
     /**
-     * The target department's pelaksana accepts the work order, sometimes
-     * with a note, and on every other one uploads a progress photo a day
-     * later (FLOW.md §5: the pelaksana adds documents while Dikerjakan). On
-     * every third one the pelaksana posts a formatted progress report with an
-     * inline photo and a document (FLOW.md §9), uploaded and claimed through
-     * the real actions.
+     * Lead Operational accepts the work order, sometimes with a note, and on
+     * every other one uploads a progress photo a day later (the executor
+     * side adds documents while Dikerjakan, PROVISIONAL until step 3). On
+     * every third one the target department's PIC Timesheet posts a
+     * formatted progress report with an inline photo and a document (FLOW.md
+     * §9), uploaded and claimed through the real actions.
      *
      * @param  array<int, WorkOrder>  $created  filled while the timeline runs
      * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
      */
-    private function planAcceptance(array &$created, int $index, CarbonImmutable $at, User $pelaksana): array
+    private function planAcceptance(array &$created, int $index, CarbonImmutable $at, User $lead, User $pic): array
     {
-        $events = [$this->transitionEvent($created, $index, $at, $pelaksana, Dikerjakan::getMorphClass(), self::ACCEPT_NOTES[$index % count(self::ACCEPT_NOTES)])];
+        $events = [$this->transitionEvent($created, $index, $at, $lead, Dikerjakan::getMorphClass(), self::ACCEPT_NOTES[$index % count(self::ACCEPT_NOTES)])];
 
         if ($index % 2 === 0) {
-            $events[] = ['at' => $at->addDay(), 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana): void {
-                $this->attachSample($created[$index], ['foto.jpg', 'Foto_Progres.jpg'], $pelaksana);
+            $events[] = ['at' => $at->addDay(), 'actor' => $lead, 'run' => function () use (&$created, $index, $lead): void {
+                $this->attachSample($created[$index], ['foto.jpg', 'Foto_Progres.jpg'], $lead);
             }];
         }
 
         if ($index % 3 === 1) {
-            $events[] = ['at' => $at->addHours(20), 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana): void {
-                $this->postProgressReport($created[$index], $pelaksana);
+            $events[] = ['at' => $at->addHours(20), 'actor' => $pic, 'run' => function () use (&$created, $index, $pic): void {
+                $this->postProgressReport($created[$index], $pic);
             }];
         }
 
@@ -871,7 +854,7 @@ Nanti saya kabari lagi.'],
     }
 
     /**
-     * The pelaksana who carried the work out invoices it (FLOW.md §8): an
+     * Lead Operational invoices it (FLOW.md v1 §8, PROVISIONAL until step 3): an
      * invoice file always, a BAST on every other one, an amount, and a due
      * date 30 days on (14 when it is meant to be past by now). Of the ones
      * still waiting for payment, the first has neither amount nor due date,
@@ -881,7 +864,7 @@ Nanti saya kabari lagi.'],
      * @param  int  $nth  this work order's place among those of its path, from 1
      * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
      */
-    private function planBilling(array &$created, int $index, string $path, int $nth, CarbonImmutable $at, User $pelaksana): array
+    private function planBilling(array &$created, int $index, string $path, int $nth, CarbonImmutable $at, User $lead): array
     {
         $bare = $path === 'billed' && $nth === 1;
         $invoiceDate = DisplayDate::local($at)->toDateString();
@@ -892,7 +875,7 @@ Nanti saya kabari lagi.'],
             default => DisplayDate::local($at)->addDays(30)->toDateString(),
         };
 
-        $events = [['at' => $at, 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana, $invoiceDate, $amount, $dueDate): void {
+        $events = [['at' => $at, 'actor' => $lead, 'run' => function () use (&$created, $index, $lead, $invoiceDate, $amount, $dueDate): void {
             $workOrder = $created[$index];
             $department = (string) $workOrder->targetDepartment?->code;
             $year = substr($invoiceDate, 0, 4);
@@ -900,7 +883,7 @@ Nanti saya kabari lagi.'],
 
             $created[$index] = $this->billWorkOrder->handle(
                 $workOrder,
-                $pelaksana,
+                $lead,
                 [
                     'number' => sprintf('INV/UGL/%s/%s/%03d', $department, $year, $sequence),
                     'invoice_date' => $invoiceDate,
@@ -913,10 +896,10 @@ Nanti saya kabari lagi.'],
         }]];
 
         if ($path === 'billed' && $nth === 2 && $amount !== null) {
-            $events[] = ['at' => $at->addHours(3), 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana, $amount): void {
+            $events[] = ['at' => $at->addHours(3), 'actor' => $lead, 'run' => function () use (&$created, $index, $lead, $amount): void {
                 $invoice = $created[$index]->invoice()->sole();
 
-                $this->correctInvoice->handle($created[$index], $pelaksana, [
+                $this->correctInvoice->handle($created[$index], $lead, [
                     'number' => $invoice->number,
                     'invoice_date' => $invoice->invoice_date->toDateString(),
                     'amount' => (string) ((int) $amount + 250_000),
@@ -932,7 +915,8 @@ Nanti saya kabari lagi.'],
      * One to three messages of a thread, from 20 minutes after submission until
      * $until, each some minutes to hours after the last. Every third message
      * is corrected right after posting, within the edit window. With
-     * $mistaken the requester first posts a comment and deletes it.
+     * $mistaken the Admin WO ($requester) first posts a comment and deletes
+     * it; $pelaksana is the target department's PIC Timesheet.
      *
      * @param  array<int, WorkOrder>  $created  filled while the timeline runs
      * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
@@ -1035,7 +1019,7 @@ Nanti saya kabari lagi.'],
     /**
      * @return array{title: string, description: string, target_date: string|null}
      */
-    private function workOrderAttributes(string $path, string $categoryCode, User $requester, CarbonImmutable $createdAt): array
+    private function workOrderAttributes(string $path, string $categoryCode, Department $requesterDepartment, CarbonImmutable $createdAt): array
     {
         /** @var array{0: string, 1: string} $template */
         $template = $this->faker->randomElement(self::TEMPLATES[$categoryCode]);
@@ -1043,7 +1027,7 @@ Nanti saya kabari lagi.'],
         $replacements = [
             '{lokasi}' => (string) $this->faker->randomElement(self::LOCATIONS),
             '{ruang}' => (string) $this->faker->randomElement(self::ROOMS),
-            '{dept}' => $requester->department->name,
+            '{dept}' => $requesterDepartment->name,
             '{plat}' => strtoupper($this->faker->bothify('DA #### ??')),
             '{jumlah}' => (string) $this->faker->numberBetween(2, 12),
             '{hari}' => (string) $this->faker->numberBetween(2, 7),
@@ -1088,17 +1072,17 @@ Nanti saya kabari lagi.'],
     }
 
     /**
-     * Uploads the report's photo and document as the pelaksana's pending
-     * comment uploads, then posts the comment that claims them.
+     * Uploads the report's photo and document as the PIC Timesheet's
+     * pending comment uploads, then posts the comment that claims them.
      */
-    private function postProgressReport(WorkOrder $workOrder, User $pelaksana): void
+    private function postProgressReport(WorkOrder $workOrder, User $pic): void
     {
         $collections = $workOrder->attachmentCollections();
-        $photo = $this->addAttachment->handle($workOrder, $collections[WorkOrder::COMMENT_IMAGE_UPLOADS], $this->sampleUpload(['kondisi.jpg', 'Kondisi_Terkini.jpg']), $pelaksana);
-        $details = $this->addAttachment->handle($workOrder, $collections[WorkOrder::COMMENT_FILE_UPLOADS], $this->sampleUpload(['dokumen.pdf', 'Rincian_Pekerjaan.pdf']), $pelaksana);
+        $photo = $this->addAttachment->handle($workOrder, $collections[WorkOrder::COMMENT_IMAGE_UPLOADS], $this->sampleUpload(['kondisi.jpg', 'Kondisi_Terkini.jpg']), $pic);
+        $details = $this->addAttachment->handle($workOrder, $collections[WorkOrder::COMMENT_FILE_UPLOADS], $this->sampleUpload(['dokumen.pdf', 'Rincian_Pekerjaan.pdf']), $pic);
 
         $image = '<img src="/attachments/'.$photo->uuid.'" alt="'.e($photo->name).'">';
-        $this->addComment->handle($workOrder, $pelaksana, sprintf(self::PROGRESS_REPORT, $image), [$details->uuid]);
+        $this->addComment->handle($workOrder, $pic, sprintf(self::PROGRESS_REPORT, $image), [$details->uuid]);
     }
 
     /**

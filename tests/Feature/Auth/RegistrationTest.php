@@ -20,7 +20,7 @@ beforeEach(function () {
 });
 
 /**
- * A valid registration for the IC production department, with overrides.
+ * A valid registration for the Unggul engineering department, with overrides.
  *
  * @param  array<string, mixed>  $overrides
  * @return array<string, mixed>
@@ -29,45 +29,37 @@ function registration(array $overrides = []): array
 {
     return [
         'name' => 'Rani Wijaya',
-        'email' => 'rani@ic.test',
+        'email' => 'rani@unggul.test',
         'password' => 'Rahasia-Kuat-2026',
         'password_confirmation' => 'Rahasia-Kuat-2026',
-        'company_id' => test()->ic->id,
-        'department_id' => test()->icDepartment->id,
+        'department_id' => test()->unggulDepartment->id,
         ...$overrides,
     ];
 }
 
 describe('page', function () {
-    it('offers only active companies with a domain and their active departments, with exactly these keys', function () {
+    it('offers only active executor companies with a domain and their active departments, with exactly these keys', function () {
         Company::factory()->inactive()->create(['email_domains' => ['old.test']]);
         Company::factory()->create(['email_domains' => []]);
         Company::factory()->create(['email_domains' => ['gone.test']])->delete();
-        Department::factory()->for($this->ic)->inactive()->create();
-        Department::factory()->for($this->ic)->create()->delete();
+        Department::factory()->for($this->unggul)->inactive()->create();
+        Department::factory()->for($this->unggul)->create()->delete();
         Department::factory()->for(Company::factory()->inactive())->create();
-        User::factory()->for($this->icDepartment)->create();
+        User::factory()->for($this->unggulDepartment)->create();
 
         $this->get(route('register'))->assertOk()->assertInertia(function (Assert $page) {
             $page->component('auth/Register')
-                ->has('companies', 2)
+                ->has('companies', 1)
                 ->has('companies.0', fn (Assert $company): AssertableInertia => $company
-                    ->where('id', $this->ic->id)
-                    ->where('name', 'IC')
-                    ->where('email_domains', ['ic.test']))
-                ->has('companies.1', fn (Assert $company): AssertableInertia => $company
                     ->where('id', $this->unggul->id)
                     ->where('name', 'Unggul')
                     ->where('email_domains', ['unggul.test', 'unggul.co.id']))
-                ->has('departments', 2)
+                ->has('departments', 1)
                 ->has('departments.0', fn (Assert $department): AssertableInertia => $department
                     ->where('id', $this->unggulDepartment->id)
                     ->where('code', 'ENG')
                     ->where('name', $this->unggulDepartment->name)
-                    ->where('company_id', $this->unggul->id))
-                ->has('departments.1', fn (Assert $department): AssertableInertia => $department
-                    ->where('id', $this->icDepartment->id)
-                    ->etc());
+                    ->where('company_id', $this->unggul->id));
 
             $pageProps = array_diff(array_keys($page->toArray()['props']), ['name', 'auth', 'pendingRegistrations', 'displayTimezone', 'sidebarOpen', 'errors']);
             expect(array_values($pageProps))->toEqualCanonicalizing(['companies', 'departments', 'passwordRules']);
@@ -85,62 +77,72 @@ describe('registering', function () {
     it('creates a pending account without roles or permissions and signs it in', function () {
         $this->post(route('register.store'), registration())->assertRedirect();
 
-        $user = User::where('email', 'rani@ic.test')->sole();
+        $user = User::where('email', 'rani@unggul.test')->sole();
 
         $this->assertAuthenticatedAs($user);
         expect($user->account_status)->toBe(AccountStatus::Pending)
             ->and($user->registered_at)->not->toBeNull()
             ->and($user->is_active)->toBeTrue()
             ->and($user->must_change_password)->toBeFalse()
-            ->and($user->department_id)->toBe($this->icDepartment->id)
+            ->and($user->department_id)->toBe($this->unggulDepartment->id)
             ->and($user->roles)->toBeEmpty()
             ->and($user->getAllPermissions())->toBeEmpty();
     });
 
     it('matches the email domain case-insensitively and stores the email in lowercase', function () {
-        $this->post(route('register.store'), registration(['email' => 'Rani.Wijaya@IC.TEST']))->assertSessionHasNoErrors();
+        $this->post(route('register.store'), registration(['email' => 'Rani.Wijaya@UNGGUL.TEST']))->assertSessionHasNoErrors();
 
-        expect(User::sole()->email)->toBe('rani.wijaya@ic.test');
+        expect(User::sole()->email)->toBe('rani.wijaya@unggul.test');
     });
 
     it('accepts any of the company domains', function () {
-        $this->post(route('register.store'), registration([
-            'email' => 'budi@unggul.co.id',
-            'company_id' => $this->unggul->id,
-            'department_id' => $this->unggulDepartment->id,
-        ]))->assertSessionHasNoErrors();
+        $this->post(route('register.store'), registration(['email' => 'budi@unggul.co.id']))->assertSessionHasNoErrors();
 
         expect(User::sole()->department_id)->toBe($this->unggulDepartment->id);
     });
 
-    it('refuses an email whose domain is not the chosen company\'s', function (string $email) {
+    it('refuses an email that is not of an executor company domain, IC included', function (string $email) {
         $this->post(route('register.store'), registration(['email' => $email]))
-            ->assertSessionHasErrors(['email' => 'Email harus memakai domain IC (ic.test).']);
+            ->assertSessionHasErrors(['email' => 'Email harus memakai domain perusahaan pelaksana (unggul.test, unggul.co.id).']);
 
         $this->assertGuest();
         expect(User::count())->toBe(0);
     })->with([
-        'another company' => 'rani@unggul.test',
-        'a subdomain' => 'rani@mail.ic.test',
-        'a lookalike' => 'rani@ic.test.evil.test',
+        'the client company (IC)' => 'rani@ic.test',
+        'a subdomain' => 'rani@mail.unggul.test',
+        'a lookalike' => 'rani@unggul.test.evil.test',
         'an unknown domain' => 'rani@gmail.com',
     ]);
 
+    it('refuses an IC registration even with an IC department', function () {
+        $this->post(route('register.store'), registration(['email' => 'rani@ic.test', 'department_id' => $this->icDepartment->id]))
+            ->assertSessionHasErrors(['email', 'department_id']);
+
+        expect(User::count())->toBe(0);
+    });
+
+    it('ignores a company sent with the request: the email domain decides', function () {
+        $this->post(route('register.store'), registration(['company_id' => $this->ic->id]))->assertSessionHasNoErrors();
+
+        expect(User::sole()->department_id)->toBe($this->unggulDepartment->id);
+    });
+
     it('refuses a department of another company, or an inactive or deleted one', function (Closure $department) {
         $this->post(route('register.store'), registration(['department_id' => $department()->id]))
-            ->assertSessionHasErrors(['department_id' => 'Pilih departemen aktif dari perusahaan yang dipilih.']);
+            ->assertSessionHasErrors(['department_id' => 'Pilih departemen aktif dari perusahaan email Anda.']);
 
         expect(User::count())->toBe(0);
     })->with([
-        'another company' => fn () => test()->unggulDepartment,
-        'inactive' => fn () => Department::factory()->for(test()->ic)->inactive()->create(),
-        'deleted' => fn () => tap(Department::factory()->for(test()->ic)->create())->delete(),
+        'another company' => fn () => test()->icDepartment,
+        'another executor company' => fn () => Department::factory()->for(Company::factory()->create(['email_domains' => ['lain.test']]))->create(),
+        'inactive' => fn () => Department::factory()->for(test()->unggul)->inactive()->create(),
+        'deleted' => fn () => tap(Department::factory()->for(test()->unggul)->create())->delete(),
     ]);
 
     it('refuses an inactive or deleted company', function (Closure $change) {
-        $change($this->ic);
+        $change($this->unggul);
 
-        $this->post(route('register.store'), registration())->assertSessionHasErrors('company_id');
+        $this->post(route('register.store'), registration())->assertSessionHasErrors('email');
 
         expect(User::count())->toBe(0);
     })->with([
@@ -150,11 +152,11 @@ describe('registering', function () {
 
     it('requires a confirmed password that meets the defaults, and every field', function () {
         $this->post(route('register.store'), registration(['password_confirmation' => 'lain']))->assertSessionHasErrors('password');
-        $this->post(route('register.store'), [])->assertSessionHasErrors(['name', 'email', 'password', 'company_id', 'department_id']);
+        $this->post(route('register.store'), [])->assertSessionHasErrors(['name', 'email', 'password', 'department_id']);
     });
 
     it('refuses an email that is already registered, even by a deleted account', function () {
-        User::factory()->create(['email' => 'rani@ic.test'])->delete();
+        User::factory()->create(['email' => 'rani@unggul.test'])->delete();
 
         $this->post(route('register.store'), registration())->assertSessionHasErrors('email');
     });
@@ -166,7 +168,7 @@ describe('registering', function () {
             'account_status' => 'approved',
             'is_active' => false,
             'must_change_password' => true,
-            'roles' => ['admin', 'pemohon'],
+            'roles' => ['admin', 'admin-wo'],
             'permissions' => ['users.view'],
             'registered_at' => null,
             'reviewed_by' => 1,
@@ -195,8 +197,8 @@ describe('registering', function () {
             ->and($activity->properties['ip'])->toBe('127.0.0.1')
             ->and($activity->attribute_changes['attributes'])->toBe([
                 'name' => 'Rani Wijaya',
-                'email' => 'rani@ic.test',
-                'department_id' => $this->icDepartment->id,
+                'email' => 'rani@unggul.test',
+                'department_id' => $this->unggulDepartment->id,
                 'account_status' => 'pending',
             ]);
     });

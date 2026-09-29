@@ -191,11 +191,12 @@ abstract class WorkOrderStatus extends State
     }
 
     /**
-     * Whether a work order needs a target department to enter this status.
-     * True for every status after the first submission (FLOW.md §5), so a
-     * submitted work order never lacks one; every new status must decide it.
+     * Whether a work order in this status has a number: true for every
+     * status after the first submission (FLOW.md §5), backed by the
+     * work_orders_submitted_number_check constraint; every new status must
+     * decide it.
      */
-    public function requiresTargetDepartment(): bool
+    public function requiresNumber(): bool
     {
         return false;
     }

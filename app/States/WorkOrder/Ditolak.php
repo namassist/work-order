@@ -54,7 +54,7 @@ class Ditolak extends WorkOrderStatus
         return true;
     }
 
-    public function requiresTargetDepartment(): bool
+    public function requiresNumber(): bool
     {
         return true;
     }
@@ -76,6 +76,6 @@ class Ditolak extends WorkOrderStatus
 
     public function waitingMessage(WorkOrder $workOrder): string
     {
-        return 'Menunggu pemohon merevisi dan mengajukan ulang.';
+        return 'Menunggu Admin WO merevisi dan mengajukan ulang.';
     }
 }

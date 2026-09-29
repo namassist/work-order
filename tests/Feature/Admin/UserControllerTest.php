@@ -4,26 +4,28 @@ use App\Enums\Permission;
 use App\Enums\SystemRole;
 use App\Models\Department;
 use App\Models\User;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Role;
 
 describe('index', function () {
     it('filters users by department, role, and status', function () {
         $finance = Department::factory()->create();
         $admin = adminUser();
-        User::factory()->for($finance)->inactive()->create(['name' => 'Budi'])->assignRole('keuangan');
-        User::factory()->for($finance)->create(['name' => 'Citra'])->assignRole('keuangan');
+        User::factory()->for($finance)->inactive()->create(['name' => 'Budi'])->assignRole('finance');
+        User::factory()->for($finance)->create(['name' => 'Citra'])->assignRole('finance');
         User::factory()->for($finance)->inactive()->create(['name' => 'Dewi'])->assignRole('viewer');
 
         $this->actingAs($admin)
-            ->get(route('admin.users.index', ['department' => $finance->id, 'role' => 'keuangan', 'status' => 'inactive']))
+            ->get(route('admin.users.index', ['department' => $finance->id, 'role' => 'finance', 'status' => 'inactive']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->component('admin/users/Index')
                 ->has('users.data', 1)
                 ->where('users.data.0.name', 'Budi')
-                ->where('users.data.0.roles', ['keuangan']));
+                ->where('users.data.0.roles', [['name' => 'finance', 'label' => 'Finance']]));
     });
 
     it('searches users by name or email', function () {
@@ -131,14 +133,14 @@ describe('store', function () {
     it('creates a user with roles and the default password without sending email', function () {
         Notification::fake();
         config(['auth.default_user_password' => 'Rahasia#2026']);
-        $department = Department::factory()->client()->create();
+        $department = Department::factory()->create();
 
         $this->actingAs(adminUser())
             ->post(route('admin.users.store'), [
                 'name' => 'Budi',
                 'email' => 'budi@example.com',
                 'department_id' => $department->id,
-                'roles' => ['pemohon', 'viewer'],
+                'roles' => ['admin-wo', 'viewer'],
             ])
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('admin.users.index'));
@@ -149,7 +151,7 @@ describe('store', function () {
             ->is_active->toBeTrue()
             ->must_change_password->toBeTrue()
             ->and(Hash::check('Rahasia#2026', $user->password))->toBeTrue()
-            ->and($user->getRoleNames()->sort()->values()->all())->toBe(['pemohon', 'viewer']);
+            ->and($user->getRoleNames()->sort()->values()->all())->toBe(['admin-wo', 'viewer']);
         Notification::assertNothingSent();
     });
 
@@ -233,7 +235,7 @@ describe('update', function () {
                 'email' => $user->email,
                 'department_id' => $department->id,
                 'is_active' => false,
-                'roles' => ['keuangan'],
+                'roles' => ['finance'],
             ])
             ->assertSessionHasNoErrors();
 
@@ -242,7 +244,7 @@ describe('update', function () {
             ->name->toBe('Nama Baru')
             ->department_id->toBe($department->id)
             ->is_active->toBeFalse()
-            ->and($user->getRoleNames()->all())->toBe(['keuangan']);
+            ->and($user->getRoleNames()->all())->toBe(['finance']);
     });
 
     it('refuses roles for an account under review, which get them on approval', function (string $state) {
@@ -353,7 +355,7 @@ describe('update', function () {
 describe('destroy', function () {
     it('soft-deletes a user and keeps their role assignments', function () {
         $admin = adminUser();
-        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('pemohon');
+        $user = User::factory()->create()->assignRole('admin-wo');
 
         $this->actingAs($admin)
             ->delete(route('admin.users.destroy', $user))
@@ -421,6 +423,13 @@ describe('authorization', function () {
 });
 
 describe('roles fit the company', function () {
+    beforeEach(function () {
+        // No initial role is for client companies (FLOW.md v2 §3); one made on the Role page may be.
+        test()->seed(RolePermissionSeeder::class);
+        Role::create(['name' => 'klien', 'label' => 'Klien', 'guard_name' => 'web', 'company_scope' => 'client'])
+            ->givePermissionTo(Permission::WorkOrdersView->value);
+    });
+
     it('accepts or refuses a role depending on the department\'s company', function (string $role, bool $clientDepartment, bool $fits) {
         config(['auth.default_user_password' => 'Rahasia#2026']);
         $department = $clientDepartment ? Department::factory()->client()->create() : Department::factory()->create();
@@ -440,23 +449,23 @@ describe('roles fit the company', function () {
             $this->assertDatabaseMissing('users', ['email' => 'budi@example.com']);
         }
     })->with([
-        'pemohon, IC' => ['pemohon', true, true],
-        'pemohon, Unggul' => ['pemohon', false, false],
-        'pelaksana, IC' => ['pelaksana', true, false],
-        'pelaksana, Unggul' => ['pelaksana', false, true],
-        'koordinator, IC' => ['koordinator', true, false],
-        'koordinator, Unggul' => ['koordinator', false, true],
-        'keuangan, IC' => ['keuangan', true, false],
-        'keuangan, Unggul' => ['keuangan', false, true],
+        'a client role, IC' => ['klien', true, true],
+        'a client role, Unggul' => ['klien', false, false],
+        'Admin WO, IC' => ['admin-wo', true, false],
+        'Admin WO, Unggul' => ['admin-wo', false, true],
+        'Lead Operational, IC' => ['lead-operational', true, false],
+        'Lead Operational, Unggul' => ['lead-operational', false, true],
+        'Finance, IC' => ['finance', true, false],
+        'Finance, Unggul' => ['finance', false, true],
         'admin, IC' => ['admin', true, false],
         'admin, Unggul' => ['admin', false, true],
-        'viewer, IC' => ['viewer', true, true],
-        'viewer, Unggul' => ['viewer', false, true],
+        'Viewer, IC' => ['viewer', true, false],
+        'Viewer, Unggul' => ['viewer', false, true],
     ]);
 
     it('refuses roles that do not fit when an update changes the roles', function () {
         $admin = adminUser();
-        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('pemohon');
+        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('klien');
 
         $this->actingAs($admin)
             ->put(route('admin.users.update', $user), [
@@ -464,16 +473,16 @@ describe('roles fit the company', function () {
                 'email' => $user->email,
                 'department_id' => $user->department_id,
                 'is_active' => true,
-                'roles' => ['pemohon', 'keuangan'],
+                'roles' => ['klien', 'finance'],
             ])
-            ->assertSessionHasErrors(['roles' => 'Role keuangan tidak dapat diberikan kepada pengguna '.$user->department->company->name.' (perusahaan klien).']);
+            ->assertSessionHasErrors(['roles' => 'Role finance tidak dapat diberikan kepada pengguna '.$user->department->company->name.' (perusahaan klien).']);
 
-        expect($user->refresh()->getRoleNames()->all())->toBe(['pemohon']);
+        expect($user->refresh()->getRoleNames()->all())->toBe(['klien']);
     });
 
     it('refuses moving a user to another company\'s department while their roles do not fit it', function () {
         $editor = userWithPermissions(Permission::UsersUpdate);
-        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('pemohon');
+        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('klien');
         $unggul = Department::factory()->create();
 
         // Without assignRoles, the roles field is not sent: the current roles are checked.
@@ -491,7 +500,7 @@ describe('roles fit the company', function () {
 
     it('moves a user to another company when the new roles fit it', function () {
         $admin = adminUser();
-        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('pemohon');
+        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('klien');
         $unggul = Department::factory()->create();
 
         $this->actingAs($admin)
@@ -500,16 +509,16 @@ describe('roles fit the company', function () {
                 'email' => $user->email,
                 'department_id' => $unggul->id,
                 'is_active' => true,
-                'roles' => ['pelaksana'],
+                'roles' => ['lead-operational'],
             ])
             ->assertSessionHasNoErrors();
 
         expect($user->refresh())
             ->department_id->toBe($unggul->id)
-            ->and($user->getRoleNames()->all())->toBe(['pelaksana']);
+            ->and($user->getRoleNames()->all())->toBe(['lead-operational']);
     });
 
-    it('gives the form each department\'s company and each role\'s scope', function () {
+    it('gives the form each department\'s company and each role\'s label and scope', function () {
         $admin = adminUser();
         $client = Department::factory()->client()->create(['code' => 'PRD']);
 
@@ -521,13 +530,16 @@ describe('roles fit the company', function () {
                     'name' => $client->company->name,
                     'scope' => 'client',
                 ])
-                ->where('roles', fn ($roles): bool => collect($roles)->pluck('company_scope', 'name')->all() === [
-                    'admin' => 'executor',
-                    'keuangan' => 'executor',
-                    'koordinator' => 'executor',
-                    'pelaksana' => 'executor',
-                    'pemohon' => 'client',
-                    'viewer' => null,
+                ->where('roles', fn ($roles): bool => collect($roles)->mapWithKeys(fn (array $role): array => [$role['name'] => [$role['label'], $role['company_scope']]])->all() === [
+                    'admin' => ['Admin Sistem', 'executor'],
+                    'admin-wo' => ['Admin WO', 'executor'],
+                    'direktur' => ['Direktur', 'executor'],
+                    'finance' => ['Finance', 'executor'],
+                    'klien' => ['Klien', 'client'],
+                    'lead-operational' => ['Lead Operational', 'executor'],
+                    'pic-timesheet' => ['PIC Timesheet', 'executor'],
+                    'rental' => ['Rental', 'executor'],
+                    'viewer' => ['Viewer', 'executor'],
                 ]));
     });
 });

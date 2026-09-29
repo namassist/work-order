@@ -16,9 +16,9 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
-    $this->department = Department::factory()->client()->create(['code' => 'IT']);
+    $this->department = Department::factory()->create(['code' => 'IT']);
     $this->user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersComment);
-    $this->workOrder = WorkOrder::factory()->submitted()->create(['requester_department_id' => $this->department->id]);
+    $this->workOrder = WorkOrder::factory()->submitted()->create();
 });
 
 /**
@@ -121,8 +121,8 @@ describe('posting', function () {
 });
 
 describe('access', function () {
-    it('answers 404 for another department\'s work order', function (Closure $request) {
-        $other = WorkOrder::factory()->submitted()->create();
+    it('answers 404 for a draft the user cannot see', function (Closure $request) {
+        $other = WorkOrder::factory()->create();
         $comment = WorkOrderComment::factory()->for($other)->for($this->user, 'author')->create();
 
         $request($this->actingAs($this->user), $other, $comment)->assertNotFound();
@@ -133,7 +133,7 @@ describe('access', function () {
     ]);
 
     it('answers 404 for a comment of another work order', function (Closure $request) {
-        $other = WorkOrder::factory()->submitted()->create(['requester_department_id' => $this->department->id]);
+        $other = WorkOrder::factory()->submitted()->create();
         $comment = WorkOrderComment::factory()->for($other)->for($this->user, 'author')->create();
 
         $request($this->actingAs($this->user), $comment)->assertNotFound();
@@ -321,7 +321,7 @@ describe('deleting', function () {
 describe('timeline', function () {
     it('merges status changes and comments in chronological order', function () {
         $transition = app(TransitionWorkOrder::class);
-        $draft = WorkOrder::factory()->targeting(Department::factory()->create())->create(['requester_department_id' => $this->department->id]);
+        $draft = WorkOrder::factory()->targeting(Department::factory()->create())->create();
         $this->workOrder = $draft;
         $draft->statusHistories()->create(['to_status' => 'draft', 'user_id' => $this->user->id]);
 

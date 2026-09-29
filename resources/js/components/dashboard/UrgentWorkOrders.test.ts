@@ -13,7 +13,7 @@ const workOrder: UrgentWorkOrder = {
     number: 'WO/PRD/2026/09/0003',
     title: 'Pompa air mati',
     category: 'Perbaikan',
-    requester: { id: 4, name: 'Eko Purnomo' },
+    requester_name: 'Eko Purnomo',
     status: { value: 'dikerjakan', label: 'Dikerjakan', tone: 'info' },
     submitted_at: '2026-09-20T01:00:00+00:00',
 };

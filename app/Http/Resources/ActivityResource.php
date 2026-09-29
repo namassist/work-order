@@ -45,12 +45,14 @@ class ActivityResource extends JsonResource
         'is_active' => 'Status',
         'department_id' => 'Departemen',
         'target_department_id' => 'Departemen tujuan',
-        'requester_id' => 'Pemohon',
-        'requester_name' => 'Nama kontak pemohon',
+        'requester_department_id' => 'Departemen pemohon',
+        'requester_name' => 'Kontak pemohon',
+        'pic_name' => 'PIC Work Order',
         'company_id' => 'Perusahaan',
         'is_client' => 'Jenis perusahaan',
         'email_domains' => 'Domain email',
         'company_scope' => 'Berlaku untuk',
+        'label' => 'Label',
         'must_change_password' => 'Wajib ganti password',
         'account_status' => 'Status akun',
         'rejection_reason' => 'Alasan penolakan',
@@ -72,26 +74,16 @@ class ActivityResource extends JsonResource
     ];
 
     /**
-     * Logged foreign keys shown as the referenced record's code (a user's
-     * name, see REFERENCE_LABELS).
+     * Logged foreign keys shown as the referenced record's code.
      *
-     * @var array<string, class-string<Company|Department|WorkOrderCategory|User>>
+     * @var array<string, class-string<Company|Department|WorkOrderCategory>>
      */
     private const array REFERENCE_FIELDS = [
-        'requester_id' => User::class,
+        'requester_department_id' => Department::class,
         'company_id' => Company::class,
         'department_id' => Department::class,
         'target_department_id' => Department::class,
         'work_order_category_id' => WorkOrderCategory::class,
-    ];
-
-    /**
-     * The column shown for a referenced record when it is not `code`.
-     *
-     * @var array<string, string>
-     */
-    private const array REFERENCE_LABELS = [
-        'requester_id' => 'name',
     ];
 
     /**
@@ -140,7 +132,7 @@ class ActivityResource extends JsonResource
                 ->unique()
                 ->values();
 
-            $codes[$field] = $ids->isEmpty() ? [] : $model::withTrashed()->whereKey($ids)->pluck(self::REFERENCE_LABELS[$field] ?? 'code', 'id')->all();
+            $codes[$field] = $ids->isEmpty() ? [] : $model::withTrashed()->whereKey($ids)->pluck('code', 'id')->all();
         }
 
         return $codes;
@@ -194,25 +186,22 @@ class ActivityResource extends JsonResource
     }
 
     /**
-     * "Diinput oleh X atas nama Y" for a work order entered on someone's
-     * behalf; null for every other entry.
+     * "Diinput oleh X atas nama Y" for a created work order (the Admin WO
+     * and the IC contact); null for every other entry.
      */
     private function summary(): ?string
     {
         $activity = $this->resource;
-        $requesterId = data_get($activity->attribute_changes, 'attributes.requester_id');
         $contactName = data_get($activity->attribute_changes, 'attributes.requester_name');
 
         if ($activity->subject_type !== AuditSubject::WorkOrder->value
             || $activity->event !== AuditEvent::Created->value
             || ! $activity->causer instanceof User
-            || ($requesterId === $activity->causer->id && $contactName === null)) {
+            || ! is_string($contactName)) {
             return null;
         }
 
-        $requester = $contactName ?? $this->referenceCodes['requester_id'][$requesterId] ?? '#'.$requesterId;
-
-        return __('Diinput oleh :causer atas nama :requester', ['causer' => $activity->causer->name, 'requester' => $requester]);
+        return __('Diinput oleh :causer atas nama :requester', ['causer' => $activity->causer->name, 'requester' => $contactName]);
     }
 
     /**

@@ -17,12 +17,24 @@ describe('index', function () {
             ->get(route('admin.roles.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->component('admin/roles/Index')
-                ->has('roles', 6)
+                ->has('roles', 8)
                 ->where('roles.0.name', 'admin')
+                ->where('roles.0.label', 'Admin Sistem')
                 ->where('roles.0.company_scope', ['value' => 'executor', 'label' => 'Perusahaan pelaksana'])
-                ->where('roles.5.name', 'viewer')
-                ->where('roles.5.company_scope', null)
-                ->where('roles.5.users_count', 2));
+                ->where('roles.1.name', 'admin-wo')
+                ->where('roles.1.label', 'Admin WO')
+                ->where('roles.7.name', 'viewer')
+                ->where('roles.7.company_scope', ['value' => 'executor', 'label' => 'Perusahaan pelaksana'])
+                ->where('roles.7.users_count', 2));
+    });
+
+    it('shows the name as the label of a role without one', function () {
+        Role::create(['name' => 'lama', 'guard_name' => 'web']);
+
+        $this->actingAs(adminUser())
+            ->get(route('admin.roles.index'))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page
+                ->where('roles', fn ($roles): bool => collect($roles)->firstWhere('name', 'lama')['label'] === 'lama'));
     });
 });
 
@@ -31,14 +43,27 @@ describe('store', function () {
         $this->actingAs(adminUser())
             ->post(route('admin.roles.store'), [
                 'name' => 'teknisi',
+                'label' => 'Teknisi Lapangan',
+                'company_scope' => 'executor',
                 'permissions' => [Permission::WorkOrdersView->value, Permission::WorkOrdersUpdate->value],
             ])
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('admin.roles.index'));
+            ->assertRedirect(route('admin.roles.index'))
+            ->assertInertiaFlash('toast.message', 'Role Teknisi Lapangan dibuat.');
 
-        expect(Role::findByName('teknisi')->permissions->pluck('name')->sort()->values()->all())
+        expect(Role::findByName('teknisi'))
+            ->label->toBe('Teknisi Lapangan')
+            ->and(Role::findByName('teknisi')->permissions->pluck('name')->sort()->values()->all())
             ->toBe([Permission::WorkOrdersUpdate->value, Permission::WorkOrdersView->value]);
     });
+
+    it('requires a label of at most 100 characters', function (?string $label) {
+        $this->actingAs(adminUser())
+            ->post(route('admin.roles.store'), ['name' => 'teknisi', 'label' => $label, 'permissions' => []])
+            ->assertSessionHasErrors('label');
+
+        expect(Role::where('name', 'teknisi')->exists())->toBeFalse();
+    })->with(['missing' => [null], 'too long' => [str_repeat('a', 101)]]);
 
     it('rejects a duplicate name and unknown permissions', function () {
         $this->actingAs(adminUser())
@@ -55,6 +80,7 @@ describe('update', function () {
         $this->actingAs($admin)
             ->put(route('admin.roles.update', $role), [
                 'name' => 'pengamat',
+                'label' => 'Pengamat',
                 'company_scope' => 'executor',
                 'permissions' => [Permission::UsersView->value],
             ])
@@ -62,6 +88,7 @@ describe('update', function () {
 
         expect($role->refresh())
             ->name->toBe('pengamat')
+            ->label->toBe('Pengamat')
             ->and($role->permissions->pluck('name')->all())->toBe([Permission::UsersView->value]);
     });
 
@@ -90,7 +117,7 @@ describe('update', function () {
         $manager = User::factory()->create()->assignRole($supervisor);
 
         $this->actingAs($manager)
-            ->put(route('admin.roles.update', $supervisor), ['name' => 'supervisor', 'permissions' => []])
+            ->put(route('admin.roles.update', $supervisor), ['name' => 'supervisor', 'label' => 'Supervisor', 'permissions' => []])
             ->assertSessionHasErrors(['permissions' => 'Role ini satu-satunya sumber hak kelola role bagi pengguna aktif; permission roles.manage tidak boleh dicabut.']);
 
         expect($supervisor->refresh()->hasPermissionTo(Permission::RolesManage->value))->toBeTrue();
@@ -103,7 +130,7 @@ describe('update', function () {
         User::factory()->create()->assignRole($supervisor);
 
         $this->actingAs($admin)
-            ->put(route('admin.roles.update', $supervisor), ['name' => 'supervisor', 'permissions' => []])
+            ->put(route('admin.roles.update', $supervisor), ['name' => 'supervisor', 'label' => 'Supervisor', 'permissions' => []])
             ->assertSessionHasNoErrors();
 
         expect($supervisor->refresh()->permissions)->toBeEmpty();
@@ -171,6 +198,7 @@ describe('company scope', function () {
         $this->actingAs(adminUser())
             ->post(route('admin.roles.store'), [
                 'name' => 'teknisi',
+                'label' => 'Teknisi',
                 'company_scope' => 'executor',
                 'permissions' => [Permission::WorkOrdersView->value],
             ])
@@ -196,6 +224,7 @@ describe('company scope', function () {
         $this->actingAs(adminUser())
             ->post(route('admin.roles.store'), [
                 'name' => 'viewer-internal',
+                'label' => 'Viewer internal',
                 'company_scope' => 'executor',
                 'permissions' => [Permission::WorkOrdersView->value, Permission::DepartmentsView->value, Permission::ActivityLogView->value],
             ])
@@ -210,7 +239,7 @@ describe('company scope', function () {
             ->givePermissionTo(Permission::ActivityLogView->value);
 
         $this->actingAs($admin)
-            ->put(route('admin.roles.update', $role), ['name' => 'auditor', 'company_scope' => null, 'permissions' => [Permission::ActivityLogView->value]])
+            ->put(route('admin.roles.update', $role), ['name' => 'auditor', 'label' => 'Auditor', 'company_scope' => null, 'permissions' => [Permission::ActivityLogView->value]])
             ->assertSessionHasErrors('permissions');
 
         expect($role->refresh()->company_scope)->toBe('executor');
@@ -223,6 +252,7 @@ describe('company scope', function () {
         $this->actingAs($admin)
             ->put(route('admin.roles.update', $role), [
                 'name' => SystemRole::Admin->value,
+                'label' => 'Admin Sistem',
                 'company_scope' => $scope,
                 'permissions' => Permission::values(),
             ])
@@ -232,26 +262,26 @@ describe('company scope', function () {
     it('refuses a scope that excludes users who already hold the role, deleted ones included', function (bool $deleted) {
         $admin = adminUser();
         $role = Role::findByName('viewer');
-        $holder = User::factory()->for(Department::factory()->client())->create()->assignRole('viewer');
+        $holder = User::factory()->create()->assignRole('viewer');
 
         if ($deleted) {
             $holder->delete();
         }
 
         $this->actingAs($admin)
-            ->put(route('admin.roles.update', $role), ['name' => 'viewer', 'company_scope' => 'executor', 'permissions' => []])
-            ->assertSessionHasErrors(['company_scope' => '1 pengguna dengan role ini bukan dari perusahaan pelaksana. Ubah role mereka terlebih dahulu.']);
+            ->put(route('admin.roles.update', $role), ['name' => 'viewer', 'label' => 'Viewer', 'company_scope' => 'client', 'permissions' => []])
+            ->assertSessionHasErrors(['company_scope' => '1 pengguna dengan role ini bukan dari perusahaan klien. Ubah role mereka terlebih dahulu.']);
 
-        expect($role->refresh()->company_scope)->toBeNull();
+        expect($role->refresh()->company_scope)->toBe('executor');
     })->with(['active holder' => false, 'deleted holder' => true]);
 
     it('narrows the scope when every holder fits', function () {
         $admin = adminUser();
-        $role = Role::findByName('viewer');
-        User::factory()->for(Department::factory()->client())->create()->assignRole('viewer');
+        $role = Role::create(['name' => 'umum', 'guard_name' => 'web']);
+        User::factory()->for(Department::factory()->client())->create()->assignRole('umum');
 
         $this->actingAs($admin)
-            ->put(route('admin.roles.update', $role), ['name' => 'viewer', 'company_scope' => 'client', 'permissions' => [Permission::WorkOrdersView->value]])
+            ->put(route('admin.roles.update', $role), ['name' => 'umum', 'label' => 'Umum', 'company_scope' => 'client', 'permissions' => [Permission::WorkOrdersView->value]])
             ->assertSessionHasNoErrors();
 
         expect($role->refresh()->company_scope)->toBe('client');

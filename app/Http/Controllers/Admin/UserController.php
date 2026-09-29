@@ -11,6 +11,7 @@ use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\Department;
 use App\Models\User;
+use App\Support\RoleLabel;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -47,7 +48,7 @@ class UserController extends Controller
         }
 
         $users = User::query()
-            ->with(['department:id,code,name,deleted_at', 'roles:id,name'])
+            ->with(['department:id,code,name,deleted_at', 'roles:id,name,label'])
             ->search($filters['search'] ?? null)
             ->when($filters['department'] ?? null, fn ($query, int $departmentId) => $query->where('department_id', $departmentId))
             ->when($filters['role'] ?? null, fn ($query, string $role) => $query->whereRelation('roles', 'name', $role))
@@ -68,7 +69,7 @@ class UserController extends Controller
                 'account_status' => $user->account_status->value,
                 'deleted_at' => $user->deleted_at?->toIso8601String(),
                 'department' => $user->department->only(['id', 'code', 'name']),
-                'roles' => $user->roles->pluck('name')->all(),
+                'roles' => $user->roles->map(RoleLabel::option(...))->all(),
             ]);
 
         $authUser = $request->user();
@@ -84,7 +85,7 @@ class UserController extends Controller
             ],
             'stats' => $this->statusCounts(),
             'departments' => Department::orderBy('code')->get(['id', 'code', 'name']),
-            'roles' => $this->roleNames(),
+            'roles' => $this->roleOptions(),
             'can' => [
                 'create' => $authUser?->can('create', User::class) ?? false,
                 'update' => $authUser?->can('update', new User) ?? false,
@@ -266,9 +267,10 @@ class UserController extends Controller
     }
 
     /**
-     * Role names with the company scope each one fits (null: any company).
+     * Roles with their label and the company scope each one fits (null: any
+     * company).
      *
-     * @return list<array{name: string, company_scope: string|null}>
+     * @return list<array{name: string, label: string, company_scope: string|null}>
      */
     private function assignableRoles(): array
     {
@@ -276,7 +278,7 @@ class UserController extends Controller
             ->orderBy('name')
             ->get()
             ->map(fn (Role $role): array => [
-                'name' => $role->name,
+                ...RoleLabel::option($role),
                 'company_scope' => CompanyScope::tryFrom((string) $role->getAttribute('company_scope'))?->value,
             ])
             ->all());
@@ -310,14 +312,16 @@ class UserController extends Controller
     }
 
     /**
-     * @return list<string>
+     * The roles the list filters by, by name with their label.
+     *
+     * @return list<array{name: string, label: string}>
      */
-    private function roleNames(): array
+    private function roleOptions(): array
     {
         return array_values(Role::where('guard_name', 'web')
             ->orderBy('name')
             ->get()
-            ->map(fn (Role $role): string => $role->name)
+            ->map(RoleLabel::option(...))
             ->all());
     }
 }

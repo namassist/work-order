@@ -175,23 +175,6 @@ class User extends Authenticatable
     }
 
     /**
-     * Accounts that can be the requester of an on-behalf work order in the
-     * department: approved, active, and not deleted. The same rule backs the
-     * picker and the validation of the chosen account
-     * (WorkOrderRequesterRules), so pending and rejected registrations never
-     * pass either.
-     *
-     * @param  Builder<self>  $query
-     */
-    #[Scope]
-    protected function activeRequesterIn(Builder $query, int $departmentId): void
-    {
-        $query->where('department_id', $departmentId)
-            ->where('is_active', true)
-            ->where('account_status', AccountStatus::Approved->value);
-    }
-
-    /**
      * Self-registered accounts (FLOW.md §3), the ones the Pendaftaran page reviews.
      *
      * @param  Builder<self>  $query

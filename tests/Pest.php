@@ -73,6 +73,19 @@ function adminUser(): User
 }
 
 /**
+ * Create a user holding one seeded role, by slug (e.g. 'admin-wo'), in the
+ * given department or a department of a new executor company (Unggul).
+ */
+function userWithRole(string $role, ?Department $department = null): User
+{
+    test()->seed(RolePermissionSeeder::class);
+
+    return User::factory()
+        ->create($department instanceof Department ? ['department_id' => $department->id] : [])
+        ->assignRole($role);
+}
+
+/**
  * Create a user in the given department holding exactly the given permissions.
  */
 function userInDepartment(Department $department, Permission ...$permissions): User

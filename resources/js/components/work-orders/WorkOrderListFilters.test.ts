@@ -80,7 +80,7 @@ describe('WorkOrderListFilters', () => {
         expect(inBody('[data-test="filter-trashed"]')).not.toBeNull();
     });
 
-    it('hides Departemen without view-all and Tampilkan terhapus without restore', async () => {
+    it('hides Departemen for client users and Tampilkan terhapus without restore', async () => {
         const wrapper = mountFilters(
             {},
             { departments: null, canRestore: false },

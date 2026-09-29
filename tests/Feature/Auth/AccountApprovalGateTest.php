@@ -41,7 +41,6 @@ it('redirects every other route to the status page, even with permissions', func
     'work order store' => ['POST', fn (): string => route('work-orders.store')],
     'work order detail' => ['GET', fn (WorkOrder $workOrder): string => route('work-orders.show', $workOrder)],
     'work order export' => ['GET', fn (): string => route('work-orders.export')],
-    'requester accounts' => ['GET', fn (): string => route('work-orders.requester-accounts')],
     'profile' => ['GET', fn (): string => route('profile.edit')],
     'profile update' => ['PATCH', fn (): string => route('profile.update')],
     'security' => ['GET', fn (): string => route('security.edit')],

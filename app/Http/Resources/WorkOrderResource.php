@@ -35,12 +35,12 @@ class WorkOrderResource extends JsonResource
             'requester_department' => $workOrder->requesterDepartment->only(['id', 'code', 'name']),
             'target_department' => $workOrder->targetDepartment?->only(['id', 'code', 'name']),
             'category' => $workOrder->category->only(['id', 'code', 'name']),
-            // An account (id set) or, when entered on behalf, a contact name (id null).
-            'requester' => ['id' => $workOrder->requester?->id, 'name' => $workOrder->requesterName()],
-            // Only the name: IC users see who entered their work order (a
-            // koordinator of the executor company), nothing else about them.
+            // The IC contact who made the request (FLOW.md §4).
+            'requester_name' => $workOrder->requester_name,
+            'pic_name' => $workOrder->pic_name,
+            // Only the name of the Admin WO who entered it: the v1 isolation
+            // safeguard still shows client company users nothing more.
             'entered_by' => ['name' => $workOrder->enteredBy->name],
-            'entered_on_behalf' => $workOrder->wasEnteredOnBehalf(),
             'created_at' => $workOrder->created_at?->toIso8601String(),
             'updated_at' => $workOrder->updated_at?->toIso8601String(),
             'deleted_at' => $workOrder->deleted_at?->toIso8601String(),

@@ -246,7 +246,7 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                         :linked="workOrder.deleted_at === null"
                     />
                     <TableCell class="hidden md:table-cell">
-                        <PersonName :name="workOrder.requester.name" />
+                        <PersonName :name="workOrder.requester_name" />
                     </TableCell>
                     <TableCell class="hidden font-mono xl:table-cell">
                         {{ workOrder.requester_department.code }}

@@ -64,8 +64,13 @@ export type AssignableDepartment = DepartmentOption & {
     company: { code: string; name: string; scope: CompanyScope };
 };
 
-export type AssignableRole = {
+/** A role as the UI names it: its stable slug and its display label. */
+export type RoleOption = {
     name: string;
+    label: string;
+};
+
+export type AssignableRole = RoleOption & {
     company_scope: CompanyScope | null;
 };
 
@@ -89,7 +94,7 @@ export type ManagedUser = {
     account_status: AccountStatus;
     deleted_at: string | null;
     department: DepartmentOption | null;
-    roles: string[];
+    roles: RoleOption[];
 };
 
 export type EditableUser = {
@@ -110,7 +115,7 @@ export type Registration = {
     is_active: boolean;
     department: DepartmentOption;
     company: { id: number; name: string; scope: CompanyScope };
-    roles: string[];
+    roles: RoleOption[];
     registered_at: string | null;
     reviewed_at: string | null;
     reviewer: string | null;
@@ -125,6 +130,7 @@ export type RegistrationDepartment = DepartmentOption & {
 export type RoleSummary = {
     id: number;
     name: string;
+    label: string;
     users_count: number;
     permissions_count: number;
     company_scope: SelectOption | null;
@@ -134,6 +140,8 @@ export type RoleSummary = {
 export type EditableRole = {
     id: number;
     name: string;
+    /** Null for a role created before labels existed. */
+    label: string | null;
     company_scope: CompanyScope | null;
     permissions: string[];
     is_system: boolean;
