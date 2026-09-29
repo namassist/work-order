@@ -21,7 +21,8 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->department = Department::factory()->client()->create(['code' => 'IT', 'name' => 'Teknologi Informasi']);
     $this->category = WorkOrderCategory::factory()->create(['code' => 'PRB', 'name' => 'Perbaikan']);
-    $this->exporter = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersExport);
+    // Sees drafts too (work-orders.create), like Admin WO.
+    $this->exporter = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersExport);
 });
 
 /**
@@ -125,27 +126,28 @@ it('downloads the list as an xlsx named after the WITA time', function () {
 
     expect(array_map(fn (Cell $cell): mixed => $cell->getValue(), exportedRows($response)[0]))
         ->toBe([
-            'Nomor', 'Judul', 'Deskripsi', 'Departemen pemohon', 'Departemen tujuan', 'Kategori', 'Pemohon', 'Diinput oleh',
+            'Nomor', 'Judul', 'Deskripsi', 'Departemen pemohon', 'Departemen tujuan', 'Kategori', 'Kontak pemohon', 'PIC Work Order', 'Diinput oleh',
             'Status', 'Urgensi', 'Target', 'Dibuat', 'Diajukan', 'No. invoice', 'Tanggal invoice', 'Jumlah', 'Jatuh tempo', 'Tanggal bayar',
         ])
         ->and(exportedSheetXml($response))->toContain('<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>');
 });
 
 it('writes one row per work order in list order, with Draft as a draft\'s number', function () {
-    $requester = User::factory()->create(['name' => 'Dewi Lestari']);
+    $adminWo = User::factory()->create(['name' => 'Dewi Lestari']);
     exportableWorkOrder(['title' => 'Lama', 'created_at' => now()->subDay()]);
     exportableWorkOrder([
         'title' => 'AC bocor',
         'description' => 'Ruang rapat lantai 2',
-        'created_by' => $requester->id,
+        'created_by' => $adminWo->id,
+        'requester_name' => 'Pak Andi',
         'urgency' => 'mendesak',
     ]);
 
     $rows = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
 
     expect($rows)->toHaveCount(3)
-        ->and(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($rows[1], 0, 10)))
-        ->toBe(['Draft', 'AC bocor', 'Ruang rapat lantai 2', 'IT - Teknologi Informasi', '', 'PRB - Perbaikan', 'Dewi Lestari', 'Dewi Lestari', 'Draft', 'Mendesak'])
+        ->and(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($rows[1], 0, 11)))
+        ->toBe(['Draft', 'AC bocor', 'Ruang rapat lantai 2', 'IT - Teknologi Informasi', '', 'PRB - Perbaikan', 'Pak Andi', '', 'Dewi Lestari', 'Draft', 'Mendesak'])
         ->and($rows[2][1]->getValue())->toBe('Lama');
 });
 
@@ -226,21 +228,29 @@ it('filters the created date by WITA day', function () {
     expect(exportedTitles($response))->toBe(['Pagi WITA']);
 });
 
-it('never exports another department\'s work orders, even when filtering by that department', function () {
-    exportableWorkOrder(['title' => 'Milik sendiri']);
+it('filters by the requester department', function () {
+    exportableWorkOrder(['title' => 'Milik IT']);
     $other = WorkOrder::factory()->create(['title' => 'Milik departemen lain']);
 
-    expect(exportedTitles($this->actingAs($this->exporter)->get(route('work-orders.export'))))->toBe(['Milik sendiri'])
-        ->and(exportedTitles($this->get(route('work-orders.export', ['department' => $other->requester_department_id]))))->toBe([]);
+    expect(exportedTitles($this->actingAs($this->exporter)->get(route('work-orders.export', ['department' => $this->department->id]))))->toBe(['Milik IT'])
+        ->and(exportedTitles($this->get(route('work-orders.export', ['department' => $other->requester_department_id]))))->toBe(['Milik departemen lain']);
 });
 
-it('exports every department\'s submitted work orders with work-orders.view-all', function () {
+it('exports every submitted work order, but no drafts, without work-orders.create', function () {
     exportableWorkOrder();
     WorkOrder::factory()->submitted()->count(2)->create();
 
-    $user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersViewAll, Permission::WorkOrdersExport);
+    $user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersExport);
 
     expect(exportedTitles($this->actingAs($user)->get(route('work-orders.export'))))->toHaveCount(2);
+});
+
+it('never exports to a client company user, whatever they hold', function () {
+    exportableWorkOrder();
+
+    $this->actingAs(userInDepartment($this->department, ...Permission::cases()))
+        ->get(route('work-orders.export'))
+        ->assertForbidden();
 });
 
 it('exports only deleted work orders from the deleted list, which needs work-orders.restore', function () {
@@ -249,13 +259,13 @@ it('exports only deleted work orders from the deleted list, which needs work-ord
 
     $this->actingAs($this->exporter)->get(route('work-orders.export', ['trashed' => 1]))->assertForbidden();
 
-    $user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersExport, Permission::WorkOrdersRestore);
+    $user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersExport, Permission::WorkOrdersRestore);
 
     expect(exportedTitles($this->actingAs($user)->get(route('work-orders.export', ['trashed' => 1]))))->toBe(['Terhapus']);
 });
 
 it('requires work-orders.export and work-orders.view', function (array $permissions) {
-    $this->actingAs(userInDepartment($this->department, ...$permissions))
+    $this->actingAs(unggulUser(...$permissions))
         ->get(route('work-orders.export'))
         ->assertForbidden();
 })->with([
@@ -271,7 +281,7 @@ it('writes dates as Excel date cells in WITA', function () {
     app(TransitionWorkOrder::class)->handle($workOrder, 'diajukan', $this->exporter);
 
     [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
-    [$target, $created, $submitted] = array_slice($row, 10, 3);
+    [$target, $created, $submitted] = array_slice($row, 11, 3);
 
     expect($target)->toBeInstanceOf(DateTimeCell::class)
         ->and($target->getValue()->format('Y-m-d'))->toBe('2026-10-01')
@@ -287,22 +297,24 @@ it('leaves Target and Diajukan empty when a work order has neither', function ()
 
     [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
 
-    expect($row[10])->toBeInstanceOf(EmptyCell::class)
-        ->and($row[12])->toBeInstanceOf(EmptyCell::class);
+    expect($row[11])->toBeInstanceOf(EmptyCell::class)
+        ->and($row[13])->toBeInstanceOf(EmptyCell::class);
 });
 
-it('writes the target department, the requester contact, and who entered it on their behalf', function () {
-    $koordinator = unggulUser(Permission::WorkOrdersCreateOnBehalf);
-    $koordinator->update(['name' => 'Dewi Lestari']);
-    WorkOrder::factory()->onBehalf($koordinator, contactName: 'Pak Andi, Produksi')->create([
+it('writes the target department, the requester contact, the PIC, and the Admin WO who entered it', function () {
+    $adminWo = unggulUser(Permission::WorkOrdersCreate);
+    $adminWo->update(['name' => 'Dewi Lestari']);
+    WorkOrder::factory()->by($adminWo)->create([
         'requester_department_id' => $this->department->id,
+        'requester_name' => 'Pak Andi, Produksi',
+        'pic_name' => 'Bu Sari',
         'target_department_id' => Department::factory()->create(['code' => 'ENG', 'name' => 'Engineering'])->id,
     ]);
 
     [, $row] = exportedRows($this->actingAs($this->exporter)->get(route('work-orders.export')));
 
-    expect(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($row, 3, 5)))
-        ->toBe(['IT - Teknologi Informasi', 'ENG - Engineering', $row[5]->getValue(), 'Pak Andi, Produksi', 'Dewi Lestari']);
+    expect(array_map(fn (Cell $cell): mixed => $cell->getValue(), array_slice($row, 3, 6)))
+        ->toBe(['IT - Teknologi Informasi', 'ENG - Engineering', $row[5]->getValue(), 'Pak Andi, Produksi', 'Bu Sari', 'Dewi Lestari']);
 });
 
 it('writes the invoice: number, dates as calendar dates, and the amount as a Rupiah number', function () {
@@ -322,7 +334,7 @@ it('writes the invoice: number, dates as calendar dates, and the amount as a Rup
 
     $response = $this->actingAs($this->exporter)->get(route('work-orders.export'));
     [, $withoutInvoice, $paid] = exportedRows($response);
-    [$number, $invoiceDate, $amount, $dueDate, $paidOn] = array_slice($paid, 13);
+    [$number, $invoiceDate, $amount, $dueDate, $paidOn] = array_slice($paid, 14);
 
     expect($number->getValue())->toBe('INV/ENG/2026/001')
         ->and($invoiceDate)->toBeInstanceOf(DateTimeCell::class)
@@ -331,11 +343,11 @@ it('writes the invoice: number, dates as calendar dates, and the amount as a Rup
         ->and($amount->getValue())->toBe(1500000.5)
         ->and($dueDate->getValue()->format('Y-m-d'))->toBe('2026-09-30')
         ->and($paidOn->getValue()->format('Y-m-d'))->toBe('2026-09-24')
-        ->and(array_map(fn (Cell $cell): string => $cell::class, array_slice($withoutInvoice, 13)))
+        ->and(array_map(fn (Cell $cell): string => $cell::class, array_slice($withoutInvoice, 14)))
         ->toBe(array_fill(0, 5, EmptyCell::class));
 
     $styles = exportedXml($response, 'xl/styles.xml');
-    preg_match('~<c r="P3" s="(\d+)"[^>]*><v>1500000.5</v></c>~', exportedSheetXml($response), $cell);
+    preg_match('~<c r="Q3" s="(\d+)"[^>]*><v>1500000.5</v></c>~', exportedSheetXml($response), $cell);
     preg_match('~<numFmt numFmtId="(\d+)" formatCode="&quot;Rp &quot;#,##0\.00"/>~', $styles, $format);
 
     expect($cell)->not->toBeEmpty()
@@ -344,18 +356,18 @@ it('writes the invoice: number, dates as calendar dates, and the amount as a Rup
 });
 
 it('writes user-entered text as plain strings, never formulas', function () {
-    $requester = User::factory()->create(['name' => '+SUM(1,1)']);
     WorkOrderInvoice::factory()->for(exportableWorkOrder([
         'title' => '=HYPERLINK("http://x","y")',
         'description' => '@SUM(A1)',
-        'created_by' => $requester->id,
+        'requester_name' => '+SUM(1,1)',
+        'pic_name' => '=cmd',
         'target_department_id' => Department::factory()->create()->id,
         'number' => 'WO/IT/2026/09/0001',
         'status' => 'penagihan',
     ]))->create(['number' => '-2+3']);
-    $koordinator = unggulUser(Permission::WorkOrdersCreateOnBehalf);
-    WorkOrder::factory()->onBehalf($koordinator, contactName: '=1+1')->create([
+    WorkOrder::factory()->create([
         'requester_department_id' => $this->department->id,
+        'requester_name' => '=1+1',
         'created_at' => now()->subDay(),
     ]);
 
@@ -365,7 +377,8 @@ it('writes user-entered text as plain strings, never formulas', function () {
         ->and($xml)->toMatch('~<c r="B2"[^>]* t="inlineStr"><is><t>=HYPERLINK\(&quot;http://x&quot;,&quot;y&quot;\)</t></is></c>~')
         ->and($xml)->toMatch('~<c r="C2"[^>]* t="inlineStr"><is><t>@SUM\(A1\)</t></is></c>~')
         ->and($xml)->toMatch('~<c r="G2"[^>]* t="inlineStr"><is><t>\+SUM\(1,1\)</t></is></c>~')
-        ->and($xml)->toMatch('~<c r="N2"[^>]* t="inlineStr"><is><t>-2\+3</t></is></c>~')
+        ->and($xml)->toMatch('~<c r="H2"[^>]* t="inlineStr"><is><t>=cmd</t></is></c>~')
+        ->and($xml)->toMatch('~<c r="O2"[^>]* t="inlineStr"><is><t>-2\+3</t></is></c>~')
         ->and($xml)->toMatch('~<c r="G3"[^>]* t="inlineStr"><is><t>=1\+1</t></is></c>~');
 });
 
@@ -421,7 +434,7 @@ it('logs an export without filters as Semua', function () {
 it('offers the export on the list only with work-orders.export, with the row cap', function (array $permissions, bool $canExport) {
     config(['work_order.export.max_rows' => 250]);
 
-    $this->actingAs(userInDepartment($this->department, ...$permissions))
+    $this->actingAs(unggulUser(...$permissions))
         ->get(route('work-orders.index'))
         ->assertInertia(fn (Assert $page): AssertableInertia => $page
             ->where('can.export', $canExport)

@@ -5,6 +5,7 @@ use App\Actions\WorkOrders\AddWorkOrderComment;
 use App\Enums\Permission;
 use App\Models\Department;
 use App\Models\Media;
+use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use Illuminate\Database\QueryException;
@@ -16,39 +17,62 @@ use Inertia\Testing\AssertableInertia;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
+    // The IC department the work orders are requested by.
     $this->department = Department::factory()->client()->create(['code' => 'IT']);
     $this->category = WorkOrderCategory::factory()->create(['code' => 'LST']);
 });
 
 /**
- * A work order in the test department.
+ * A work order requested by the test (IC) department.
  */
 function ownWorkOrder(array $attributes = []): WorkOrder
 {
     return WorkOrder::factory()->create(['requester_department_id' => test()->department->id, ...$attributes]);
 }
 
-describe('index', function () {
-    it('lists only the user\'s department work orders', function () {
-        $mine = ownWorkOrder(['title' => 'Lampu kantor mati']);
-        WorkOrder::factory()->create(['title' => 'Milik departemen lain']);
+/**
+ * An executor company user who sees every work order, drafts included
+ * (work-orders.view and work-orders.create, like Admin WO), plus the given
+ * permissions.
+ */
+function staff(Permission ...$permissions): User
+{
+    return unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, ...$permissions);
+}
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+/**
+ * The requester fields every store, and every update of a draft, sends.
+ *
+ * @return array{requester_department_id: int, requester_name: string}
+ */
+function requesterFields(): array
+{
+    return ['requester_department_id' => test()->department->id, 'requester_name' => 'Pak Andi'];
+}
+
+describe('index', function () {
+    it('lists drafts to a user who creates work orders', function () {
+        $mine = ownWorkOrder(['title' => 'Lampu kantor mati']);
+
+        $this->actingAs(staff())
             ->get(route('work-orders.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->component('work-orders/Index')
                 ->has('workOrders.data', 1)
                 ->where('workOrders.data.0.id', $mine->id)
                 ->where('workOrders.data.0.display_number', 'Draft')
-                ->where('workOrders.data.0.status', ['value' => 'draft', 'label' => 'Draft', 'tone' => 'secondary'])
-                ->where('departments', null));
+                ->where('workOrders.data.0.status', ['value' => 'draft', 'label' => 'Draft', 'tone' => 'secondary']));
     });
 
-    it('lists every department\'s submitted work orders with work-orders.view-all and offers the IC departments as a filter', function () {
-        ownWorkOrder(['number' => 'WO/IT/2026/09/0001', 'status' => 'diajukan', 'target_department_id' => Department::factory()->create()->id]);
+    it('offers the IC departments as a filter to executor company users only', function () {
+        ownWorkOrder(['number' => 'WO/IT/2026/09/0001', 'status' => 'diajukan']);
         $other = WorkOrder::factory()->submitted()->create();
 
-        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
+        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+            ->get(route('work-orders.index'))
+            ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('departments', null));
+
+        $this->actingAs(unggulUser(Permission::WorkOrdersView))
             ->get(route('work-orders.index', ['department' => $other->requester_department_id]))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->has('workOrders.data', 1)
@@ -57,7 +81,7 @@ describe('index', function () {
                     === Department::query()->whereRelation('company', 'is_client', true)->orderBy('id')->pluck('id')->all()));
     });
 
-    it('ignores a department filter that falls outside the user\'s visibility', function () {
+    it('ignores a department filter that falls outside a client user\'s visibility', function () {
         $other = WorkOrder::factory()->create();
 
         $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
@@ -70,7 +94,7 @@ describe('index', function () {
         ownWorkOrder(['title' => 'Lainnya', 'number' => 'WO/IT/2026/09/0007', 'status' => 'diajukan']);
         ownWorkOrder(['title' => 'Tidak cocok']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['search' => 'ac ruang']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page->has('workOrders.data', 1));
 
@@ -86,7 +110,7 @@ describe('index', function () {
         ownWorkOrder(['status' => 'diajukan', 'number' => 'WO/IT/2026/09/0002', 'work_order_category_id' => $other->id]);
         ownWorkOrder(['work_order_category_id' => $match->work_order_category_id]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['status' => 'diajukan', 'category' => $match->work_order_category_id]))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->has('workOrders.data', 1)
@@ -100,7 +124,7 @@ describe('index', function () {
         WorkOrder::factory()->paid()->create(['requester_department_id' => $this->department->id]);
         WorkOrder::factory()->cancelled()->create(['requester_department_id' => $this->department->id]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['status' => 'aktif']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->sort()->values()->all() === $active->sort()->values()->all())
@@ -115,13 +139,12 @@ describe('index', function () {
         Department::factory()->inactive()->create(['code' => 'OFF']);
         $match = WorkOrder::factory()->targeting($engineering)->submitted()->create(['requester_department_id' => $this->department->id]);
         WorkOrder::factory()->targeting($general)->submitted()->create(['requester_department_id' => $this->department->id]);
-        WorkOrder::factory()->targeting($engineering)->submitted()->create();
+        $elsewhere = WorkOrder::factory()->targeting($engineering)->submitted()->create();
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['target' => $engineering->id]))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
-                ->has('workOrders.data', 1)
-                ->where('workOrders.data.0.id', $match->id)
+                ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->sort()->values()->all() === collect([$match->id, $elsewhere->id])->sort()->values()->all())
                 ->where('filters.target', (string) $engineering->id)
                 ->where('targetDepartments', fn ($departments): bool => collect($departments)->pluck('id')->all()
                     === Department::query()->whereRelation('company', 'is_client', false)->where('is_active', true)->orderBy('code')->pluck('id')->all()
@@ -135,10 +158,11 @@ describe('index', function () {
         $hidden = Department::factory()->inactive()->create(['code' => 'HIDDEN']);
         WorkOrder::factory()->targeting($closed)->submitted()->create(['requester_department_id' => $this->department->id]);
         WorkOrder::factory()->targeting($gone)->submitted()->create(['requester_department_id' => $this->department->id]);
-        WorkOrder::factory()->targeting($hidden)->submitted()->create();
+        WorkOrder::factory()->targeting($hidden)->create();
         $gone->delete();
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        // Drafts are hidden without work-orders.create.
+        $this->actingAs(unggulUser(Permission::WorkOrdersView))
             ->get(route('work-orders.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('targetDepartments', fn ($departments): bool => collect($departments)->pluck('code')->intersect(['CLOSED', 'GONE', 'HIDDEN'])->values()->all() === ['CLOSED', 'GONE']));
@@ -152,9 +176,9 @@ describe('index', function () {
         $lateInvoice = WorkOrder::factory()->billed(['due_date' => '2026-09-24'])->create($inDepartment);
         WorkOrder::factory()->inProgress()->create([...$inDepartment, 'target_date' => '2026-09-25']);
         WorkOrder::factory()->billed(['due_date' => null])->create([...$inDepartment, 'target_date' => '2026-09-01']);
-        WorkOrder::factory()->inProgress()->create(['target_date' => '2026-09-01']);
+        WorkOrder::factory()->create(['target_date' => '2026-09-01']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['overdue' => 1]))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('workOrders.data', fn ($rows): bool => collect($rows)->pluck('id')->sort()->values()->all() === collect([$lateTarget->id, $lateInvoice->id])->sort()->values()->all())
@@ -162,7 +186,7 @@ describe('index', function () {
     });
 
     it('rejects an unknown target department and overdue value', function () {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['target' => 'eng', 'overdue' => 'ya']))
             ->assertSessionHasErrors(['target', 'overdue']);
     });
@@ -173,7 +197,7 @@ describe('index', function () {
         ownWorkOrder(['created_at' => Carbon::parse('2026-09-24 15:30', 'UTC')]);
         ownWorkOrder(['created_at' => Carbon::parse('2026-09-25 16:30', 'UTC')]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['from' => '2026-09-25', 'to' => '2026-09-25']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->has('workOrders.data', 1)
@@ -182,7 +206,7 @@ describe('index', function () {
 
     it('sorts by last activity, most recent first, when asked', function () {
         $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
-        $user = userInDepartment($this->department, Permission::WorkOrdersView);
+        $user = staff(Permission::WorkOrdersComment);
         $oldest = ownWorkOrder(['created_at' => now()->subDays(3), 'updated_at' => now()->subDays(3)]);
         $middle = ownWorkOrder(['created_at' => now()->subDays(2), 'updated_at' => now()->subDays(2)]);
         $newest = ownWorkOrder(['created_at' => now()->subDay(), 'updated_at' => now()->subDay()]);
@@ -199,7 +223,7 @@ describe('index', function () {
     });
 
     it('rejects an unknown status and an inverted date range', function () {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['status' => 'disetujui', 'from' => '2026-09-25', 'to' => '2026-09-24']))
             ->assertSessionHasErrors(['status', 'to']);
     });
@@ -209,7 +233,7 @@ describe('index', function () {
         $deleted = ownWorkOrder();
         $deleted->delete();
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersRestore))
+        $this->actingAs(staff(Permission::WorkOrdersRestore))
             ->get(route('work-orders.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page->has('workOrders.data', 1));
 
@@ -220,7 +244,7 @@ describe('index', function () {
     });
 
     it('forbids the deleted list without the restore permission', function () {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['trashed' => 1]))
             ->assertForbidden();
     });
@@ -228,7 +252,7 @@ describe('index', function () {
     it('paginates 15 work orders per page', function () {
         WorkOrder::factory()->count(16)->create(['requester_department_id' => $this->department->id]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['page' => 2]))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->has('workOrders.data', 1)
@@ -243,32 +267,32 @@ describe('index', function () {
         WorkOrder::factory()->cancelled()->create(['requester_department_id' => $this->department->id]);
         WorkOrder::factory()->submitted()->create();
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.index', ['status' => 'draft', 'search' => 'tidak ada']))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('stats', [
-                    'total' => 4,
-                    'statuses' => ['draft' => 2, 'diajukan' => 1, 'ditolak' => 0, 'dikerjakan' => 0, 'penagihan' => 0, 'selesai' => 0, 'dibatalkan' => 1],
+                    'total' => 5,
+                    'statuses' => ['draft' => 2, 'diajukan' => 2, 'ditolak' => 0, 'dikerjakan' => 0, 'penagihan' => 0, 'selesai' => 0, 'dibatalkan' => 1],
                 ]));
     });
 
-    it('counts only their own department\'s work orders for a client user holding work-orders.view-all', function () {
+    it('counts only their own department\'s work orders for a client user, whatever they hold', function () {
         $client = Department::factory()->client()->create();
         WorkOrder::factory()->create(['requester_department_id' => $client->id]);
         ownWorkOrder();
 
-        $this->actingAs(userInDepartment($client, Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
+        $this->actingAs(userInDepartment($client, ...Permission::cases()))
             ->get(route('work-orders.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('stats.total', 1)
                 ->where('departments', null));
     });
 
-    it('counts every department\'s submitted work orders with work-orders.view-all, but no drafts', function () {
+    it('counts every submitted work order, but no drafts, without work-orders.create', function () {
         ownWorkOrder();
         WorkOrder::factory()->submitted()->count(2)->create();
 
-        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersViewAll))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView))
             ->get(route('work-orders.index'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('stats.total', 2)
@@ -282,18 +306,17 @@ describe('create and store', function () {
         WorkOrderCategory::factory()->inactive()->create();
         WorkOrderCategory::factory()->create()->delete();
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(staff())
             ->get(route('work-orders.create'))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->component('work-orders/Create')
-                ->where('department.code', 'IT')
                 ->has('categories', 1)
                 ->where('categories.0.id', $this->category->id));
     });
 
     it('creates a numberless draft in the requester\'s department with its first history row', function () {
         $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
-        $user = userInDepartment($this->department, Permission::WorkOrdersCreate);
+        $user = staff();
 
         $response = $this->actingAs($user)->post(route('work-orders.store'), [
             'title' => 'Lampu kantor mati',
@@ -301,6 +324,7 @@ describe('create and store', function () {
             'work_order_category_id' => $this->category->id,
             'urgency' => 'tinggi',
             'target_date' => '2026-09-25',
+            ...requesterFields(),
         ]);
 
         $workOrder = WorkOrder::sole();
@@ -309,8 +333,7 @@ describe('create and store', function () {
             ->number->toBeNull()
             ->status->getValue()->toBe('draft')
             ->requester_department_id->toBe($this->department->id)
-            ->requester_id->toBe($user->id)
-            ->requester_name->toBeNull()
+            ->requester_name->toBe('Pak Andi')
             ->created_by->toBe($user->id)
             ->target_date->toDateString()->toBe('2026-09-25');
         expect($workOrder->statusHistories()->sole())
@@ -320,15 +343,15 @@ describe('create and store', function () {
     });
 
     it('requires the title and category', function () {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(staff())
             ->post(route('work-orders.store'), [])
-            ->assertSessionHasErrors(['title', 'work_order_category_id']);
+            ->assertSessionHasErrors(['title', 'work_order_category_id', 'requester_department_id', 'requester_name']);
 
         expect(WorkOrder::count())->toBe(0);
     });
 
     it('rejects an inactive or deleted category', function (Closure $category) {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(staff())
             ->post(route('work-orders.store'), ['title' => 'X', 'work_order_category_id' => $category()->id])
             ->assertSessionHasErrors('work_order_category_id');
     })->with([
@@ -340,24 +363,26 @@ describe('create and store', function () {
         // 25 Sep 17:00 UTC is already 26 Sep in WITA.
         $this->travelTo(Carbon::parse('2026-09-25 17:00', 'UTC'));
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(staff())
             ->post(route('work-orders.store'), [
                 'title' => 'X',
                 'work_order_category_id' => $this->category->id,
                 'target_date' => '2026-09-25',
+                ...requesterFields(),
             ])
             ->assertSessionHasErrors(['target_date' => 'Target selesai tidak boleh sebelum hari ini.']);
     });
 
     it('attaches the documents chosen on the form', function () {
         $disk = Storage::fake('attachments');
-        $user = userInDepartment($this->department, Permission::WorkOrdersCreate);
+        $user = staff();
 
         $this->actingAs($user)->post(route('work-orders.store'), [
             'title' => 'Lampu kantor mati',
             'work_order_category_id' => $this->category->id,
             'urgency' => 'normal',
             'attachments' => [attachmentUpload('dokumen.pdf', 'Surat.pdf'), attachmentUpload('foto.jpg', 'Foto lampu.jpg')],
+            ...requesterFields(),
         ])->assertRedirect();
 
         expect(WorkOrder::sole()->attachmentsIn(WorkOrder::DOCUMENTS)->pluck('name')->all())->toBe(['Surat.pdf', 'Foto lampu.jpg'])
@@ -369,12 +394,13 @@ describe('create and store', function () {
         $disk = Storage::fake('attachments');
         config(['work_order.attachments.dokumen.max_files' => 1]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(staff())
             ->post(route('work-orders.store'), [
                 'title' => 'Lampu kantor mati',
                 'work_order_category_id' => $this->category->id,
                 'urgency' => 'normal',
                 'attachments' => array_map(fn (array $upload): UploadedFile => attachmentUpload(...$upload), $attachments),
+                ...requesterFields(),
             ])
             ->assertSessionHasErrors([$errorKey => $message]);
 
@@ -389,7 +415,7 @@ describe('create and store', function () {
 
 describe('show', function () {
     it('shows the work order with its timeline and available transitions', function () {
-        $user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate);
+        $user = staff(Permission::WorkOrdersUpdate);
         $workOrder = ownWorkOrder();
         $workOrder->statusHistories()->create(['to_status' => 'draft', 'user_id' => $user->id]);
 
@@ -402,8 +428,8 @@ describe('show', function () {
                 ->where('timeline.0.to', ['value' => 'draft', 'label' => 'Draft'])
                 ->where('timeline.0.user.name', $user->name)
                 ->where('transitions', [
-                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'requires_target_department' => true, 'form' => null, 'blocked_reason' => null],
-                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan', 'requires_target_department' => false, 'form' => null, 'blocked_reason' => null],
+                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'form' => null, 'blocked_reason' => null],
+                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan', 'form' => null, 'blocked_reason' => null],
                 ])
                 ->where('waitingFor', null)
                 ->where('statusNote', null)
@@ -412,7 +438,7 @@ describe('show', function () {
 
     it('lists the documents and lets the requester side change them only in Draft and Ditolak', function (Closure $workOrder, bool $changeable) {
         Storage::fake('attachments');
-        $user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate);
+        $user = staff(Permission::WorkOrdersUpdate);
         $workOrder = $workOrder();
         app(AddAttachment::class)->handle($workOrder, $workOrder->documentsCollection(), attachmentUpload('dokumen.pdf', 'Surat.pdf'), $user);
 
@@ -436,13 +462,13 @@ describe('show', function () {
     ]);
 
     it('offers no transitions without the update permission', function () {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(staff())
             ->get(route('work-orders.show', ownWorkOrder()))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page->where('transitions', []));
     });
 
-    it('returns 404 for another department\'s work order', function () {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+    it('returns 404 for a draft without work-orders.create', function () {
+        $this->actingAs(unggulUser(Permission::WorkOrdersView))
             ->get(route('work-orders.show', WorkOrder::factory()->create()))
             ->assertNotFound();
     });
@@ -453,13 +479,13 @@ describe('edit and update', function () {
         $retired = WorkOrderCategory::factory()->inactive()->create();
         $workOrder = ownWorkOrder(['work_order_category_id' => $retired->id]);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersUpdate))
+        $this->actingAs(staff(Permission::WorkOrdersUpdate))
             ->get(route('work-orders.edit', $workOrder))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->component('work-orders/Edit')
                 ->has('categories', 2));
 
-        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $retired->id, 'urgency' => 'normal'])
+        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $retired->id, 'urgency' => 'normal', ...requesterFields()])
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('work-orders.show', $workOrder));
 
@@ -469,11 +495,11 @@ describe('edit and update', function () {
     it('keeps an unchanged past target date valid but rejects moving it into the past', function () {
         $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
         $workOrder = ownWorkOrder(['target_date' => '2026-09-01', 'work_order_category_id' => $this->category->id]);
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersUpdate));
+        $this->actingAs(staff(Permission::WorkOrdersUpdate));
 
-        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $this->category->id, 'urgency' => 'normal', 'target_date' => '2026-09-01'])
+        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $this->category->id, 'urgency' => 'normal', 'target_date' => '2026-09-01', ...requesterFields()])
             ->assertSessionHasNoErrors();
-        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $this->category->id, 'urgency' => 'normal', 'target_date' => '2026-09-02'])
+        $this->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $this->category->id, 'urgency' => 'normal', 'target_date' => '2026-09-02', ...requesterFields()])
             ->assertSessionHasErrors('target_date');
 
         expect($workOrder->refresh()->target_date->toDateString())->toBe('2026-09-01');
@@ -482,7 +508,7 @@ describe('edit and update', function () {
     it('forbids editing a submitted work order', function () {
         $workOrder = ownWorkOrder(['status' => 'diajukan', 'number' => 'WO/IT/2026/09/0001', 'title' => 'Lama']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersUpdate))
+        $this->actingAs(staff(Permission::WorkOrdersUpdate))
             ->put(route('work-orders.update', $workOrder), ['title' => 'Baru', 'work_order_category_id' => $workOrder->work_order_category_id])
             ->assertForbidden();
 
@@ -493,7 +519,7 @@ describe('edit and update', function () {
 describe('destroy and restore', function () {
     it('soft-deletes a draft and restores it', function () {
         $workOrder = ownWorkOrder(['title' => 'Lampu gudang']);
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersDelete, Permission::WorkOrdersRestore));
+        $this->actingAs(staff(Permission::WorkOrdersDelete, Permission::WorkOrdersRestore));
 
         $this->delete(route('work-orders.destroy', $workOrder))->assertRedirect(route('work-orders.index'));
         $this->assertSoftDeleted($workOrder);
@@ -507,7 +533,7 @@ describe('destroy and restore', function () {
     it('refuses to delete a cancelled draft without telling the user to cancel it', function () {
         $workOrder = ownWorkOrder(['title' => 'Lampu gudang', 'status' => 'dibatalkan']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersDelete))
+        $this->actingAs(staff(Permission::WorkOrdersDelete))
             ->delete(route('work-orders.destroy', $workOrder))
             ->assertInertiaFlash('toast.type', 'error')
             ->assertInertiaFlash('toast.message', 'Draft yang sudah dibatalkan tidak dapat dihapus.');
@@ -518,7 +544,7 @@ describe('destroy and restore', function () {
     it('refuses to delete a work order that left the draft status', function () {
         $workOrder = ownWorkOrder(['status' => 'diajukan', 'number' => 'WO/IT/2026/09/0001']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersDelete))
+        $this->actingAs(staff(Permission::WorkOrdersDelete))
             ->from(route('work-orders.show', $workOrder))
             ->delete(route('work-orders.destroy', $workOrder))
             ->assertRedirect(route('work-orders.show', $workOrder))
@@ -530,10 +556,11 @@ describe('destroy and restore', function () {
 });
 
 it('forbids users without the matching permission', function (string $method, Closure $url, array $payload) {
-    $workOrder = ownWorkOrder(['title' => 'Lama']);
-    $deleted = ownWorkOrder();
+    // Rejected, so still editable and visible to every user with work-orders.view.
+    $workOrder = WorkOrder::factory()->rejected()->create(['requester_department_id' => $this->department->id, 'title' => 'Lama']);
+    $deleted = WorkOrder::factory()->submitted()->create();
     $deleted->delete();
-    $user = userInDepartment($this->department, ...array_filter(Permission::cases(), fn (Permission $permission): bool => ! str_starts_with($permission->value, 'work-orders.')));
+    $user = unggulUser(Permission::WorkOrdersView, ...array_filter(Permission::cases(), fn (Permission $permission): bool => ! str_starts_with($permission->value, 'work-orders.')));
 
     $this->actingAs($user)
         ->{$method}($url($workOrder, $deleted), $payload)
@@ -543,12 +570,10 @@ it('forbids users without the matching permission', function (string $method, Cl
         ->and(WorkOrder::onlyTrashed()->count())->toBe(1)
         ->and($workOrder->refresh())
         ->title->toBe('Lama')
-        ->status->getValue()->toBe('draft');
+        ->status->getValue()->toBe('ditolak');
 })->with([
-    'index' => ['get', fn (): string => route('work-orders.index'), []],
     'create' => ['get', fn (): string => route('work-orders.create'), []],
     'store' => ['post', fn (): string => route('work-orders.store'), ['title' => 'X', 'work_order_category_id' => 1]],
-    'show' => ['get', fn (WorkOrder $workOrder): string => route('work-orders.show', $workOrder), []],
     'edit' => ['get', fn (WorkOrder $workOrder): string => route('work-orders.edit', $workOrder), []],
     'update' => ['put', fn (WorkOrder $workOrder): string => route('work-orders.update', $workOrder), ['title' => 'X', 'work_order_category_id' => 1]],
     'destroy' => ['delete', fn (WorkOrder $workOrder): string => route('work-orders.destroy', $workOrder), []],
@@ -556,13 +581,13 @@ it('forbids users without the matching permission', function (string $method, Cl
     'transition' => ['post', fn (WorkOrder $workOrder): string => route('work-orders.transitions.store', $workOrder), ['status' => 'diajukan']],
 ]);
 
-it('returns 404 on every record endpoint for another department\'s work order', function (string $method, string $route) {
+it('returns 404 on every record endpoint for a draft without work-orders.create', function (string $method, string $route) {
     $workOrder = WorkOrder::factory()->create();
     if ($route === 'work-orders.restore') {
         $workOrder->delete();
     }
 
-    $this->actingAs(userInDepartment($this->department, ...Permission::cases())->revokePermissionTo(Permission::WorkOrdersViewAll->value))
+    $this->actingAs(unggulUser(...Permission::cases())->revokePermissionTo(Permission::WorkOrdersCreate->value))
         ->{$method}(route($route, $workOrder), ['title' => 'X', 'work_order_category_id' => $this->category->id, 'status' => 'diajukan'])
         ->assertNotFound();
 })->with([
@@ -591,6 +616,7 @@ describe('target department', function () {
             'title' => 'Lampu kantor mati',
             'work_order_category_id' => test()->category->id,
             'urgency' => 'normal',
+            ...requesterFields(),
             ...$overrides,
         ];
     }
@@ -598,7 +624,7 @@ describe('target department', function () {
     it('saves a draft with or without an active executor department as its target', function (bool $withTarget) {
         $target = Department::factory()->create(['code' => 'ENG']);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(staff())
             ->post(route('work-orders.store'), draftPayload(['target_department_id' => $withTarget ? $target->id : null]))
             ->assertSessionHasNoErrors();
 
@@ -606,7 +632,7 @@ describe('target department', function () {
     })->with(['with a target' => true, 'without a target' => false]);
 
     it('refuses a target that is not an active executor department', function (Closure $target) {
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersCreate))
+        $this->actingAs(staff())
             ->post(route('work-orders.store'), draftPayload(['target_department_id' => $target()->id]))
             ->assertSessionHasErrors(['target_department_id' => 'Pilih departemen aktif dari perusahaan pelaksana.']);
 
@@ -622,7 +648,7 @@ describe('target department', function () {
         $new = Department::factory()->create(['code' => 'NEW']);
         $draft = ownWorkOrder(['target_department_id' => $old->id]);
         $old->update(['is_active' => false]);
-        $user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate);
+        $user = staff(Permission::WorkOrdersUpdate);
 
         $this->actingAs($user)
             ->put(route('work-orders.update', $draft), draftPayload(['target_department_id' => $old->id]))
@@ -641,7 +667,7 @@ describe('target department', function () {
         $current = Department::factory()->create(['code' => 'CUR']);
         $draft = ownWorkOrder(['target_department_id' => $current->id]);
         $current->delete();
-        $user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate);
+        $user = staff(Permission::WorkOrdersUpdate);
 
         $codes = fn ($targets): array => collect($targets)->pluck('code')->all();
 
@@ -657,37 +683,41 @@ describe('target department', function () {
                     && ! in_array('OFF', $codes($targets), true)));
     });
 
-    it('shows the requester, the entered-by user, and both departments', function () {
+    it('shows the requester, the PIC, the entered-by user, and both departments', function () {
         $target = Department::factory()->create(['code' => 'ENG']);
-        $user = userInDepartment($this->department, Permission::WorkOrdersView);
-        $workOrder = ownWorkOrder(['target_department_id' => $target->id]);
+        $user = staff();
+        $workOrder = ownWorkOrder(['target_department_id' => $target->id, 'requester_name' => 'Pak Andi', 'pic_name' => 'Bu Sari']);
 
         $this->actingAs($user)->get(route('work-orders.show', $workOrder))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
                 ->where('workOrder.requester_department.code', 'IT')
                 ->where('workOrder.target_department.code', 'ENG')
-                ->where('workOrder.requester', ['id' => $workOrder->requester_id, 'name' => $workOrder->requester->name])
+                ->where('workOrder.requester_name', 'Pak Andi')
+                ->where('workOrder.pic_name', 'Bu Sari')
                 ->where('workOrder.entered_by', ['name' => $workOrder->enteredBy->name]));
     });
 
-    it('names a contact requester without an account', function () {
-        $koordinator = unggulUser(Permission::WorkOrdersView);
-        $workOrder = WorkOrder::factory()->onBehalf($koordinator, contactName: 'Pak Andi')->create(['requester_department_id' => $this->department->id]);
+    it('lets a work order be submitted without a target', function () {
+        $user = staff(Permission::WorkOrdersUpdate);
+        $draft = ownWorkOrder();
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))->get(route('work-orders.show', $workOrder))
-            ->assertInertia(fn (Assert $page): AssertableInertia => $page
-                ->where('workOrder.requester', ['id' => null, 'name' => 'Pak Andi'])
-                ->where('workOrder.entered_by', ['name' => $koordinator->name]));
+        $this->actingAs($user)
+            ->post(route('work-orders.transitions.store', $draft), ['status' => 'diajukan'])
+            ->assertSessionHasNoErrors();
+
+        expect($draft->refresh())
+            ->status->getValue()->toBe('diajukan')
+            ->target_department_id->toBeNull();
     });
 });
 
 describe('who creates work orders', function () {
-    it('lets only IC users create, for their own department', function () {
-        $unggul = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate);
+    it('lets no client company user create, whatever they hold', function () {
+        $client = userInDepartment($this->department, ...Permission::cases());
 
-        $this->actingAs($unggul)->get(route('work-orders.create'))->assertForbidden();
-        $this->actingAs($unggul)
-            ->post(route('work-orders.store'), ['title' => 'X', 'work_order_category_id' => $this->category->id, 'urgency' => 'normal'])
+        $this->actingAs($client)->get(route('work-orders.create'))->assertForbidden();
+        $this->actingAs($client)
+            ->post(route('work-orders.store'), ['title' => 'X', 'work_order_category_id' => $this->category->id, 'urgency' => 'normal', ...requesterFields()])
             ->assertForbidden();
 
         expect(WorkOrder::count())->toBe(0);
@@ -695,16 +725,14 @@ describe('who creates work orders', function () {
 });
 
 describe('requester integrity', function () {
-    it('refuses a work order with both or neither of a requester account and a contact name', function (?bool $account, ?string $name) {
+    it('refuses a work order without a contact name', function (?string $name, string $violation) {
         $workOrder = WorkOrder::factory()->create(['requester_department_id' => $this->department->id]);
 
-        expect(fn () => DB::table('work_orders')->where('id', $workOrder->id)->update([
-            'requester_id' => $account ? $workOrder->created_by : null,
-            'requester_name' => $name,
-        ]))->toThrow(QueryException::class, 'work_orders_requester_check');
+        expect(fn () => DB::table('work_orders')->where('id', $workOrder->id)->update(['requester_name' => $name]))
+            ->toThrow(QueryException::class, $violation);
     })->with([
-        'both' => [true, 'Pak Andi'],
-        'neither' => [false, null],
+        'missing' => [null, 'requester_name'],
+        'blank' => ['  ', 'work_orders_requester_name_check'],
     ]);
 });
 
@@ -721,7 +749,6 @@ describe('submitted number integrity', function () {
         expect(fn () => DB::transaction(fn () => WorkOrder::factory()->create([
             'requester_department_id' => $this->department->id,
             'created_by' => $submitted->created_by,
-            'requester_id' => $submitted->created_by,
             'work_order_category_id' => $category->id,
             'status' => 'diajukan',
             'number' => null,

@@ -9,7 +9,6 @@ const reject: WorkOrderTransition = {
     destructive: true,
     requires_note: true,
     note_label: 'Alasan penolakan',
-    requires_target_department: true,
     form: null,
     blocked_reason: null,
 };
@@ -20,7 +19,6 @@ const accept: WorkOrderTransition = {
     destructive: false,
     requires_note: false,
     note_label: 'Catatan',
-    requires_target_department: true,
     form: null,
     blocked_reason: null,
 };

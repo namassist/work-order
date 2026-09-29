@@ -30,7 +30,9 @@ const props = defineProps<{
 const ANY_COMPANY = 'any';
 
 const pageTitle = computed(() =>
-    props.role ? `Ubah role ${props.role.name}` : 'Tambah role',
+    props.role
+        ? `Ubah role ${props.role.label ?? props.role.name}`
+        : 'Tambah role',
 );
 
 // Create and edit share this page, so keep the last crumb in step with the prop.
@@ -48,6 +50,7 @@ const locked = props.role?.is_system ?? false;
 
 const form = useForm({
     name: props.role?.name ?? '',
+    label: props.role?.label ?? '',
     company_scope: (props.role?.company_scope ?? ANY_COMPANY) as
         | CompanyScope
         | typeof ANY_COMPANY,
@@ -104,12 +107,27 @@ const submit = () => {
                     v-if="locked"
                     class="rounded-lg bg-muted p-3 text-sm text-muted-foreground"
                 >
-                    Role admin adalah role sistem: namanya tetap dan selalu
+                    Role admin adalah role sistem: kodenya tetap dan selalu
                     memiliki semua permission.
                 </p>
 
                 <div class="grid max-w-sm gap-2">
-                    <Label for="role-name">Nama role</Label>
+                    <Label for="role-label">Nama tampilan</Label>
+                    <Input
+                        id="role-label"
+                        v-model="form.label"
+                        required
+                        maxlength="100"
+                        placeholder="Teknisi Lapangan"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Nama yang tampil di aplikasi.
+                    </p>
+                    <InputError :message="form.errors.label" />
+                </div>
+
+                <div class="grid max-w-sm gap-2">
+                    <Label for="role-name">Kode role</Label>
                     <Input
                         id="role-name"
                         v-model="form.name"
@@ -119,7 +137,8 @@ const submit = () => {
                         placeholder="teknisi"
                     />
                     <p class="text-xs text-muted-foreground">
-                        Huruf kecil, angka, dan tanda hubung.
+                        Huruf kecil, angka, dan tanda hubung. Tetap, dipakai
+                        oleh sistem dan log aktivitas.
                     </p>
                     <InputError :message="form.errors.name" />
                 </div>

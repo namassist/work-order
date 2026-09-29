@@ -11,8 +11,9 @@ use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
+    // The IC department requesting the work order; the user is an Admin WO.
     $this->department = Department::factory()->client()->create(['code' => 'IT']);
-    $this->user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate, Permission::ActivityLogView);
+    $this->user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::ActivityLogView);
     $this->workOrder = WorkOrder::factory()->create(['requester_department_id' => $this->department->id]);
 });
 
@@ -125,17 +126,16 @@ describe('upload', function () {
     it('refuses uploads without work-orders.update', function () {
         Storage::fake('attachments');
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))
             ->post(documentsUploadUrl($this->workOrder), ['file' => attachmentUpload('dokumen.pdf')])
             ->assertForbidden();
     });
 
-    it('answers 404 for another department\'s work order', function () {
+    it('answers 404 for a draft the user cannot see', function () {
         Storage::fake('attachments');
-        $other = WorkOrder::factory()->create();
 
-        $this->actingAs($this->user)
-            ->post(documentsUploadUrl($other), ['file' => attachmentUpload('dokumen.pdf')])
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersUpdate))
+            ->post(documentsUploadUrl($this->workOrder), ['file' => attachmentUpload('dokumen.pdf')])
             ->assertNotFound();
     });
 
@@ -225,16 +225,16 @@ describe('download', function () {
         $submitted = WorkOrder::factory()->submitted()->create(['requester_department_id' => $this->department->id]);
         $media = attachDocument($submitted, 'dokumen.pdf', $this->user);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView))
             ->get(route('attachments.show', $media->uuid))
             ->assertOk();
     });
 
-    it('answers 404 for another department\'s work order', function () {
+    it('answers 404 for a draft the user cannot see', function () {
         Storage::fake('attachments');
-        $media = attachDocument(WorkOrder::factory()->create(), 'dokumen.pdf', $this->user);
+        $media = attachDocument($this->workOrder, 'dokumen.pdf', $this->user);
 
-        $this->actingAs($this->user)
+        $this->actingAs(unggulUser(Permission::WorkOrdersView))
             ->get(route('attachments.show', $media->uuid))
             ->assertNotFound();
     });
@@ -290,11 +290,11 @@ describe('delete', function () {
             ->and($disk->allFiles())->toHaveCount(1);
     });
 
-    it('answers 404 for another department\'s work order', function () {
+    it('answers 404 for a draft the user cannot see', function () {
         Storage::fake('attachments');
-        $media = attachDocument(WorkOrder::factory()->create(), 'dokumen.pdf', $this->user);
+        $media = attachDocument($this->workOrder, 'dokumen.pdf', $this->user);
 
-        $this->actingAs($this->user)
+        $this->actingAs(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersUpdate))
             ->delete(route('attachments.destroy', $media->uuid))
             ->assertNotFound();
 

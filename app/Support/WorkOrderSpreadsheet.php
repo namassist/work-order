@@ -40,7 +40,8 @@ class WorkOrderSpreadsheet
         'Departemen pemohon' => 28,
         'Departemen tujuan' => 28,
         'Kategori' => 22,
-        'Pemohon' => 24,
+        'Kontak pemohon' => 24,
+        'PIC Work Order' => 24,
         'Diinput oleh' => 24,
         'Status' => 14,
         'Urgensi' => 12,
@@ -66,7 +67,7 @@ class WorkOrderSpreadsheet
 
     /**
      * Write the work orders to $path. Load requesterDepartment,
-     * targetDepartment, category, requester, enteredBy, and invoice first,
+     * targetDepartment, category, enteredBy, and invoice first,
      * and select a `submitted_at` datetime (null if never submitted).
      *
      * @param  iterable<WorkOrder>  $workOrders
@@ -102,7 +103,8 @@ class WorkOrderSpreadsheet
                 new StringCell($this->department($workOrder->requesterDepartment)),
                 $this->text($workOrder->targetDepartment === null ? null : $this->department($workOrder->targetDepartment)),
                 new StringCell($workOrder->category->code.' - '.$workOrder->category->name),
-                new StringCell($workOrder->requesterName()),
+                new StringCell($workOrder->requester_name),
+                $this->text($workOrder->pic_name),
                 new StringCell($workOrder->enteredBy->name),
                 new StringCell($workOrder->status->label()),
                 new StringCell($workOrder->urgency->label()),

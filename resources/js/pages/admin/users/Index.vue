@@ -60,6 +60,7 @@ import type {
     ListAbilities,
     ManagedUser,
     Paginated,
+    RoleOption,
 } from '@/types';
 
 const props = defineProps<{
@@ -79,7 +80,7 @@ const props = defineProps<{
         must_change_password: number;
     };
     departments: DepartmentOption[];
-    roles: string[];
+    roles: RoleOption[];
     can: ListAbilities;
 }>();
 
@@ -215,8 +216,12 @@ const openHistory = (user: ManagedUser) => {
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem :value="ALL">Semua role</SelectItem>
-                    <SelectItem v-for="role in roles" :key="role" :value="role">
-                        {{ role }}
+                    <SelectItem
+                        v-for="role in roles"
+                        :key="role.name"
+                        :value="role.name"
+                    >
+                        {{ role.label }}
                     </SelectItem>
                 </SelectContent>
             </Select>
@@ -291,10 +296,10 @@ const openHistory = (user: ManagedUser) => {
                         <div class="flex flex-wrap gap-1">
                             <Badge
                                 v-for="role in user.roles"
-                                :key="role"
+                                :key="role.name"
                                 variant="outline"
                             >
-                                {{ role }}
+                                {{ role.label }}
                             </Badge>
                         </div>
                     </TableCell>

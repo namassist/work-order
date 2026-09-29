@@ -46,6 +46,6 @@ class Draft extends WorkOrderStatus
 
     public function waitingMessage(WorkOrder $workOrder): string
     {
-        return 'Menunggu pemohon mengajukan.';
+        return 'Menunggu Admin WO mengajukan.';
     }
 }

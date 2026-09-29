@@ -165,7 +165,7 @@ const submit = () => {
                                 "
                             />
                             <Label :for="`approve-role-${role.name}`">
-                                {{ role.name }}
+                                {{ role.label }}
                             </Label>
                         </div>
                     </div>

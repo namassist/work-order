@@ -36,8 +36,8 @@ trait WorkOrderValidationRules
                     ->when($currentCategoryId, fn ($query, int $id) => $query->orWhere('id', $id))),
             ],
             'target_department_id' => [
-                // Once submitted, the target may change (in Ditolak) but never be cleared.
-                $workOrder?->status->requiresTargetDepartment() ? 'required' : 'nullable',
+                // Informational only (FLOW.md v2 §4), so it may stay empty.
+                'nullable',
                 'integer',
                 // Departments of the executor company that are active, plus
                 // the one the work order already has (FLOW.md §2).
@@ -67,12 +67,10 @@ trait WorkOrderValidationRules
     {
         return [
             'target_date.after_or_equal' => __('Target selesai tidak boleh sebelum hari ini.'),
-            'target_department_id.required' => __('Work order yang sudah diajukan harus tetap punya departemen tujuan.'),
             'target_department_id.exists' => __('Pilih departemen aktif dari perusahaan pelaksana.'),
             'requester_department_id.exists' => __('Pilih departemen aktif dari perusahaan klien.'),
-            'requester_id.exists' => __('Pilih akun aktif dari departemen pemohon.'),
-            'requester_id.required_if' => __('Pilih akun pemohon.'),
-            'requester_name.required_if' => __('Isi nama kontak pemohon.'),
+            'requester_department_id.prohibited' => __('Departemen pemohon tidak dapat diubah setelah work order diajukan.'),
+            'requester_name.required' => __('Isi nama kontak pemohon.'),
         ];
     }
 }

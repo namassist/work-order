@@ -11,41 +11,43 @@ it('lets an IC user see only their own department\'s work orders', function () {
     $user = userInDepartment($own, Permission::WorkOrdersView);
 
     expect($user->can('view', WorkOrder::factory()->create(['requester_department_id' => $own->id])))->toBeTrue()
-        ->and($user->can('view', WorkOrder::factory()->create()))->toBeFalse();
+        ->and($user->can('view', WorkOrder::factory()->submitted()->create()))->toBeFalse();
 });
 
-it('lets an Unggul user with work-orders.view-all see every submitted work order, but no one else\'s draft', function () {
-    $user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersViewAll);
+it('lets an Unggul user with work-orders.view see every submitted work order, and drafts only with work-orders.create', function () {
+    $submitted = WorkOrder::factory()->submitted()->create();
+    $draft = WorkOrder::factory()->create();
+    $reader = unggulUser(Permission::WorkOrdersView);
+    $creator = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate);
 
-    expect($user->can('view', WorkOrder::factory()->submitted()->create()))->toBeTrue()
-        ->and($user->can('view', WorkOrder::factory()->create()))->toBeFalse();
+    expect($reader->can('view', $submitted))->toBeTrue()
+        ->and($reader->can('view', $draft))->toBeFalse()
+        ->and($creator->can('view', $draft))->toBeTrue();
 });
 
-it('ignores work-orders.view-all for a client company user', function () {
-    $own = Department::factory()->client()->create();
-    $user = userInDepartment($own, Permission::WorkOrdersView, Permission::WorkOrdersViewAll);
-    $mine = WorkOrder::factory()->create(['requester_department_id' => $own->id]);
-    $other = WorkOrder::factory()->create();
+it('shows nothing to an Unggul user without work-orders.view, drafts included', function () {
+    $user = unggulUser(Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate);
+    WorkOrder::factory()->create();
+    WorkOrder::factory()->submitted()->create();
 
-    expect($user->can('view', $other))->toBeFalse()
-        ->and($user->can('viewAllDepartments', WorkOrder::class))->toBeFalse()
-        ->and(WorkOrder::visibleTo($user)->pluck('id')->all())->toBe([$mine->id]);
+    expect(WorkOrder::visibleTo($user)->count())->toBe(0)
+        ->and(WorkOrder::query()->get()->filter(fn (WorkOrder $workOrder): bool => $workOrder->isVisibleTo($user)))->toBeEmpty();
 });
 
 it('limits the visibleTo scope to the same work orders as the policy', function () {
     $own = Department::factory()->client()->create();
     $mine = WorkOrder::factory()->create(['requester_department_id' => $own->id]);
-    WorkOrder::factory()->create();
-
+    $draft = WorkOrder::factory()->create();
     $submitted = WorkOrder::factory()->submitted()->create();
 
     expect(WorkOrder::visibleTo(userInDepartment($own, Permission::WorkOrdersView))->pluck('id')->all())->toBe([$mine->id])
-        ->and(WorkOrder::visibleTo(unggulUser(Permission::WorkOrdersViewAll))->pluck('id')->all())->toBe([$submitted->id]);
+        ->and(WorkOrder::visibleTo(unggulUser(Permission::WorkOrdersView))->pluck('id')->all())->toBe([$submitted->id])
+        ->and(WorkOrder::visibleTo(unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate))->orderBy('id')->pluck('id')->all())->toBe([$mine->id, $draft->id, $submitted->id]);
 });
 
-it('answers 404 rather than 403 for another department\'s work order', function (string $ability, array $arguments) {
-    $user = userInDepartment(Department::factory()->client()->create(), ...Permission::cases());
-    $user->revokePermissionTo(Permission::WorkOrdersViewAll->value);
+it('answers 404 rather than 403 for a work order the user cannot see', function (string $ability, array $arguments) {
+    $user = unggulUser(...Permission::cases());
+    $user->revokePermissionTo(Permission::WorkOrdersCreate->value);
 
     $response = Gate::forUser($user)->inspect($ability, [WorkOrder::factory()->create(), ...$arguments]);
 
@@ -61,23 +63,28 @@ it('answers 404 rather than 403 for another department\'s work order', function 
 ]);
 
 it('allows editing only while the work order is editable (Draft and Ditolak)', function () {
-    $department = Department::factory()->client()->create();
-    $user = userInDepartment($department, Permission::WorkOrdersUpdate);
+    $user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate);
 
-    expect($user->can('update', WorkOrder::factory()->create(['requester_department_id' => $department->id])))->toBeTrue()
-        ->and($user->can('update', WorkOrder::factory()->rejected()->create(['requester_department_id' => $department->id])))->toBeTrue()
-        ->and($user->can('update', WorkOrder::factory()->submitted()->create(['requester_department_id' => $department->id])))->toBeFalse()
-        ->and($user->can('update', WorkOrder::factory()->inProgress()->create(['requester_department_id' => $department->id])))->toBeFalse()
-        ->and($user->can('update', WorkOrder::factory()->cancelled()->create(['requester_department_id' => $department->id])))->toBeFalse();
+    expect($user->can('update', WorkOrder::factory()->create()))->toBeTrue()
+        ->and($user->can('update', WorkOrder::factory()->rejected()->create()))->toBeTrue()
+        ->and($user->can('update', WorkOrder::factory()->submitted()->create()))->toBeFalse()
+        ->and($user->can('update', WorkOrder::factory()->inProgress()->create()))->toBeFalse()
+        ->and($user->can('update', WorkOrder::factory()->cancelled()->create()))->toBeFalse();
+});
+
+it('never lets a client company user edit, whatever they hold', function () {
+    $department = Department::factory()->client()->create();
+    $user = userInDepartment($department, ...Permission::cases());
+
+    expect($user->can('update', WorkOrder::factory()->create(['requester_department_id' => $department->id])))->toBeFalse();
 });
 
 it('allows changing attachments only on drafts, with work-orders.update', function () {
-    $department = Department::factory()->client()->create();
-    $draft = WorkOrder::factory()->create(['requester_department_id' => $department->id]);
-    $submitted = WorkOrder::factory()->submitted()->create(['requester_department_id' => $department->id]);
-    $updater = userInDepartment($department, Permission::WorkOrdersUpdate);
+    $draft = WorkOrder::factory()->create();
+    $submitted = WorkOrder::factory()->submitted()->create();
+    $updater = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate);
     $others = array_filter(Permission::cases(), fn (Permission $case): bool => $case !== Permission::WorkOrdersUpdate);
-    $viewer = userInDepartment($department, ...$others);
+    $viewer = unggulUser(...$others);
 
     foreach (['addAttachment' => 'dokumen', 'deleteAttachment' => new Media()->forceFill(['collection_name' => WorkOrder::DOCUMENTS])] as $ability => $argument) {
         expect($updater->can($ability, [$draft, $argument]))->toBeTrue()
@@ -86,8 +93,8 @@ it('allows changing attachments only on drafts, with work-orders.update', functi
     }
 });
 
-it('answers 404 for attachment changes on another department\'s work order', function (string $ability, Closure $argument) {
-    $user = userInDepartment(Department::factory()->client()->create(), Permission::WorkOrdersUpdate);
+it('answers 404 for attachment changes on a work order the user cannot see', function (string $ability, Closure $argument) {
+    $user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersUpdate);
 
     $response = Gate::forUser($user)->inspect($ability, [WorkOrder::factory()->create(), $argument()]);
 
@@ -98,14 +105,14 @@ it('answers 404 for attachment changes on another department\'s work order', fun
 ]);
 
 it('grants each action only with its permission', function (string $ability, Permission $permission, array $arguments = []) {
-    $department = Department::factory()->client()->create();
-    $workOrder = WorkOrder::factory()->create(['requester_department_id' => $department->id]);
+    $workOrder = WorkOrder::factory()->create();
+    // Seeing the draft needs work-orders.view and work-orders.create.
+    $sees = [Permission::WorkOrdersView, Permission::WorkOrdersCreate];
     $others = array_filter(Permission::cases(), fn (Permission $case): bool => $case !== $permission);
 
-    expect(userInDepartment($department, $permission)->can($ability, [$workOrder, ...$arguments]))->toBeTrue()
-        ->and(userInDepartment($department, ...$others)->can($ability, [$workOrder, ...$arguments]))->toBeFalse();
+    expect(unggulUser(...$sees, ...[$permission])->can($ability, [$workOrder, ...$arguments]))->toBeTrue()
+        ->and(unggulUser(...$others)->can($ability, [$workOrder, ...$arguments]))->toBeFalse();
 })->with([
-    'view' => ['view', Permission::WorkOrdersView],
     'update' => ['update', Permission::WorkOrdersUpdate],
     'transition' => ['transition', Permission::WorkOrdersUpdate, ['diajukan']],
     'delete' => ['delete', Permission::WorkOrdersDelete],

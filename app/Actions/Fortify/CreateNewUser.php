@@ -9,6 +9,7 @@ use App\Enums\AuditEvent;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -16,9 +17,11 @@ use Illuminate\Validation\Validator as ValidatorInstance;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
 /**
- * Self-service registration (FLOW.md §3). The account is pending, holds no
- * roles or permissions, and only reaches its status page until an admin
- * approves it. Only name, email, password, and department are taken from the
+ * Self-service registration (FLOW.md §3), for executor company (Unggul)
+ * staff only: the email's domain picks the company, and IC domains are
+ * refused (IC never logs in, v2 §1). The account is pending, holds no roles
+ * or permissions, and only reaches its status page until an admin approves
+ * it. Only name, email, password, and department are taken from the
  * request; everything else (status, roles, flags) is set here.
  */
 class CreateNewUser implements CreatesNewUsers
@@ -40,21 +43,16 @@ class CreateNewUser implements CreatesNewUsers
             'name' => $this->nameRules(),
             'email' => $this->emailRules(),
             'password' => $this->passwordRules(),
-            'company_id' => [
-                'required',
-                'integer',
-                Rule::exists(Company::class, 'id')->where('is_active', true)->whereNull('deleted_at'),
-            ],
             'department_id' => [
                 'required',
                 'integer',
                 Rule::exists(Department::class, 'id')
-                    ->where('company_id', is_numeric($input['company_id'] ?? null) ? (int) $input['company_id'] : 0)
+                    ->where('company_id', $this->companyFor($input['email'] ?? null)->id ?? 0)
                     ->where('is_active', true)
                     ->whereNull('deleted_at'),
             ],
         ], [
-            'department_id.exists' => __('Pilih departemen aktif dari perusahaan yang dipilih.'),
+            'department_id.exists' => __('Pilih departemen aktif dari perusahaan email Anda.'),
         ])->after($this->emailDomainCheck(...))->validate();
 
         return DB::transaction(function () use ($validated): User {
@@ -91,23 +89,44 @@ class CreateNewUser implements CreatesNewUsers
     }
 
     /**
-     * The email's domain must be one of the chosen company's domains, so the
-     * company is fixed by the email address.
+     * The email's domain must be one of an active executor company's
+     * domains; that company is the one the department must belong to.
      */
     private function emailDomainCheck(ValidatorInstance $validator): void
     {
-        if ($validator->errors()->hasAny(['email', 'company_id'])) {
+        if ($validator->errors()->has('email') || $this->companyFor($validator->getData()['email'] ?? null) instanceof Company) {
             return;
         }
 
-        $data = $validator->getData();
-        $company = Company::query()->findOrFail((int) $data['company_id']);
+        $domains = self::registrableCompanies()->flatMap(fn (Company $company): array => $company->email_domains)->all();
 
-        if (! $company->allowsEmailDomain((string) $data['email'])) {
-            $validator->errors()->add('email', __('Email harus memakai domain :company (:domains).', [
-                'company' => $company->name,
-                'domains' => implode(', ', $company->email_domains),
-            ]));
-        }
+        $validator->errors()->add('email', __('Email harus memakai domain perusahaan pelaksana (:domains).', [
+            'domains' => implode(', ', $domains),
+        ]));
+    }
+
+    /**
+     * The active executor company whose domains include the email's, if any
+     * (domains are unique across companies).
+     */
+    private function companyFor(mixed $email): ?Company
+    {
+        return is_string($email)
+            ? self::registrableCompanies()->first(fn (Company $company): bool => $company->allowsEmailDomain($email))
+            : null;
+    }
+
+    /**
+     * Companies whose staff may register: active executor companies.
+     *
+     * @return Collection<int, Company>
+     */
+    public static function registrableCompanies(): Collection
+    {
+        return Company::query()
+            ->where('is_client', false)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email_domains']);
     }
 }

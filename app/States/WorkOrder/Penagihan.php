@@ -48,7 +48,7 @@ class Penagihan extends WorkOrderStatus
         return WorkOrderDeadline::PaymentDueDate;
     }
 
-    public function requiresTargetDepartment(): bool
+    public function requiresNumber(): bool
     {
         return true;
     }
@@ -75,6 +75,6 @@ class Penagihan extends WorkOrderStatus
 
     public function waitingMessage(WorkOrder $workOrder): string
     {
-        return 'Menunggu konfirmasi pembayaran oleh keuangan.';
+        return 'Menunggu konfirmasi pembayaran oleh Finance.';
     }
 }

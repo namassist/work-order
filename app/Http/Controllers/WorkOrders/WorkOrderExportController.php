@@ -46,7 +46,7 @@ class WorkOrderExportController extends Controller
             ->log(AuditEvent::Exported->value);
 
         $workOrders = $request->workOrders()
-            ->with(['requesterDepartment', 'targetDepartment', 'category', 'requester', 'enteredBy', 'invoice'])
+            ->with(['requesterDepartment', 'targetDepartment', 'category', 'enteredBy', 'invoice'])
             ->withSubmittedAt();
 
         return response()->streamDownload(

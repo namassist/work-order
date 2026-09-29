@@ -16,11 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import type { RegistrationCompany } from '@/lib/registration';
-import {
-    companyAllowsEmail,
-    companyForEmail,
-    emailDomain,
-} from '@/lib/registration';
+import { companyForEmail, emailDomain } from '@/lib/registration';
 import { login } from '@/routes';
 import { store } from '@/routes/register';
 
@@ -40,6 +36,7 @@ type RegistrationDepartment = {
 };
 
 const props = defineProps<{
+    /** Executor companies only (FLOW.md v2 §3): IC staff never register. */
     companies: RegistrationCompany[];
     departments: RegistrationDepartment[];
     passwordRules: string;
@@ -48,7 +45,6 @@ const props = defineProps<{
 const form = useForm({
     name: '',
     email: '',
-    company_id: null as number | null,
     department_id: null as number | null,
     password: '',
     password_confirmation: '',
@@ -56,48 +52,25 @@ const form = useForm({
 
 const hasDomain = computed(() => emailDomain(form.email) !== null);
 
-// The email domain fixes the company: once there is a domain, only its
-// company can be chosen (the server checks the same rule).
-const selectable = (company: RegistrationCompany) =>
-    !hasDomain.value || companyAllowsEmail(company, form.email);
-
-watch(
-    () => form.email,
-    (email) => {
-        const match = companyForEmail(props.companies, email);
-
-        if (match) {
-            form.company_id = match.id;
-        } else if (hasDomain.value) {
-            form.company_id = null;
-        }
-    },
-);
+// The email domain fixes the company (the server checks the same rule), so
+// only its departments can be chosen.
+const company = computed(() => companyForEmail(props.companies, form.email));
 
 const companyDepartments = computed(() =>
     props.departments.filter(
-        (department) => department.company_id === form.company_id,
+        (department) => department.company_id === company.value?.id,
     ),
 );
 
-watch(
-    () => form.company_id,
-    () => {
-        if (
-            !companyDepartments.value.some(
-                (department) => department.id === form.department_id,
-            )
-        ) {
-            form.department_id = null;
-        }
-    },
-);
+watch(companyDepartments, (departments) => {
+    if (
+        !departments.some((department) => department.id === form.department_id)
+    ) {
+        form.department_id = null;
+    }
+});
 
-const unknownDomain = computed(
-    () =>
-        hasDomain.value &&
-        companyForEmail(props.companies, form.email) === null,
-);
+const unknownDomain = computed(() => hasDomain.value && company.value === null);
 
 const submit = () => {
     form.submit(store(), {
@@ -154,36 +127,16 @@ const submit = () => {
             </div>
 
             <div class="grid gap-2">
-                <Label for="company">Perusahaan</Label>
-                <Select v-model="form.company_id">
-                    <SelectTrigger id="company" class="w-full">
-                        <SelectValue placeholder="Dipilih dari domain email" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem
-                            v-for="company in companies"
-                            :key="company.id"
-                            :value="company.id"
-                            :disabled="!selectable(company)"
-                        >
-                            {{ company.name }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <InputError :message="form.errors.company_id" />
-            </div>
-
-            <div class="grid gap-2">
                 <Label for="department">Departemen</Label>
                 <Select
                     v-model="form.department_id"
-                    :disabled="form.company_id === null"
+                    :disabled="company === null"
                 >
                     <SelectTrigger id="department" class="w-full">
                         <SelectValue
                             :placeholder="
-                                form.company_id === null
-                                    ? 'Pilih perusahaan dulu'
+                                company === null
+                                    ? 'Isi email perusahaan dulu'
                                     : 'Pilih departemen'
                             "
                         />

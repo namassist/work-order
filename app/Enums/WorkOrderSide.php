@@ -3,12 +3,11 @@
 namespace App\Enums;
 
 /**
- * The sides of a work order (FLOW.md §5). The requester side is the
- * requester department's users with work-orders.update, or the koordinator
- * who entered it on their behalf; the executor side is the target
- * department's users with work-orders.process; the finance side is any
- * executor company user with work-orders.confirm-payment (keuangan), who
- * confirms that an invoice was paid. See WorkOrder::isOnSide().
+ * The sides of a work order (FLOW.md §5). PROVISIONAL until step 3 replaces
+ * the v1 statuses: the requester side is Admin WO (work-orders.update), the
+ * executor side Lead Operational (work-orders.process), and the finance side
+ * Finance (work-orders.confirm-payment), each any executor company user
+ * holding the permission. See WorkOrder::isOnSide().
  */
 enum WorkOrderSide: string
 {

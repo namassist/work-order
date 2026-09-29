@@ -30,12 +30,10 @@ enum Permission: string
 
     case WorkOrdersView = 'work-orders.view';
     case WorkOrdersCreate = 'work-orders.create';
-    case WorkOrdersCreateOnBehalf = 'work-orders.create-on-behalf';
     case WorkOrdersUpdate = 'work-orders.update';
     case WorkOrdersProcess = 'work-orders.process';
     case WorkOrdersDelete = 'work-orders.delete';
     case WorkOrdersRestore = 'work-orders.restore';
-    case WorkOrdersViewAll = 'work-orders.view-all';
     case WorkOrdersExport = 'work-orders.export';
     case WorkOrdersComment = 'work-orders.comment';
     case WorkOrdersConfirmPayment = 'work-orders.confirm-payment';
@@ -64,15 +62,20 @@ enum Permission: string
 
     /**
      * Whether only users of the executor company may use this permission:
-     * master data, user and role management, registration review, the activity log, seeing every
-     * department's work orders, entering work orders on behalf of IC, processing work orders
-     * as the executor, and confirming their payment. Only executor-scoped roles may include
-     * it, and client company users never hold it, even through a direct
-     * grant (see User::hasPermissionTo()).
+     * master data, user and role management, registration review, the
+     * activity log, and every work order permission except reading one
+     * (FLOW.md §2, §6: IC never logs in, and a possible future IC access
+     * would be read-only). Only executor-scoped roles may include it, and
+     * client company users never hold it, even through a direct grant (see
+     * User::hasPermissionTo()).
      */
     public function isInternalOnly(): bool
     {
-        return in_array($this, [self::WorkOrdersViewAll, self::WorkOrdersCreateOnBehalf, self::WorkOrdersProcess, self::WorkOrdersConfirmPayment], true) || in_array($this->resource(), [
+        if ($this->resource() === 'work-orders') {
+            return $this !== self::WorkOrdersView;
+        }
+
+        return in_array($this->resource(), [
             'departments',
             'users',
             'roles',

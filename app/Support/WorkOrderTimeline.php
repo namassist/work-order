@@ -27,7 +27,6 @@ class WorkOrderTimeline
     public static function for(WorkOrder $workOrder, User $viewer, Request $request): array
     {
         $workOrder->loadMissing([
-            'requester',
             'statusHistories.user',
             'comments' => fn ($query) => $query->withTrashed()->with(['author', 'documents.uploader']),
         ]);
@@ -41,7 +40,7 @@ class WorkOrderTimeline
                     'type' => 'status',
                     ...$history->toTimelineEntry(),
                     // "Diinput oleh X atas nama Y" on the creation entry.
-                    'on_behalf_of' => $history->from_status === null && $workOrder->wasEnteredOnBehalf() ? $workOrder->requesterName() : null,
+                    'on_behalf_of' => $history->from_status === null ? $workOrder->requester_name : null,
                 ],
             ]),
             ...$workOrder->comments->map(fn (WorkOrderComment $comment): array => [

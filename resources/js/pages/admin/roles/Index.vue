@@ -101,10 +101,15 @@ const destroy = () => {
                         <div class="flex items-center gap-2">
                             <Link
                                 :href="RoleController.edit(role.id)"
-                                class="rounded-sm font-mono font-semibold underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                class="rounded-sm font-semibold underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                {{ role.label }}
+                            </Link>
+                            <span
+                                class="font-mono text-xs text-muted-foreground"
                             >
                                 {{ role.name }}
-                            </Link>
+                            </span>
                             <Badge v-if="role.is_system" variant="outline">
                                 <Lock /> Sistem
                             </Badge>
@@ -122,7 +127,7 @@ const destroy = () => {
                         {{ role.users_count }}
                     </TableCell>
                     <TableCell class="text-right">
-                        <RowActionsMenu :label="`Aksi ${role.name}`">
+                        <RowActionsMenu :label="`Aksi ${role.label}`">
                             <DropdownMenuItem as-child>
                                 <Link :href="RoleController.edit(role.id)">
                                     <Pencil /> Ubah
@@ -147,7 +152,7 @@ const destroy = () => {
     <ConfirmDialog
         v-model:open="deleteOpen"
         title="Hapus role?"
-        :description="`Role ${deleting?.name ?? ''} akan dihapus permanen. Role yang masih dipakai pengguna tidak dapat dihapus.`"
+        :description="`Role ${deleting?.label ?? ''} akan dihapus permanen. Role yang masih dipakai pengguna tidak dapat dihapus.`"
         confirm-label="Hapus"
         :processing="processing"
         @confirm="destroy"

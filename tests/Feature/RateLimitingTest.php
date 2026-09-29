@@ -13,7 +13,7 @@ beforeEach(function () {
     config(['work_order.attachments.dokumen.max_files' => 100]);
 
     $department = Department::factory()->client()->create(['code' => 'IT']);
-    $this->user = userInDepartment($department, Permission::WorkOrdersView, Permission::WorkOrdersUpdate, Permission::WorkOrdersExport);
+    $this->user = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::WorkOrdersExport);
     $this->workOrder = WorkOrder::factory()->create(['requester_department_id' => $department->id]);
     $this->actingAs($this->user);
 });

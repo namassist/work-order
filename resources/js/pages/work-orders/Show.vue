@@ -109,13 +109,6 @@ const historyOpen = ref(false);
 const deleteOpen = ref(false);
 const deleting = ref(false);
 
-// The server refuses these too; the page only explains why up front.
-const needsTarget = (transition: WorkOrderTransition) =>
-    transition.requires_target_department &&
-    props.workOrder.target_department === null;
-
-const blockedByTarget = computed(() => props.transitions.some(needsTarget));
-
 // One primary action per area: the first that moves the work order forward.
 const primaryTransition = computed(
     () =>
@@ -163,10 +156,7 @@ const destroy = () => {
                                 ? 'default'
                                 : 'outline'
                         "
-                        :disabled="
-                            needsTarget(transition) ||
-                            transition.blocked_reason !== null
-                        "
+                        :disabled="transition.blocked_reason !== null"
                         @click="openTransition(transition)"
                     >
                         {{ transition.label }}
@@ -192,12 +182,6 @@ const destroy = () => {
                     >
                         <Trash2 />
                     </Button>
-                    <p
-                        v-if="blockedByTarget"
-                        class="basis-full text-xs text-muted-foreground"
-                    >
-                        Pilih departemen tujuan lewat Ubah sebelum mengajukan.
-                    </p>
                     <p
                         v-for="reason in blockedReasons"
                         :key="reason"
@@ -247,6 +231,19 @@ const destroy = () => {
                     </dd>
                 </div>
                 <div>
+                    <dt class="text-muted-foreground">Kontak pemohon</dt>
+                    <dd>{{ workOrder.requester_name }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">Diinput oleh</dt>
+                    <dd>{{ workOrder.entered_by.name }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted-foreground">PIC Work Order</dt>
+                    <dd v-if="workOrder.pic_name">{{ workOrder.pic_name }}</dd>
+                    <dd v-else class="text-muted-foreground">Tidak diisi</dd>
+                </div>
+                <div>
                     <dt class="text-muted-foreground">Departemen tujuan</dt>
                     <dd v-if="workOrder.target_department">
                         <span class="font-mono">{{
@@ -254,7 +251,7 @@ const destroy = () => {
                         }}</span>
                         {{ workOrder.target_department.name }}
                     </dd>
-                    <dd v-else class="text-muted-foreground">Belum dipilih</dd>
+                    <dd v-else class="text-muted-foreground">Tidak diisi</dd>
                 </div>
                 <div>
                     <dt class="text-muted-foreground">Kategori</dt>
@@ -264,22 +261,6 @@ const destroy = () => {
                         }}</span>
                         {{ workOrder.category.name }}
                     </dd>
-                </div>
-                <div>
-                    <dt class="text-muted-foreground">Pemohon</dt>
-                    <dd>
-                        {{ workOrder.requester.name }}
-                        <span
-                            v-if="workOrder.requester.id === null"
-                            class="text-muted-foreground"
-                        >
-                            (tanpa akun)
-                        </span>
-                    </dd>
-                </div>
-                <div v-if="workOrder.entered_on_behalf">
-                    <dt class="text-muted-foreground">Diinput oleh</dt>
-                    <dd>{{ workOrder.entered_by.name }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted-foreground">Urgensi</dt>

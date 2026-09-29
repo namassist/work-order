@@ -2,96 +2,66 @@
 
 namespace App\Concerns;
 
-use App\Enums\AccountStatus;
 use App\Models\Department;
-use App\Models\User;
+use App\Models\WorkOrder;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 
 /**
- * The requester of an on-behalf work order (FLOW.md §4): an approved, active account
- * of the requester department, or a contact name. Exactly one, chosen by
- * `requester_mode`.
+ * Who requested a work order (FLOW.md v2 §4): an IC department and the name
+ * of the IC contact, both required, plus the optional PIC Work Order name.
+ * The department may change only until the first submission, since the
+ * number carries its code from then on; the names stay editable while the
+ * work order is (Draft and Ditolak).
  */
 trait WorkOrderRequesterRules
 {
-    public const string REQUESTER_ACCOUNT = 'account';
-
-    public const string REQUESTER_CONTACT = 'contact';
-
     /**
-     * @param  int|null  $departmentId  the requester department; null reads `requester_department_id` from the input
+     * @param  WorkOrder|null  $workOrder  the work order being edited; null on create
      * @return array<string, array<int, ValidationRule|string|Exists>>
      */
-    protected function requesterRules(?int $departmentId = null): array
+    protected function requesterRules(?WorkOrder $workOrder = null): array
     {
-        $account = self::REQUESTER_ACCOUNT;
-        $contact = self::REQUESTER_CONTACT;
-
         return [
-            'requester_mode' => ['required', Rule::in([$account, $contact])],
-            'requester_id' => [
-                "required_if:requester_mode,{$account}",
-                "prohibited_unless:requester_mode,{$account}",
-                'nullable',
-                'integer',
-                // The same accounts the picker offers (User::activeRequesterIn()).
-                Rule::exists(User::class, 'id')
-                    ->where('department_id', $departmentId ?? $this->integer('requester_department_id'))
-                    ->where('is_active', true)
-                    ->where('account_status', AccountStatus::Approved->value)
-                    ->whereNull('deleted_at'),
-            ],
-            'requester_name' => [
-                "required_if:requester_mode,{$contact}",
-                "prohibited_unless:requester_mode,{$contact}",
-                'nullable',
-                'string',
-                'max:150',
-            ],
+            'requester_department_id' => $workOrder?->wasSubmitted()
+                ? ['prohibited']
+                : $this->requesterDepartmentRules($workOrder?->requester_department_id),
+            'requester_name' => ['required', 'string', 'max:150'],
+            'pic_name' => ['nullable', 'string', 'max:150'],
         ];
     }
 
     /**
-     * An active department of a client company, the side that requests work.
+     * An active department of a client company, the side that requests
+     * work, or the one the work order already has.
      *
      * @return array<int, string|Exists>
      */
-    protected function requesterDepartmentRules(): array
+    private function requesterDepartmentRules(?int $currentId): array
     {
         return [
             'required',
             'integer',
-            Rule::exists(Department::class, 'id')
-                ->where('is_active', true)
-                ->whereNull('deleted_at')
-                ->where(fn ($query) => $query->whereIn('company_id', fn ($companies) => $companies->select('id')->from('companies')->where('is_client', true))),
+            Rule::exists(Department::class, 'id')->where(fn ($query) => $query
+                ->whereIn('company_id', fn ($companies) => $companies->select('id')->from('companies')->where('is_client', true))
+                ->where(fn ($query) => $query
+                    ->where(fn ($query) => $query->where('is_active', true)->whereNull('deleted_at'))
+                    ->when($currentId, fn ($query, int $id) => $query->orWhere('id', $id)))),
         ];
     }
 
     /**
-     * The requester fields, refused when the user may not set them.
-     *
-     * @return array<string, array<int, string>>
-     */
-    protected function prohibitedRequesterRules(bool $withDepartment): array
-    {
-        return [
-            ...($withDepartment ? ['requester_department_id' => ['prohibited']] : []),
-            'requester_mode' => ['prohibited'],
-            'requester_id' => ['prohibited'],
-            'requester_name' => ['prohibited'],
-        ];
-    }
-
-    /**
-     * The trimmed contact name, so a blank one counts as missing.
+     * Trimmed names, so a blank contact name counts as missing and a blank
+     * PIC name is stored as none.
      */
     protected function prepareRequesterForValidation(): void
     {
-        if (is_string($this->input('requester_name'))) {
-            $this->merge(['requester_name' => trim($this->input('requester_name'))]);
+        foreach (['requester_name', 'pic_name'] as $field) {
+            if (is_string($this->input($field))) {
+                $value = trim($this->input($field));
+                $this->merge([$field => $value === '' ? null : $value]);
+            }
         }
     }
 }

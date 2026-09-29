@@ -22,9 +22,9 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
     $this->disk = Storage::fake('attachments');
-    $this->department = Department::factory()->client()->create(['code' => 'IT']);
+    $this->department = Department::factory()->create(['code' => 'IT']);
     $this->user = userInDepartment($this->department, Permission::WorkOrdersView, Permission::WorkOrdersComment);
-    $this->workOrder = WorkOrder::factory()->submitted()->create(['requester_department_id' => $this->department->id]);
+    $this->workOrder = WorkOrder::factory()->submitted()->create();
 });
 
 /**
@@ -116,8 +116,8 @@ describe('uploading', function () {
         uploadForComment('gambar', attachmentUpload('foto.webp'), $colleague)->assertCreated();
     });
 
-    it('answers 404 for a work order of another company', function () {
-        $other = WorkOrder::factory()->submitted()->create();
+    it('answers 404 for a draft the user cannot see', function () {
+        $other = WorkOrder::factory()->create();
 
         uploadForComment('gambar', attachmentUpload('foto.jpg'), workOrder: $other)->assertNotFound();
         expect(Media::query()->exists())->toBeFalse();
@@ -218,7 +218,7 @@ describe('posting with files', function () {
         'the author\'s upload on another work order' => fn (): string => uploadedForComment(
             'gambar',
             'foto.jpg',
-            workOrder: WorkOrder::factory()->submitted()->create(['requester_department_id' => test()->department->id]),
+            workOrder: WorkOrder::factory()->submitted()->create(),
         ),
         'a colleague\'s upload on this work order' => fn (): string => uploadedForComment(
             'gambar',
@@ -246,7 +246,7 @@ describe('posting with files', function () {
         'another work order' => fn (): string => uploadedForComment(
             'lampiran',
             'dokumen.pdf',
-            workOrder: WorkOrder::factory()->submitted()->create(['requester_department_id' => test()->department->id]),
+            workOrder: WorkOrder::factory()->submitted()->create(),
         ),
         'a colleague\'s upload' => fn (): string => uploadedForComment(
             'lampiran',
@@ -300,17 +300,16 @@ describe('posting with files', function () {
         expect($locks)->toBe([]);
     });
 
-    it('serves comment files to whoever sees the work order, and 404 to another company', function () {
+    it('serves comment files to whoever sees the work order, and 404 to anyone else', function () {
         $image = uploadedForComment('gambar', 'foto.jpg');
         $this->post(route('work-orders.comments.store', $this->workOrder), ['body' => inlineImage($image)]);
-        $executor = unggulUser(Permission::WorkOrdersView, Permission::WorkOrdersViewAll);
-        $otherClient = icUser(Permission::WorkOrdersView, Permission::WorkOrdersComment);
+        $otherClient = icUser(Permission::WorkOrdersView);
 
-        $this->actingAs(userInDepartment($this->department, Permission::WorkOrdersView))
+        $this->actingAs(unggulUser(Permission::WorkOrdersView))
             ->get(route('attachments.show', $image))
             ->assertOk()
             ->assertHeader('Content-Type', 'image/jpeg');
-        $this->actingAs($executor)->get(route('attachments.show', $image))->assertOk();
+        $this->actingAs(unggulUser())->get(route('attachments.show', $image))->assertNotFound();
         $this->actingAs($otherClient)->get(route('attachments.show', $image))->assertNotFound();
     });
 });
@@ -426,7 +425,7 @@ describe('pruning abandoned uploads', function () {
         $abandonedPath = Media::query()->where('uuid', $abandoned)->sole()->getPathRelativeToRoot();
         $claimed = uploadedForComment('gambar', 'foto.png');
         $this->post(route('work-orders.comments.store', $this->workOrder), ['body' => inlineImage($claimed)]);
-        uploadedForComment('lampiran', 'dokumen.pdf', workOrder: WorkOrder::factory()->create(['requester_department_id' => $this->department->id]));
+        uploadedForComment('lampiran', 'dokumen.pdf', workOrder: WorkOrder::factory()->submitted()->create());
         $this->travel(23)->hours();
         $recent = uploadedForComment('lampiran', 'dokumen.pdf');
         $this->travel(1)->hours();

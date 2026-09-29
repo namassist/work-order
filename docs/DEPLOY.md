@@ -74,6 +74,12 @@ php artisan optimize
   leaves other roles alone: grants in `INITIAL_ROLES` apply only when a role is first created, so on
   an existing database new grants for other roles are made on the Role page (each PR's deploy notes
   name them, e.g. `work-orders.confirm-payment` for keuangan).
+- **v1 → v2 roles (FLOW.md v2 step 2): no in-place upgrade.** A database seeded with the v1 roles
+  (`pemohon`, `koordinator`, `pelaksana`, `keuangan`) cannot be upgraded to the v2 roles: the seeder
+  never rewrites existing roles, and a leftover `pelaksana` would keep `work-orders.process` and, with
+  department-based visibility gone, act on every work order. `RolePermissionSeeder` therefore refuses
+  to run while any v1 role exists. Start from a fresh database instead (no production data exists
+  yet); locally that is `php artisan migrate:fresh --seeder=DemoSeeder`.
 - `php artisan optimize` caches config, routes, and events; rerun it whenever `.env` changes.
 - Queues: nothing is queued yet, so no worker is needed.
 

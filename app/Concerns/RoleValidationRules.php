@@ -29,6 +29,7 @@ trait RoleValidationRules
                 'regex:/^[a-z0-9-]+$/',
                 Rule::unique(Role::class, 'name')->where('guard_name', 'web')->ignore($role),
             ],
+            'label' => ['required', 'string', 'max:100'],
             'company_scope' => ['nullable', Rule::enum(CompanyScope::class)],
             'permissions' => ['present', 'array'],
             'permissions.*' => ['string', 'distinct', Rule::in(Permission::values())],

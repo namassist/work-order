@@ -27,7 +27,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
-use Spatie\Activitylog\Support\LogOptions;
 use Spatie\ModelStates\HasStates;
 
 /**
@@ -37,8 +36,8 @@ use Spatie\ModelStates\HasStates;
  * @property string|null $description
  * @property int $requester_department_id
  * @property int|null $target_department_id
- * @property int|null $requester_id
- * @property string|null $requester_name
+ * @property string $requester_name
+ * @property string|null $pic_name
  * @property int $work_order_category_id
  * @property int $created_by
  * @property WorkOrderStatus $status
@@ -50,12 +49,11 @@ use Spatie\ModelStates\HasStates;
  * @property-read Department $requesterDepartment
  * @property-read Department|null $targetDepartment
  * @property-read WorkOrderCategory $category
- * @property-read User|null $requester
  * @property-read User $enteredBy
  * @property-read Collection<int, WorkOrderComment> $comments
  * @property-read WorkOrderInvoice|null $invoice
  */
-#[Fillable(['title', 'description', 'work_order_category_id', 'target_department_id', 'urgency', 'target_date'])]
+#[Fillable(['title', 'description', 'requester_department_id', 'requester_name', 'pic_name', 'work_order_category_id', 'target_department_id', 'urgency', 'target_date'])]
 class WorkOrder extends Model implements Attachable
 {
     /** @use HasFactory<WorkOrderFactory> */
@@ -107,15 +105,6 @@ class WorkOrder extends Model implements Attachable
     protected $attributes = [
         'urgency' => 'normal',
     ];
-
-    /**
-     * Log the requester too: it is not fillable (the action sets it) but may
-     * be corrected on an on-behalf draft.
-     */
-    protected function activityLogOptions(LogOptions $options): LogOptions
-    {
-        return $options->logOnly(['requester_id', 'requester_name']);
-    }
 
     /**
      * @return array<string, AttachmentCollection>
@@ -196,8 +185,9 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * The department (of a client company) that requests the work, fixed at
-     * creation, even if it was deleted later.
+     * The department (of a client company) that requests the work (FLOW.md
+     * §4). It may change only in Draft, since the number carries its code
+     * from the first submission on; kept even if it was deleted later.
      *
      * @return BelongsTo<Department, $this>
      */
@@ -207,8 +197,9 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * The department (of the executor company) the work is addressed to;
-     * required from the first submission on (requiresTargetDepartment()).
+     * The department (of the executor company) the work is addressed to:
+     * optional and informational only (FLOW.md v2 §4); it no longer decides
+     * who acts or who sees the work order.
      *
      * @return BelongsTo<Department, $this>
      */
@@ -226,42 +217,14 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * The requester's account; null when the work order was entered on behalf
-     * of someone without one (see requester_name).
-     *
-     * @return BelongsTo<User, $this>
-     */
-    public function requester(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'requester_id')->withTrashed();
-    }
-
-    /**
-     * The user who entered the work order: the requester, or a koordinator
-     * entering it on their behalf.
+     * The Admin WO who entered the work order on behalf of the IC contact
+     * (FLOW.md §4).
      *
      * @return BelongsTo<User, $this>
      */
     public function enteredBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by')->withTrashed();
-    }
-
-    /**
-     * Whether someone other than the requester entered the work order (a
-     * koordinator, for an IC account or a contact without one).
-     */
-    public function wasEnteredOnBehalf(): bool
-    {
-        return $this->requester_id !== $this->created_by;
-    }
-
-    /**
-     * The requester's name: their account's, or the contact name.
-     */
-    public function requesterName(): string
-    {
-        return $this->requester->name ?? (string) $this->requester_name;
     }
 
     /**
@@ -314,12 +277,12 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
-     * Whether the user may see this work order (FLOW.md §6). Client company
-     * (IC) users see their own department's work orders, drafts included.
-     * Executor company (Unggul) users see those they entered, and submitted
-     * ones addressed to their department, or all submitted ones with
-     * work-orders.view-all; never another user's draft. Must agree with
-     * scopeVisibleTo(), see WorkOrderVisibilityTest.
+     * Whether the user may see this work order (FLOW.md v2 §6). Executor
+     * company (Unggul) users with work-orders.view see every submitted work
+     * order, and drafts too with work-orders.create (Admin WO and the system
+     * admin). Client company (IC) users keep the v1 safeguard: at most their
+     * own department's work orders, although none are issued an account.
+     * Must agree with scopeVisibleTo(), see WorkOrderVisibilityTest.
      */
     public function isVisibleTo(User $user): bool
     {
@@ -327,37 +290,33 @@ class WorkOrder extends Model implements Attachable
             return $this->requester_department_id === $user->department_id;
         }
 
-        if ($this->created_by === $user->id) {
-            return true;
+        if (! $user->checkPermissionTo(Permission::WorkOrdersView->value)) {
+            return false;
         }
 
-        return $this->wasSubmitted()
-            && ($user->checkPermissionTo(Permission::WorkOrdersViewAll->value) || $this->target_department_id === $user->department_id);
+        return $this->wasSubmitted() || $user->checkPermissionTo(Permission::WorkOrdersCreate->value);
     }
 
     /**
      * Whether the user acts for the given side of this work order (FLOW.md
-     * §5). The requester side is a client company user of the requester
-     * department with work-orders.update, or the koordinator who entered it
-     * on their behalf; the executor side is a user of the target department
-     * with work-orders.process (internal-only, so never an IC user); the
-     * finance side is an executor company user with
-     * work-orders.confirm-payment (keuangan, also internal-only).
+     * §5). PROVISIONAL until step 3 replaces the v1 statuses: the requester
+     * side is an executor company user with work-orders.update (Admin WO),
+     * the executor side one with work-orders.process (Lead Operational), and
+     * the finance side one with work-orders.confirm-payment (Finance), all
+     * internal-only, whatever their department. Client company users are on
+     * no side.
      */
     public function isOnSide(User $user, WorkOrderSide $side): bool
     {
-        return match ($side) {
-            WorkOrderSide::Requester => $user->isClient()
-                ? $this->requester_department_id === $user->department_id
-                    && $user->checkPermissionTo(Permission::WorkOrdersUpdate->value)
-                : $this->created_by === $user->id
-                    && $user->checkPermissionTo(Permission::WorkOrdersCreateOnBehalf->value),
-            WorkOrderSide::Executor => $this->target_department_id !== null
-                && $this->target_department_id === $user->department_id
-                && $user->checkPermissionTo(Permission::WorkOrdersProcess->value),
-            WorkOrderSide::Finance => ! $user->isClient()
-                && $user->checkPermissionTo(Permission::WorkOrdersConfirmPayment->value),
-        };
+        if ($user->isClient()) {
+            return false;
+        }
+
+        return $user->checkPermissionTo(match ($side) {
+            WorkOrderSide::Requester => Permission::WorkOrdersUpdate->value,
+            WorkOrderSide::Executor => Permission::WorkOrdersProcess->value,
+            WorkOrderSide::Finance => Permission::WorkOrdersConfirmPayment->value,
+        });
     }
 
     /**
@@ -383,13 +342,16 @@ class WorkOrder extends Model implements Attachable
             return;
         }
 
-        $seesAllSubmitted = $user->checkPermissionTo(Permission::WorkOrdersViewAll->value);
+        if (! $user->checkPermissionTo(Permission::WorkOrdersView->value)) {
+            $query->whereRaw('false');
 
-        $query->where(fn (Builder $query) => $query
-            ->where('created_by', $user->id)
-            ->orWhere(fn (Builder $query) => $query
-                ->whereNotNull('number')
-                ->when(! $seesAllSubmitted, fn (Builder $query) => $query->where('target_department_id', $user->department_id))));
+            return;
+        }
+
+        $query->when(
+            ! $user->checkPermissionTo(Permission::WorkOrdersCreate->value),
+            fn (Builder $query) => $query->whereNotNull('number'),
+        );
     }
 
     /**

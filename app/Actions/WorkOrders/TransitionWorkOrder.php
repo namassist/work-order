@@ -27,7 +27,7 @@ class TransitionWorkOrder
 
     /**
      * @throws CouldNotPerformTransition when the transition is not allowed from the current status
-     * @throws ValidationException when the new status requires a target department and there is none, or an invoice (Penagihan) or its payment (Selesai)
+     * @throws ValidationException when the new status requires an invoice (Penagihan) or its payment (Selesai)
      */
     public function handle(WorkOrder $workOrder, string $to, User $user, ?string $note = null): WorkOrder
     {
@@ -38,12 +38,6 @@ class TransitionWorkOrder
             $from = $locked->status->getValue();
             $oldNumber = $locked->number;
             $target = WorkOrderStatus::fromName($to);
-
-            if ($target?->requiresTargetDepartment() && $locked->target_department_id === null) {
-                throw ValidationException::withMessages([
-                    'status' => __('Pilih departemen tujuan sebelum mengajukan.'),
-                ]);
-            }
 
             $this->ensureInvoiced($locked, $to);
 

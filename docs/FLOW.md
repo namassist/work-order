@@ -27,16 +27,16 @@ from input through approval, execution, daily reporting, BAST, closing and payme
 
 ## 3. Roles
 
-| Role | Does |
-|---|---|
-| Admin WO | Enters, submits, revises, resubmits and closes WOs; cancels before execution |
-| Lead Operational | Approves or rejects submitted WOs; cancels during execution. One person |
-| PIC Timesheet | Posts the daily reports during execution; submits for document review |
-| Rental | Reviews documents; returns for revision or submits the BAST |
-| Direktur | Approves BAST (approve only, no rejection) |
-| Finance | Manages the payment track after closing (§10) |
-| Viewer | Read-only |
-| System admin | Users, roles, master data, registrations, BAST templates, activity log |
+| Role             | Does                                                                         |
+| ---------------- | ---------------------------------------------------------------------------- |
+| Admin WO         | Enters, submits, revises, resubmits and closes WOs; cancels before execution |
+| Lead Operational | Approves or rejects submitted WOs; cancels during execution. One person      |
+| PIC Timesheet    | Posts the daily reports during execution; submits for document review        |
+| Rental           | Reviews documents; returns for revision or submits the BAST                  |
+| Direktur         | Approves BAST (approve only, no rejection)                                   |
+| Finance          | Manages the payment track after closing (§10)                                |
+| Viewer           | Read-only                                                                    |
+| System admin     | Users, roles, master data, registrations, BAST templates, activity log       |
 
 - "Admin WO" is deliberately not called "Admin", to avoid confusion with the system admin.
 - PIC Work Order has **no action** in the application **(Provisional:** optionally recorded on the WO as information, §4).
@@ -67,17 +67,17 @@ Payment track after Closed: §10
 
 ### 5.1 Transitions
 
-| From → To | By | Requirements |
-|---|---|---|
-| Draft → Diajukan | Admin WO | Required WO data complete. Number assigned on first submission |
-| Diajukan → Pelaksanaan | Lead Operational | – |
-| Diajukan → Ditolak | Lead Operational | **Note required** |
-| Ditolak → Diajukan | Admin WO | After revision; same number |
-| Pelaksanaan → Review Dokumen | PIC Timesheet | At least one daily report (§7) |
-| Review Dokumen → Pelaksanaan | Rental | **Note required** (data incomplete) |
-| Review Dokumen → Approval BAST | Rental | The application generates the BAST (§8) |
-| Approval BAST → BAST Disetujui | Direktur | Approve only; the final BAST PDF is generated with the approval |
-| BAST Disetujui → Closed | Admin WO | – |
+| From → To                      | By               | Requirements                                                    |
+| ------------------------------ | ---------------- | --------------------------------------------------------------- |
+| Draft → Diajukan               | Admin WO         | Required WO data complete. Number assigned on first submission  |
+| Diajukan → Pelaksanaan         | Lead Operational | –                                                               |
+| Diajukan → Ditolak             | Lead Operational | **Note required**                                               |
+| Ditolak → Diajukan             | Admin WO         | After revision; same number                                     |
+| Pelaksanaan → Review Dokumen   | PIC Timesheet    | At least one daily report (§7)                                  |
+| Review Dokumen → Pelaksanaan   | Rental           | **Note required** (data incomplete)                             |
+| Review Dokumen → Approval BAST | Rental           | The application generates the BAST (§8)                         |
+| Approval BAST → BAST Disetujui | Direktur         | Approve only; the final BAST PDF is generated with the approval |
+| BAST Disetujui → Closed        | Admin WO         | –                                                               |
 
 ### 5.2 Cancellation **(Provisional)**
 
@@ -87,17 +87,17 @@ Payment track after Closed: §10
 
 ### 5.3 Status properties
 
-| Status | Edit WO | Comments | Files | Overdue basis | Final |
-|---|---|---|---|---|---|
-| Draft | Admin WO | Yes | Admin WO: dokumen | – | No |
-| Diajukan | – | Yes | – | target date | No |
-| Ditolak | Admin WO | Yes | Admin WO: dokumen | – | No |
-| Pelaksanaan | – | Yes | PIC Timesheet: dokumen; daily reports (§7) | target date; missing daily report | No |
-| Review Dokumen | – | Yes | – | target date | No |
-| Approval BAST | – | Yes | – | – | No |
-| BAST Disetujui | – | Yes | – | – | No |
-| Closed | – | Read-only | Finance: payment track (§10) | payment due date (§10) | Yes (for the WO flow) |
-| Dibatalkan | – | Read-only | – | – | Yes |
+| Status         | Edit WO  | Comments  | Files                                      | Overdue basis                     | Final                 |
+| -------------- | -------- | --------- | ------------------------------------------ | --------------------------------- | --------------------- |
+| Draft          | Admin WO | Yes       | Admin WO: dokumen                          | –                                 | No                    |
+| Diajukan       | –        | Yes       | –                                          | target date                       | No                    |
+| Ditolak        | Admin WO | Yes       | Admin WO: dokumen                          | –                                 | No                    |
+| Pelaksanaan    | –        | Yes       | PIC Timesheet: dokumen; daily reports (§7) | target date; missing daily report | No                    |
+| Review Dokumen | –        | Yes       | –                                          | target date                       | No                    |
+| Approval BAST  | –        | Yes       | –                                          | –                                 | No                    |
+| BAST Disetujui | –        | Yes       | –                                          | –                                 | No                    |
+| Closed         | –        | Read-only | Finance: payment track (§10)               | payment due date (§10)            | Yes (for the WO flow) |
+| Dibatalkan     | –        | Read-only | –                                          | –                                 | Yes                   |
 
 Every status sets every status flag (see `CLAUDE.md`). The number constraint covers every status
 after the first submission.
@@ -116,8 +116,8 @@ link kept outside the application.
 
 - During **Pelaksanaan**, PIC Timesheet posts **one report per WO per working day** (WITA).
 - A report contains: the date, a short note, and **at least one** of:
-  - Excel file(s) (the existing attachment allowlist, private disk, access follows the WO)
-  - link(s) (http/https only)
+    - Excel file(s) (the existing attachment allowlist, private disk, access follows the WO)
+    - link(s) (http/https only)
 - A report can be edited on its own day; changes are audit-logged.
 - Discussion about the work uses the existing WO comments.
 - **Missing report:** a WO in Pelaksanaan with no report for today after the cutoff time is flagged
@@ -140,13 +140,13 @@ link kept outside the application.
 ## 9. BAST template management
 
 - A system admin page to manage BAST templates:
-  - a rich-text editor (reusing the comment editor stack, with an extended allowlist for headings,
-    tables, alignment and a letterhead image uploaded to the application)
-  - **placeholders** from a fixed allowlist, e.g. `{{nomor_bast}}`, `{{nomor_wo}}`, `{{judul}}`,
-    `{{departemen_pemohon}}`, `{{kontak_pemohon}}`, `{{tanggal_bast}}`, `{{nama_direktur}}`,
-    `{{tanggal_persetujuan}}`
-  - preview with a real WO
-  - **versioning**: publishing creates a new version; exactly one version is active
+    - a rich-text editor (reusing the comment editor stack, with an extended allowlist for headings,
+      tables, alignment and a letterhead image uploaded to the application)
+    - **placeholders** from a fixed allowlist, e.g. `{{nomor_bast}}`, `{{nomor_wo}}`, `{{judul}}`,
+      `{{departemen_pemohon}}`, `{{kontak_pemohon}}`, `{{tanggal_bast}}`, `{{nama_direktur}}`,
+      `{{tanggal_persetujuan}}`
+    - preview with a real WO
+    - **versioning**: publishing creates a new version; exactly one version is active
 - **Security:** templates are HTML with simple placeholder substitution and **escaped values**.
   Templates are never compiled or evaluated as Blade/PHP (no server-side template injection).
   Template HTML is sanitized on save like comments.

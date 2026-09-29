@@ -48,7 +48,7 @@ class Diajukan extends WorkOrderStatus
         return WorkOrderDeadline::TargetDate;
     }
 
-    public function requiresTargetDepartment(): bool
+    public function requiresNumber(): bool
     {
         return true;
     }
@@ -65,6 +65,6 @@ class Diajukan extends WorkOrderStatus
 
     public function waitingMessage(WorkOrder $workOrder): string
     {
-        return __('Menunggu pelaksana :department memproses.', ['department' => $workOrder->targetDepartment?->code]);
+        return __('Menunggu persetujuan Lead Operational.');
     }
 }

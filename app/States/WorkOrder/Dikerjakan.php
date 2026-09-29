@@ -39,7 +39,7 @@ class Dikerjakan extends WorkOrderStatus
         return WorkOrderDeadline::TargetDate;
     }
 
-    public function requiresTargetDepartment(): bool
+    public function requiresNumber(): bool
     {
         return true;
     }
@@ -67,6 +67,6 @@ class Dikerjakan extends WorkOrderStatus
 
     public function waitingMessage(WorkOrder $workOrder): string
     {
-        return __('Sedang dikerjakan oleh :department.', ['department' => $workOrder->targetDepartment?->code]);
+        return __('Sedang dikerjakan.');
     }
 }

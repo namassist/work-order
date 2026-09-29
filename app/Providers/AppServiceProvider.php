@@ -93,7 +93,6 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('wo-comment-change', $perUserPerMinute(10));
         RateLimiter::for('wo-comment-upload', $perUserPerMinute(20));
         RateLimiter::for('attachment-upload', $perUserPerMinute(30));
-        RateLimiter::for('wo-requester-search', $perUserPerMinute(30));
         RateLimiter::for('wo-invoice', $perUserPerMinute(10));
 
         // Public, so per IP. Offices share an IP, hence the hourly headroom.

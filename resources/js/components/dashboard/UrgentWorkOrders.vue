@@ -93,7 +93,7 @@ const listHref = WorkOrderController.index({
                     </span>
                     <span class="block truncate text-muted-foreground">
                         {{ workOrder.category }} ·
-                        {{ workOrder.requester.name }}
+                        {{ workOrder.requester_name }}
                     </span>
                 </Link>
             </li>

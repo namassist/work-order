@@ -109,7 +109,7 @@ class DashboardController extends Controller
      * urgency mendesak and status aktif): the earliest in the flow first,
      * then waiting longest.
      *
-     * @return list<array{id: int, number: string|null, title: string, category: string, requester: array{id: int|null, name: string}, status: array{value: string, label: string, tone: string}, submitted_at: string|null}>
+     * @return list<array{id: int, number: string|null, title: string, category: string, requester_name: string, status: array{value: string, label: string, tone: string}, submitted_at: string|null}>
      */
     private function urgentWorkOrders(User $user): array
     {
@@ -118,7 +118,7 @@ class DashboardController extends Controller
             ->whereIn('status', WorkOrderStatus::activeNames())
             ->where('urgency', WorkOrderUrgency::Mendesak)
             ->withSubmittedAt()
-            ->with(['category', 'requester'])
+            ->with('category')
             ->orderByRaw('array_position(?::text[], status::text)', ['{'.implode(',', WorkOrderStatus::flowOrder()).'}'])
             ->orderBy('submitted_at')
             ->orderBy('id')
@@ -130,7 +130,7 @@ class DashboardController extends Controller
             'number' => $workOrder->number,
             'title' => $workOrder->title,
             'category' => $workOrder->category->name,
-            'requester' => ['id' => $workOrder->requester?->id, 'name' => $workOrder->requesterName()],
+            'requester_name' => $workOrder->requester_name,
             'status' => $workOrder->status->toOption(),
             'submitted_at' => $this->isoMoment($workOrder->getAttribute('submitted_at')),
         ])->all());

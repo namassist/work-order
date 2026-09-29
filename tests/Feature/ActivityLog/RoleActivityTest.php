@@ -33,14 +33,14 @@ function executorViewerRole(array $permissions): Role
 describe('user roles', function () {
     it('logs the roles before and after an admin changes them', function () {
         $admin = adminUser();
-        $user = User::factory()->for(Department::factory()->client())->create()->assignRole('viewer');
+        $user = User::factory()->for(Department::factory())->create()->assignRole('viewer');
 
         $this->actingAs($admin)->put(route('admin.users.update', $user), [
             'name' => $user->name,
             'email' => $user->email,
             'department_id' => $user->department_id,
             'is_active' => true,
-            'roles' => ['pemohon', 'viewer'],
+            'roles' => ['admin-wo', 'viewer'],
         ])->assertSessionHasNoErrors();
 
         [$activity] = activitiesWithEvent('roles_updated', 'user');
@@ -49,7 +49,7 @@ describe('user roles', function () {
             ->subject_id->toBe($user->id)
             ->causer_id->toBe($admin->id)
             ->and($activity->attribute_changes->all())->toBe([
-                'attributes' => ['roles' => ['pemohon', 'viewer']],
+                'attributes' => ['roles' => ['admin-wo', 'viewer']],
                 'old' => ['roles' => ['viewer']],
             ]);
     });
@@ -92,6 +92,8 @@ describe('roles', function () {
     it('logs a new role with its permissions', function () {
         $this->actingAs(userWithPermissions(Permission::RolesManage))->post(route('admin.roles.store'), [
             'name' => 'teknisi',
+            'label' => 'Teknisi',
+            'company_scope' => 'executor',
             'permissions' => [Permission::WorkOrdersView->value, Permission::WorkOrdersUpdate->value],
         ])->assertSessionHasNoErrors();
 
@@ -102,6 +104,8 @@ describe('roles', function () {
             ->subject_id->toBe(Role::findByName('teknisi')->id)
             ->and($activity->attribute_changes->get('attributes'))->toBe([
                 'name' => 'teknisi',
+                'label' => 'Teknisi',
+                'company_scope' => 'executor',
                 'permissions' => [Permission::WorkOrdersUpdate->value, Permission::WorkOrdersView->value],
             ]);
     });
@@ -112,6 +116,7 @@ describe('roles', function () {
 
         $this->actingAs($manager)->put(route('admin.roles.update', $role), [
             'name' => 'pengamat',
+            'label' => 'Pengamat',
             'company_scope' => 'executor',
             'permissions' => [Permission::WorkOrdersView->value, Permission::UsersView->value],
         ])->assertSessionHasNoErrors();
@@ -119,8 +124,8 @@ describe('roles', function () {
         [$activity] = activitiesWithEvent('updated', 'role');
         expect($activity->subject_id)->toBe($role->id)
             ->and($activity->attribute_changes->all())->toBe([
-                'attributes' => ['name' => 'pengamat', 'permissions' => [Permission::UsersView->value, Permission::WorkOrdersView->value]],
-                'old' => ['name' => 'viewer', 'permissions' => [Permission::DepartmentsView->value, Permission::WorkOrdersView->value]],
+                'attributes' => ['name' => 'pengamat', 'label' => 'Pengamat', 'permissions' => [Permission::UsersView->value, Permission::WorkOrdersView->value]],
+                'old' => ['name' => 'viewer', 'label' => 'Viewer', 'permissions' => [Permission::DepartmentsView->value, Permission::WorkOrdersView->value]],
             ]);
     });
 
@@ -130,6 +135,7 @@ describe('roles', function () {
 
         $this->actingAs($manager)->put(route('admin.roles.update', $role), [
             'name' => 'viewer',
+            'label' => 'Viewer',
             'company_scope' => 'executor',
             'permissions' => [Permission::DepartmentsView->value, Permission::UsersView->value],
         ])->assertSessionHasNoErrors();
@@ -147,6 +153,7 @@ describe('roles', function () {
 
         $this->actingAs($manager)->put(route('admin.roles.update', $role), [
             'name' => 'viewer',
+            'label' => 'Viewer',
             'company_scope' => 'executor',
             'permissions' => [Permission::DepartmentsView->value],
         ])->assertSessionHasNoErrors();
@@ -167,6 +174,7 @@ describe('roles', function () {
             ->subject_id->toBe($role->id)
             ->and($activity->attribute_changes->get('old'))->toBe([
                 'name' => 'viewer',
+                'label' => 'Viewer',
                 'company_scope' => 'executor',
                 'permissions' => [Permission::DepartmentsView->value],
             ]);

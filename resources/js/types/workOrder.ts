@@ -42,15 +42,15 @@ export type WorkOrder = {
     target_date: string | null;
     /** The client company (IC) department that requests the work. */
     requester_department: DepartmentOption;
-    /** The executor company department it is addressed to; null until chosen. */
+    /** An executor company department, informational only; null when not given. */
     target_department: DepartmentOption | null;
     category: CategoryOption;
-    /** The requester: an account, or a contact name (id null) when entered on behalf. */
-    requester: { id: number | null; name: string };
-    /** Who entered the work order: the requester, or a koordinator on their behalf. */
+    /** The IC contact who made the request. */
+    requester_name: string;
+    /** The Unggul staff member IC contacted (optional, informational). */
+    pic_name: string | null;
+    /** The Admin WO who entered the work order. */
     entered_by: { name: string };
-    /** Entered by someone other than the requester (a koordinator). */
-    entered_on_behalf: boolean;
     created_at: string;
     /** Last activity: edits, comments, status changes, and attachments. */
     updated_at: string;
@@ -71,8 +71,6 @@ export type WorkOrderTransition = {
     requires_note: boolean;
     /** E.g. "Alasan penolakan"; "Catatan" when nothing more specific fits. */
     note_label: string;
-    /** The target status needs a target department (e.g. Diajukan). */
-    requires_target_department: boolean;
     /** Entered through its own form instead of the note dialog. */
     form: 'invoice' | 'payment' | null;
     /** Why this user may not make the change (segregation of duties). */
@@ -110,7 +108,7 @@ export type StatusHistoryEntry = {
     to: { value: string; label: string };
     user: { id: number; name: string };
     note: string | null;
-    /** On the creation entry of an on-behalf work order: the requester's name. */
+    /** On the creation entry: the IC contact the work order was entered for. */
     on_behalf_of: string | null;
     created_at: string;
 };
@@ -161,22 +159,8 @@ export type UrgentWorkOrder = {
     number: string | null;
     title: string;
     category: string;
-    requester: { id: number | null; name: string };
+    requester_name: string;
     status: WorkOrderStatusOption;
     /** ISO moment of the first submission. */
     submitted_at: string | null;
-};
-
-/** An account the koordinator can pick as the requester of an on-behalf work order. */
-export type RequesterAccount = {
-    id: number;
-    name: string;
-    email: string;
-};
-
-/** The current requester of an on-behalf draft, for the koordinator who entered it. */
-export type RequesterCorrection = {
-    department_id: number;
-    account: RequesterAccount | null;
-    contact_name: string | null;
 };

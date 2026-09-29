@@ -13,17 +13,18 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role;
 
 /*
-| FLOW.md §6: client company (IC) users never open the executor's internal
-| pages and never receive its internal data. The route checks read the
-| router, so a route added later is covered without editing this file.
+| FLOW.md §2, §6: client company (IC) users never open the executor's
+| internal pages and never receive its internal data. IC never logs in (v2),
+| so no IC account is issued; this stays as a safeguard. The route checks
+| read the router, so a route added later is covered without editing this
+| file.
 */
 
 /**
- * Route name segments of the resources only the executor company manages,
- * and of every endpoint that lists or searches users (requester-accounts).
+ * Route name segments of the resources only the executor company manages.
  * A route whose name contains one must be internal, wherever it is defined.
  */
-const INTERNAL_RESOURCES = ['users', 'roles', 'departments', 'work-order-categories', 'companies', 'activity-log', 'registrations', 'requester-accounts'];
+const INTERNAL_RESOURCES = ['users', 'roles', 'departments', 'work-order-categories', 'companies', 'activity-log', 'registrations'];
 
 /**
  * Every admin.* route with the HTTP method to call it with.
@@ -77,9 +78,9 @@ function adminRouteUrl(RoutingRoute $route, array $parameters): string
 /**
  * Text that belongs to the executor company or to another IC department. It
  * must never reach an IC user's page props. Active Unggul departments are
- * the one exception: IC forms list them (id, code, name) as targets, see
- * assertTargetDepartmentsOnly(); the secret ones here are inactive or
- * deleted, so no form offers them.
+ * the one exception: the list's target filter names them (id, code, name),
+ * see assertTargetDepartmentsOnly(); the secret ones here are inactive or
+ * deleted, so no list offers them.
  *
  * @return list<string>
  */
@@ -90,14 +91,14 @@ function seedInternalSecrets(): array
     Department::factory()->create(['code' => 'SECRET-DEL', 'name' => 'Rahasia Unggul Terhapus'])->delete();
 
     $otherIc = Department::factory()->client()->create(['code' => 'SECRET-IC', 'name' => 'Rahasia IC Lain']);
-    $otherRequester = User::factory()->for($otherIc)->create(['name' => 'Rahasia Pemohon Lain', 'email' => 'rahasia.pemohon@ic.test']);
-    WorkOrder::factory()->by($otherRequester)->create(['title' => 'Rahasia WO IC Lain']);
-    WorkOrder::factory()->by($otherRequester)->submitted()->create(['title' => 'Rahasia WO IC Lain Diajukan', 'urgency' => 'mendesak']);
+    User::factory()->for($otherIc)->create(['name' => 'Rahasia Akun IC Lain', 'email' => 'rahasia.pemohon@ic.test']);
+    WorkOrder::factory()->requestedBy($otherIc)->create(['title' => 'Rahasia WO IC Lain', 'requester_name' => 'Rahasia Pemohon Lain']);
+    WorkOrder::factory()->requestedBy($otherIc)->submitted()->create(['title' => 'Rahasia WO IC Lain Diajukan', 'urgency' => 'mendesak', 'requester_name' => 'Rahasia Pemohon Lain']);
 
     return [
         'SECRET-UGL', 'Rahasia Unggul Departemen', 'Rahasia Pelaksana', 'rahasia.pelaksana@unggul.test',
         'SECRET-DEL', 'Rahasia Unggul Terhapus',
-        'SECRET-IC', 'Rahasia IC Lain', 'Rahasia Pemohon Lain', 'rahasia.pemohon@ic.test', 'Rahasia WO IC Lain',
+        'SECRET-IC', 'Rahasia IC Lain', 'Rahasia Akun IC Lain', 'Rahasia Pemohon Lain', 'rahasia.pemohon@ic.test', 'Rahasia WO IC Lain',
     ];
 }
 
@@ -120,8 +121,8 @@ function assertNoInternalData(array $props, array $secrets, string $page): void
 }
 
 /**
- * The IC work order form's target list: exactly the active executor
- * departments, and nothing about them beyond id, code, and name.
+ * The work order list's target filter for an IC user: exactly the active
+ * executor departments, and nothing about them beyond id, code, and name.
  *
  * @param  array<string, mixed>  $props
  */
@@ -139,7 +140,7 @@ function assertTargetDepartmentsOnly(array $props): void
 }
 
 dataset('IC users', [
-    'pemohon' => [fn (): User => icUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::WorkOrdersComment)],
+    'holding the v1 pemohon permissions' => [fn (): User => icUser(Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::WorkOrdersComment)],
     'holding every permission directly' => [fn (): User => icUser(...Permission::cases())],
     'with the admin role' => [fn (): User => icUser()->assignRole('admin')],
 ]);
@@ -156,10 +157,6 @@ describe('internal routes', function () {
             ->all();
 
         expect($unguarded)->toBe([]);
-    });
-
-    it('keeps the requester account picker internal', function () {
-        expect(Route::getRoutes()->getByName('work-orders.requester-accounts')?->gatherMiddleware())->toContain('internal');
     });
 
     it('covers users, roles, registrations, departments, categories, companies, and the activity log', function () {
@@ -221,8 +218,9 @@ describe('permissions', function () {
         $user = icUser()->assignRole('admin');
 
         expect($user->checkPermissionTo(Permission::UsersView->value))->toBeFalse()
-            ->and($user->checkPermissionTo(Permission::WorkOrdersViewAll->value))->toBeFalse()
-            ->and($user->checkPermissionTo(Permission::WorkOrdersCreate->value))->toBeTrue();
+            ->and($user->checkPermissionTo(Permission::WorkOrdersCreate->value))->toBeFalse()
+            ->and($user->checkPermissionTo(Permission::WorkOrdersExport->value))->toBeFalse()
+            ->and($user->checkPermissionTo(Permission::WorkOrdersView->value))->toBeTrue();
     });
 
     it('keeps every permission for an Unggul user', function () {
@@ -243,24 +241,22 @@ describe('page props', function () {
         $user = $icUser();
         $secrets = seedInternalSecrets();
         Department::factory()->create(['code' => 'TUJUAN']);
-        $own = WorkOrder::factory()->by($user)->create(['title' => 'Lampu gudang mati']);
-        // Entered for the IC user's department by an Unggul koordinator: IC
-        // users see the koordinator's name, and nothing else about them.
-        $koordinator = User::factory()->create(['name' => 'Koordinator Unggul', 'email' => 'rahasia.koordinator@unggul.test']);
-        $onBehalf = WorkOrder::factory()->onBehalf($koordinator, contactName: 'Pak Andi')->create(['requester_department_id' => $user->department_id]);
-        $secrets[] = 'rahasia.koordinator@unggul.test';
+        // Entered for the IC user's department by an Unggul Admin WO: IC
+        // users see the Admin WO's name, and nothing else about them.
+        $adminWo = User::factory()->create(['name' => 'Admin WO Unggul', 'email' => 'rahasia.adminwo@unggul.test']);
+        $own = WorkOrder::factory()->by($adminWo)->requestedBy($user->department)->create(['title' => 'Lampu gudang mati', 'requester_name' => 'Pak Andi']);
+        $secrets[] = 'rahasia.adminwo@unggul.test';
         // Invoiced and paid by Unggul users: IC users see the invoice (they
         // pay it) and those users' names, nothing else about them.
         $pelaksana = User::factory()->create(['name' => 'Pelaksana Unggul', 'email' => 'penagih.rahasia@unggul.test']);
         $keuangan = User::factory()->create(['name' => 'Keuangan Unggul', 'email' => 'rahasia.keuangan@unggul.test']);
-        $paid = WorkOrder::factory()->by($user)->paid(['issued_by' => $pelaksana->id, 'paid_by' => $keuangan->id])->create();
+        $paid = WorkOrder::factory()->requestedBy($user->department)->paid(['issued_by' => $pelaksana->id, 'paid_by' => $keuangan->id])->create();
         $secrets[] = 'penagih.rahasia@unggul.test';
         $secrets[] = 'rahasia.keuangan@unggul.test';
 
         $pages = [
             'Daftar WO' => route('work-orders.index'),
             'Detail WO' => route('work-orders.show', $own),
-            'Detail WO diinput koordinator' => route('work-orders.show', $onBehalf),
             'Detail WO lunas' => route('work-orders.show', $paid),
             'Buat WO' => route('work-orders.create'),
             'Ubah WO' => route('work-orders.edit', $own),
@@ -269,7 +265,8 @@ describe('page props', function () {
         foreach ($pages as $name => $url) {
             $response = $this->actingAs($user)->get($url);
 
-            if ($name === 'Ubah WO' && ! $user->can('update', $own)) {
+            // IC users never create or edit work orders (FLOW.md v2 §4).
+            if (in_array($name, ['Buat WO', 'Ubah WO'], true)) {
                 $response->assertForbidden();
 
                 continue;
@@ -279,11 +276,8 @@ describe('page props', function () {
                 $props = $page->toArray()['props'];
                 assertNoInternalData($props, $secrets, $name);
 
-                if (in_array($name, ['Buat WO', 'Ubah WO'], true)) {
+                if ($name === 'Daftar WO') {
                     assertTargetDepartmentsOnly($props);
-                    // The koordinator's requester choices never reach IC users.
-                    expect($props['requesterDepartments'] ?? null)->toBeNull()
-                        ->and($props['requesterCorrection'] ?? null)->toBeNull();
                 }
 
                 if ($name === 'Detail WO lunas') {
@@ -291,8 +285,8 @@ describe('page props', function () {
                         ->and($props['invoice']['paid_by'])->toBe(['name' => 'Keuangan Unggul']);
                 }
 
-                if ($name === 'Detail WO diinput koordinator') {
-                    expect($props['workOrder']['entered_by'])->toBe(['name' => 'Koordinator Unggul']);
+                if ($name === 'Detail WO') {
+                    expect($props['workOrder']['entered_by'])->toBe(['name' => 'Admin WO Unggul']);
                 }
 
                 return $page;

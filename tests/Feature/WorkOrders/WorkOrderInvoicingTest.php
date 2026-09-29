@@ -42,10 +42,10 @@ beforeEach(function () {
 
     $this->requesterDepartment = Department::factory()->client()->create(['code' => 'PRD']);
     $this->target = Department::factory()->create(['code' => 'ENG']);
-    $this->pemohon = User::factory()->for($this->requesterDepartment)->create()->assignRole('pemohon');
-    $this->pelaksana = User::factory()->for($this->target)->create()->assignRole('pelaksana');
-    $this->keuangan = User::factory()->for(Department::factory()->create(['code' => 'KEU']))->create()->assignRole('keuangan');
-    $this->workOrder = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->inProgress()->create();
+    $this->adminWo = User::factory()->for(Department::factory()->create(['code' => 'OPS']))->create()->assignRole('admin-wo');
+    $this->lead = User::factory()->for($this->target)->create()->assignRole('lead-operational');
+    $this->finance = User::factory()->for(Department::factory()->create(['code' => 'KEU']))->create()->assignRole('finance');
+    $this->workOrder = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->inProgress()->create();
 });
 
 /**
@@ -88,14 +88,14 @@ function payAs(User $user, WorkOrder $workOrder, array $payload = []): TestRespo
  */
 function billedByPelaksana(): WorkOrder
 {
-    billAs(test()->pelaksana, test()->workOrder)->assertSessionHasNoErrors();
+    billAs(test()->lead, test()->workOrder)->assertSessionHasNoErrors();
 
     return test()->workOrder->refresh();
 }
 
 describe('invoicing (Dikerjakan → Penagihan)', function () {
     it('saves the invoice, its files, and the status change together', function () {
-        billAs($this->pelaksana, $this->workOrder)
+        billAs($this->lead, $this->workOrder)
             ->assertSessionHasNoErrors()
             ->assertInertiaFlash('toast.type', 'success');
 
@@ -106,7 +106,7 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
             ->number->toBe('INV/ENG/2026/001')
             ->amount->toBe('1500000.00')
             ->paid_on->toBeNull()
-            ->issued_by->toBe($this->pelaksana->id)
+            ->issued_by->toBe($this->lead->id)
             ->and($workOrder->invoice->invoice_date->toDateString())->toBe('2026-09-25')
             ->and($workOrder->invoice->due_date?->toDateString())->toBe('2026-10-25')
             ->and($workOrder->attachmentsIn('invoice')->pluck('name')->all())->toBe(['Invoice 001.pdf'])
@@ -114,12 +114,12 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
             ->and($workOrder->statusHistories()->reorder()->latest('id')->first())
             ->from_status->toBe('dikerjakan')
             ->to_status->toBe('penagihan')
-            ->user_id->toBe($this->pelaksana->id);
+            ->user_id->toBe($this->lead->id);
 
         $issued = Activity::query()->where('event', AuditEvent::InvoiceIssued->value)->sole();
 
         expect($issued->subject_id)->toBe($workOrder->id)
-            ->and($issued->causer_id)->toBe($this->pelaksana->id)
+            ->and($issued->causer_id)->toBe($this->lead->id)
             ->and($issued->attribute_changes?->toArray())->toBe(['attributes' => [
                 'no_invoice' => 'INV/ENG/2026/001',
                 'tanggal_invoice' => '2026-09-25',
@@ -129,7 +129,7 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
     });
 
     it('needs only the number, the date, and one invoice file', function () {
-        billAs($this->pelaksana, $this->workOrder, ['amount' => null, 'due_date' => null, 'bast_files' => []])
+        billAs($this->lead, $this->workOrder, ['amount' => null, 'due_date' => null, 'bast_files' => []])
             ->assertSessionHasNoErrors();
 
         expect($this->workOrder->refresh()->invoice)
@@ -138,7 +138,7 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
     });
 
     it('validates the invoice', function (array $overrides, string $field) {
-        billAs($this->pelaksana, $this->workOrder, $overrides)->assertSessionHasErrors($field);
+        billAs($this->lead, $this->workOrder, $overrides)->assertSessionHasErrors($field);
 
         expect($this->workOrder->refresh()->status->getValue())->toBe('dikerjakan')
             ->and(WorkOrderInvoice::query()->count())->toBe(0);
@@ -163,7 +163,7 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
         // 07:30 WITA on 26 Sep, 23:30 UTC on 25 Sep.
         $this->travelTo(Carbon::parse('2026-09-25 23:30', 'UTC'));
 
-        billAs($this->pelaksana, $this->workOrder, ['invoice_date' => '2026-09-26', 'amount' => '1500000.5', 'due_date' => null])
+        billAs($this->lead, $this->workOrder, ['invoice_date' => '2026-09-26', 'amount' => '1500000.5', 'due_date' => null])
             ->assertSessionHasNoErrors();
 
         expect($this->workOrder->refresh()->invoice)
@@ -174,7 +174,7 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
     it('refuses an invoice number already used, whatever its casing', function () {
         WorkOrderInvoice::factory()->create(['number' => 'inv/eng/2026/001']);
 
-        billAs($this->pelaksana, $this->workOrder, ['invoice_number' => '  INV/ENG/2026/001 '])
+        billAs($this->lead, $this->workOrder, ['invoice_number' => '  INV/ENG/2026/001 '])
             ->assertSessionHasErrors('invoice_number');
 
         expect($this->workOrder->refresh()->status->getValue())->toBe('dikerjakan');
@@ -203,7 +203,7 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
             }
         });
 
-        billAs($this->pelaksana, $this->workOrder)->assertSessionHasErrors(['bast_files' => 'Gagal menyimpan berkas.']);
+        billAs($this->lead, $this->workOrder)->assertSessionHasErrors(['bast_files' => 'Gagal menyimpan berkas.']);
 
         expect($this->workOrder->refresh()->status->getValue())->toBe('dikerjakan')
             ->and(WorkOrderInvoice::query()->count())->toBe(0)
@@ -214,7 +214,7 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
     });
 
     it('refuses Penagihan through the plain status change', function () {
-        $this->actingAs($this->pelaksana)
+        $this->actingAs($this->lead)
             ->post(route('work-orders.transitions.store', $this->workOrder), ['status' => 'penagihan'])
             ->assertSessionHasErrors(['status' => 'Status Penagihan diubah lewat formulirnya sendiri.']);
 
@@ -224,9 +224,9 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
     it('never enters Penagihan without an invoice, or Selesai without a payment', function () {
         $billed = WorkOrder::factory()->targeting($this->target)->billed()->create();
 
-        expect(fn () => app(TransitionWorkOrder::class)->handle($this->workOrder, 'penagihan', $this->pelaksana))
+        expect(fn () => app(TransitionWorkOrder::class)->handle($this->workOrder, 'penagihan', $this->lead))
             ->toThrow(ValidationException::class)
-            ->and(fn () => app(TransitionWorkOrder::class)->handle($billed, 'selesai', $this->keuangan))
+            ->and(fn () => app(TransitionWorkOrder::class)->handle($billed, 'selesai', $this->finance))
             ->toThrow(ValidationException::class)
             ->and($this->workOrder->refresh()->status->getValue())->toBe('dikerjakan')
             ->and($billed->refresh()->status->getValue())->toBe('penagihan');
@@ -235,7 +235,7 @@ describe('invoicing (Dikerjakan → Penagihan)', function () {
     it('answers a page loaded before the work order was invoiced with a message', function () {
         billedByPelaksana();
 
-        billAs($this->pelaksana, $this->workOrder, ['invoice_number' => 'INV-2'])
+        billAs($this->lead, $this->workOrder, ['invoice_number' => 'INV-2'])
             ->assertSessionHasErrors(['status' => 'Status tidak dapat diubah dari Penagihan.']);
 
         expect(WorkOrderInvoice::query()->count())->toBe(1);
@@ -256,7 +256,7 @@ describe('correcting the invoice', function () {
     });
 
     it('lets the executor side correct the invoice, logging before and after', function () {
-        $colleague = User::factory()->for($this->target)->create()->assignRole('pelaksana');
+        $colleague = User::factory()->for($this->target)->create()->assignRole('lead-operational');
 
         ($this->correct)($colleague, ['invoice_number' => 'INV/ENG/2026/001-R', 'amount' => '1750000', 'due_date' => ''])
             ->assertSessionHasNoErrors()
@@ -266,7 +266,7 @@ describe('correcting the invoice', function () {
             ->number->toBe('INV/ENG/2026/001-R')
             ->amount->toBe('1750000.00')
             ->due_date->toBeNull()
-            ->issued_by->toBe($this->pelaksana->id)
+            ->issued_by->toBe($this->lead->id)
             ->corrected_by->toBe($colleague->id)
             ->and($this->billed->status->getValue())->toBe('penagihan');
 
@@ -280,28 +280,28 @@ describe('correcting the invoice', function () {
     });
 
     it('replaces invoice files, but never removes the last one', function () {
-        ($this->correct)($this->pelaksana, ['remove_files' => [$this->invoiceFile->uuid]])
+        ($this->correct)($this->lead, ['remove_files' => [$this->invoiceFile->uuid]])
             ->assertSessionHasErrors(['invoice_files' => 'Invoice harus memiliki minimal satu berkas.']);
 
         expect($this->billed->attachmentsIn('invoice')->pluck('id')->all())->toBe([$this->invoiceFile->id])
             ->and($this->billed->refresh()->invoice->corrected_by)->toBeNull();
 
-        ($this->correct)($this->pelaksana, [
+        ($this->correct)($this->lead, [
             'remove_files' => [$this->invoiceFile->uuid],
             'invoice_files' => [attachmentUpload('dokumen.pdf', 'Invoice 001 revisi.pdf')],
         ])->assertSessionHasNoErrors();
 
         expect($this->billed->attachmentsIn('invoice')->pluck('name')->all())->toBe(['Invoice 001 revisi.pdf'])
             ->and(Activity::query()->where('event', AuditEvent::AttachmentRemoved->value)->where('subject_id', $this->billed->id)->count())->toBe(1)
-            ->and($this->billed->refresh()->invoice->corrected_by)->toBe($this->pelaksana->id);
+            ->and($this->billed->refresh()->invoice->corrected_by)->toBe($this->lead->id);
     });
 
     it('removes only invoice and BAST files of this work order', function () {
-        $document = app(AddAttachment::class)->handle($this->billed, $this->billed->documentsCollection(), attachmentUpload('dokumen.pdf'), $this->pemohon);
+        $document = app(AddAttachment::class)->handle($this->billed, $this->billed->documentsCollection(), attachmentUpload('dokumen.pdf'), $this->adminWo);
         $otherWorkOrder = WorkOrder::factory()->targeting($this->target)->billed()->create();
-        $otherFile = app(AddAttachment::class)->handle($otherWorkOrder, $otherWorkOrder->attachmentCollections()['invoice'], attachmentUpload('dokumen.pdf'), $this->pelaksana);
+        $otherFile = app(AddAttachment::class)->handle($otherWorkOrder, $otherWorkOrder->attachmentCollections()['invoice'], attachmentUpload('dokumen.pdf'), $this->lead);
 
-        ($this->correct)($this->pelaksana, ['remove_files' => [$document->uuid, $otherFile->uuid], 'invoice_number' => 'INV-X'])
+        ($this->correct)($this->lead, ['remove_files' => [$document->uuid, $otherFile->uuid], 'invoice_number' => 'INV-X'])
             ->assertSessionHasNoErrors();
 
         expect(Media::query()->whereKey([$document->id, $otherFile->id])->count())->toBe(2);
@@ -310,27 +310,27 @@ describe('correcting the invoice', function () {
     it('keeps the number unique, apart from the invoice itself', function () {
         WorkOrderInvoice::factory()->create(['number' => 'INV-TAKEN']);
 
-        ($this->correct)($this->pelaksana, ['invoice_number' => 'inv/eng/2026/001'])->assertSessionHasNoErrors();
-        ($this->correct)($this->pelaksana, ['invoice_number' => 'inv-taken'])->assertSessionHasErrors('invoice_number');
+        ($this->correct)($this->lead, ['invoice_number' => 'inv/eng/2026/001'])->assertSessionHasNoErrors();
+        ($this->correct)($this->lead, ['invoice_number' => 'inv-taken'])->assertSessionHasErrors('invoice_number');
 
         expect($this->billed->refresh()->invoice->number)->toBe('inv/eng/2026/001');
     });
 
     it('records nothing when nothing changes', function () {
-        ($this->correct)($this->pelaksana, [])->assertSessionHasNoErrors();
+        ($this->correct)($this->lead, [])->assertSessionHasNoErrors();
 
         expect($this->billed->refresh()->invoice->corrected_by)->toBeNull()
             ->and(Activity::query()->where('event', AuditEvent::InvoiceCorrected->value)->exists())->toBeFalse();
     });
 
     it('is only for the executor side', function (string $who) {
-        ($this->correct)($who === 'pemohon' ? $this->pemohon : $this->keuangan, ['invoice_number' => 'INV-X'])->assertForbidden();
+        ($this->correct)($who === 'pemohon' ? $this->adminWo : $this->finance, ['invoice_number' => 'INV-X'])->assertForbidden();
     })->with(['pemohon', 'keuangan']);
 
     it('refuses corrections once paid', function () {
-        payAs($this->keuangan, $this->billed)->assertSessionHasNoErrors();
+        payAs($this->finance, $this->billed)->assertSessionHasNoErrors();
 
-        ($this->correct)($this->pelaksana, ['invoice_number' => 'INV-X'])
+        ($this->correct)($this->lead, ['invoice_number' => 'INV-X'])
             ->assertInertiaFlash('toast', ['type' => 'error', 'message' => 'Invoice hanya dapat dikoreksi selama work order dalam penagihan.']);
 
         expect($this->billed->refresh()->invoice->number)->toBe('INV/ENG/2026/001');
@@ -343,7 +343,7 @@ describe('confirming payment (Penagihan → Selesai)', function () {
     });
 
     it('records the payment date and proof, and closes the work order', function () {
-        payAs($this->keuangan, $this->billed, ['proof_files' => [attachmentUpload('foto.png', 'Transfer.png')]])
+        payAs($this->finance, $this->billed, ['proof_files' => [attachmentUpload('foto.png', 'Transfer.png')]])
             ->assertSessionHasNoErrors()
             ->assertInertiaFlash('toast.type', 'success');
 
@@ -351,7 +351,7 @@ describe('confirming payment (Penagihan → Selesai)', function () {
 
         expect($workOrder->status->getValue())->toBe('selesai')
             ->and($workOrder->invoice->paid_on?->toDateString())->toBe('2026-09-25')
-            ->and($workOrder->invoice->paid_by)->toBe($this->keuangan->id)
+            ->and($workOrder->invoice->paid_by)->toBe($this->finance->id)
             ->and($workOrder->attachmentsIn('bukti_bayar')->pluck('name')->all())->toBe(['Transfer.png'])
             ->and(Activity::query()->where('event', AuditEvent::PaymentConfirmed->value)->sole()->attribute_changes?->toArray())
             ->toBe(['attributes' => ['tanggal_bayar' => '2026-09-25']]);
@@ -360,7 +360,7 @@ describe('confirming payment (Penagihan → Selesai)', function () {
     it('checks the payment date in WITA', function (string $now, string $paidOn, bool $accepted) {
         $this->travelTo(Carbon::parse($now, 'UTC'));
 
-        $response = payAs($this->keuangan, $this->billed, ['paid_on' => $paidOn]);
+        $response = payAs($this->finance, $this->billed, ['paid_on' => $paidOn]);
 
         $accepted ? $response->assertSessionHasNoErrors() : $response->assertSessionHasErrors('paid_on');
         expect($this->billed->refresh()->status->getValue())->toBe($accepted ? 'selesai' : 'penagihan');
@@ -374,13 +374,13 @@ describe('confirming payment (Penagihan → Selesai)', function () {
     ]);
 
     it('re-checks the payment date against the invoice under the lock', function () {
-        expect(fn () => app(ConfirmWorkOrderPayment::class)->handle($this->billed, $this->keuangan, '2026-09-24'))
+        expect(fn () => app(ConfirmWorkOrderPayment::class)->handle($this->billed, $this->finance, '2026-09-24'))
             ->toThrow(ValidationException::class)
             ->and($this->billed->refresh()->status->getValue())->toBe('penagihan');
     });
 
     it('refuses Selesai through the plain status change', function () {
-        $this->actingAs($this->keuangan)
+        $this->actingAs($this->finance)
             ->post(route('work-orders.transitions.store', $this->billed), ['status' => 'selesai'])
             ->assertSessionHasErrors('status');
 
@@ -405,7 +405,7 @@ describe('segregation of duties', function () {
         expect($this->workOrder->refresh()->status->getValue())->toBe('penagihan')
             ->and($this->workOrder->invoice->paid_on)->toBeNull();
 
-        payAs($this->keuangan, $this->workOrder)->assertSessionHasNoErrors();
+        payAs($this->finance, $this->workOrder)->assertSessionHasNoErrors();
 
         expect($this->workOrder->refresh()->status->getValue())->toBe('selesai');
     });
@@ -441,7 +441,7 @@ describe('segregation of duties', function () {
                 ->where('transitions.0.form', 'payment')
                 ->where('transitions.0.blocked_reason', 'Anda menerbitkan atau terakhir mengoreksi invoice ini, jadi pembayarannya harus dikonfirmasi oleh petugas keuangan lain.'));
 
-        $this->actingAs($this->keuangan)
+        $this->actingAs($this->finance)
             ->get(route('work-orders.show', $this->workOrder))
             ->assertInertia(fn (Assert $page): Assert => $page->where('transitions.0.blocked_reason', null));
     });
@@ -485,9 +485,9 @@ describe('overdue per status date', function () {
     });
 
     it('counts a late invoice in the dashboard', function () {
-        WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->billed(['due_date' => '2026-09-24'])->create();
+        WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->billed(['due_date' => '2026-09-24'])->create();
 
-        $this->actingAs($this->pemohon)
+        $this->actingAs($this->adminWo)
             ->get(route('dashboard'))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->loadDeferredProps(fn (Assert $reload): Assert => $reload->where('workOrderCounts.overdue', 1)));
@@ -496,14 +496,14 @@ describe('overdue per status date', function () {
 
 describe('Selesai is read-only', function () {
     beforeEach(function () {
-        $this->paid = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->paid()->create();
+        $this->paid = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->paid()->create();
     });
 
     it('offers no status change, correction, or comment', function (string $who) {
         $user = match ($who) {
-            'pemohon' => $this->pemohon,
-            'pelaksana' => $this->pelaksana,
-            'keuangan' => $this->keuangan,
+            'pemohon' => $this->adminWo,
+            'pelaksana' => $this->lead,
+            'keuangan' => $this->finance,
             'admin' => adminUser(),
         };
 
@@ -518,7 +518,7 @@ describe('Selesai is read-only', function () {
     })->with(['pemohon', 'pelaksana', 'keuangan', 'admin']);
 
     it('refuses comments with a message', function () {
-        $this->actingAs($this->pemohon)
+        $this->actingAs($this->adminWo)
             ->post(route('work-orders.comments.store', $this->paid), ['body' => 'Terima kasih'])
             ->assertInertiaFlash('toast.type', 'error');
 
@@ -526,9 +526,9 @@ describe('Selesai is read-only', function () {
     });
 
     it('refuses changes to every attachment collection', function (string $collection) {
-        $media = app(AddAttachment::class)->handle($this->paid, $this->paid->attachmentCollections()[$collection], attachmentUpload('dokumen.pdf'), $this->keuangan);
+        $media = app(AddAttachment::class)->handle($this->paid, $this->paid->attachmentCollections()[$collection], attachmentUpload('dokumen.pdf'), $this->finance);
 
-        foreach ([$this->pemohon, $this->pelaksana, $this->keuangan, adminUser()] as $user) {
+        foreach ([$this->adminWo, $this->lead, $this->finance, adminUser()] as $user) {
             $this->actingAs($user)
                 ->post(route('attachments.store', ['work-order', $this->paid->id, $collection]), ['file' => attachmentUpload('dokumen.pdf')])
                 ->assertForbidden();
@@ -539,38 +539,38 @@ describe('Selesai is read-only', function () {
 
 describe('attachments while invoicing', function () {
     it('lets the target department add a BAST while it works, and only the finance side add proof of payment while billed', function () {
-        $billed = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->billed()->create();
+        $billed = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->billed()->create();
 
-        expect($this->pelaksana->can('addAttachment', [$this->workOrder, 'bast']))->toBeTrue()
-            ->and($this->pelaksana->can('addAttachment', [$this->workOrder, 'invoice']))->toBeFalse()
-            ->and($this->keuangan->can('addAttachment', [$this->workOrder, 'bast']))->toBeFalse()
+        expect($this->lead->can('addAttachment', [$this->workOrder, 'bast']))->toBeTrue()
+            ->and($this->lead->can('addAttachment', [$this->workOrder, 'invoice']))->toBeFalse()
+            ->and($this->finance->can('addAttachment', [$this->workOrder, 'bast']))->toBeFalse()
             // While billed, invoice and BAST change only through the correction, which records who made it.
-            ->and($this->pelaksana->can('addAttachment', [$billed, 'invoice']))->toBeFalse()
-            ->and($this->pelaksana->can('addAttachment', [$billed, 'bast']))->toBeFalse()
-            ->and($this->pelaksana->can('addAttachment', [$billed, 'bukti_bayar']))->toBeFalse()
-            ->and($this->pemohon->can('addAttachment', [$billed, 'bukti_bayar']))->toBeFalse()
-            ->and($this->keuangan->can('addAttachment', [$billed, 'bukti_bayar']))->toBeTrue();
+            ->and($this->lead->can('addAttachment', [$billed, 'invoice']))->toBeFalse()
+            ->and($this->lead->can('addAttachment', [$billed, 'bast']))->toBeFalse()
+            ->and($this->lead->can('addAttachment', [$billed, 'bukti_bayar']))->toBeFalse()
+            ->and($this->adminWo->can('addAttachment', [$billed, 'bukti_bayar']))->toBeFalse()
+            ->and($this->finance->can('addAttachment', [$billed, 'bukti_bayar']))->toBeTrue();
     });
 
     it('lets the finance side remove only its own proof of payment', function () {
-        $billed = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->billed()->create();
-        $colleague = User::factory()->for($this->keuangan->department)->create()->assignRole('keuangan');
+        $billed = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->billed()->create();
+        $colleague = User::factory()->for($this->finance->department)->create()->assignRole('finance');
 
-        $this->actingAs($this->keuangan)
+        $this->actingAs($this->finance)
             ->post(route('attachments.store', ['work-order', $billed->id, 'bukti_bayar']), ['file' => attachmentUpload('foto.jpg')])
             ->assertSessionHasNoErrors();
         $proof = $billed->attachmentsIn('bukti_bayar')->sole();
 
         $this->actingAs($colleague)->delete(route('attachments.destroy', $proof))->assertForbidden();
-        $this->actingAs($this->keuangan)->delete(route('attachments.destroy', $proof))->assertRedirect();
+        $this->actingAs($this->finance)->delete(route('attachments.destroy', $proof))->assertRedirect();
 
         expect($billed->attachmentsIn('bukti_bayar'))->toBeEmpty();
     });
 
     it('accepts only PDF and images as proof of payment', function () {
-        $billed = WorkOrder::factory()->by($this->pemohon)->targeting($this->target)->billed()->create();
+        $billed = WorkOrder::factory()->by($this->adminWo)->targeting($this->target)->billed()->create();
 
-        $this->actingAs($this->keuangan)
+        $this->actingAs($this->finance)
             ->post(route('attachments.store', ['work-order', $billed->id, 'bukti_bayar']), ['file' => attachmentUpload('anggaran.xlsx')])
             ->assertSessionHasErrors('file');
     });
@@ -578,7 +578,7 @@ describe('attachments while invoicing', function () {
 
 describe('detail page', function () {
     it('offers the invoice form to the target department while it works', function () {
-        $this->actingAs($this->pelaksana)
+        $this->actingAs($this->lead)
             ->get(route('work-orders.show', $this->workOrder))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('transitions.0', [
@@ -587,7 +587,6 @@ describe('detail page', function () {
                     'destructive' => false,
                     'requires_note' => false,
                     'note_label' => 'Catatan',
-                    'requires_target_department' => true,
                     'form' => 'invoice',
                     'blocked_reason' => null,
                 ])
@@ -599,7 +598,7 @@ describe('detail page', function () {
     it('shows the invoice, its files, and whom the work order waits for', function () {
         $billed = billedByPelaksana();
 
-        $this->actingAs($this->pemohon)
+        $this->actingAs($this->adminWo)
             ->get(route('work-orders.show', $billed))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('workOrder.status', ['value' => 'penagihan', 'label' => 'Penagihan', 'tone' => 'billing'])
@@ -610,7 +609,7 @@ describe('detail page', function () {
                     'due_date' => '2026-10-25',
                     'paid_on' => null,
                     'is_overdue' => false,
-                    'issued_by' => ['name' => $this->pelaksana->name],
+                    'issued_by' => ['name' => $this->lead->name],
                     'corrected_by' => null,
                     'paid_by' => null,
                 ])
@@ -620,15 +619,15 @@ describe('detail page', function () {
                 ->where('invoiceAttachments.bukti_bayar.can.upload', false)
                 ->where('transitions', [])
                 ->where('can.correctInvoice', false)
-                ->where('waitingFor', 'Menunggu konfirmasi pembayaran oleh keuangan.'));
+                ->where('waitingFor', 'Menunggu konfirmasi pembayaran oleh Finance.'));
 
-        $this->actingAs($this->pelaksana)
+        $this->actingAs($this->lead)
             ->get(route('work-orders.show', $billed))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('can.correctInvoice', true)
-                ->where('waitingFor', 'Menunggu konfirmasi pembayaran oleh keuangan.'));
+                ->where('waitingFor', 'Menunggu konfirmasi pembayaran oleh Finance.'));
 
-        $this->actingAs($this->keuangan)
+        $this->actingAs($this->finance)
             ->get(route('work-orders.show', $billed))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('waitingFor', null)
@@ -638,14 +637,14 @@ describe('detail page', function () {
 
     it('shows the new statuses in the timeline and the invoice changes in the Riwayat', function () {
         $billed = billedByPelaksana();
-        $this->actingAs($this->pelaksana)->patch(route('work-orders.invoice.update', $billed), [
+        $this->actingAs($this->lead)->patch(route('work-orders.invoice.update', $billed), [
             'invoice_number' => 'INV/ENG/2026/001',
             'invoice_date' => '2026-09-25',
             'amount' => '1750000.5',
         ])->assertSessionHasNoErrors();
-        payAs($this->keuangan, $billed)->assertSessionHasNoErrors();
+        payAs($this->finance, $billed)->assertSessionHasNoErrors();
 
-        $this->actingAs($this->pemohon)
+        $this->actingAs($this->adminWo)
             ->get(route('work-orders.show', $billed))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('timeline', fn ($entries): bool => collect($entries)->where('type', 'status')->pluck('to.label')->take(-2)->values()->all() === ['Penagihan', 'Selesai']));

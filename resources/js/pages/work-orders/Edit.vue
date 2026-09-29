@@ -8,15 +8,15 @@ import type {
     AttachmentPanelData,
     CategoryOption,
     DepartmentOption,
-    RequesterCorrection,
     WorkOrder,
     WorkOrderUrgencyOption,
 } from '@/types';
 
 defineProps<{
     workOrder: WorkOrder;
+    /** Null once submitted: the department is then fixed. */
+    requesterDepartments: DepartmentOption[] | null;
     targetDepartments: DepartmentOption[];
-    requesterCorrection: RequesterCorrection | null;
     categories: CategoryOption[];
     urgencies: WorkOrderUrgencyOption[];
     attachments: AttachmentPanelData;
@@ -40,9 +40,8 @@ defineOptions({
         <template #meta>{{ workOrder.title }}</template>
         <WorkOrderForm
             :work-order="workOrder"
-            :department="workOrder.requester_department"
+            :requester-departments="requesterDepartments"
             :target-departments="targetDepartments"
-            :requester-correction="requesterCorrection"
             :categories="categories"
             :urgencies="urgencies"
         />
