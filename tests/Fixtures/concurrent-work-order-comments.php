@@ -14,6 +14,7 @@
  */
 
 use App\Actions\WorkOrders\AddWorkOrderComment;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
@@ -65,8 +66,15 @@ if ($mode === 'cleanup') {
         // Comments and status histories cascade.
         DB::table('work_orders')->where('id', $workOrder->id)->delete();
         DB::table('users')->whereIn('id', $users->modelKeys())->delete();
-        Department::withTrashed()->whereKey([$workOrder->requester_department_id, ...$users->pluck('department_id')->filter()])->forceDelete();
+        $departments = Department::withTrashed()->whereKey([
+            $workOrder->requester_department_id,
+            $workOrder->target_department_id,
+            ...$users->pluck('department_id')->filter(),
+        ])->get();
+        $departments->each->forceDelete();
         WorkOrderCategory::withTrashed()->whereKey($workOrder->work_order_category_id)->forceDelete();
+        // The factories give each department its own company.
+        Company::withTrashed()->whereKey($departments->pluck('company_id')->unique())->forceDelete();
     });
     exit(0);
 }
