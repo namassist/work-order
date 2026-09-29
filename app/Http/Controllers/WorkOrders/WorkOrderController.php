@@ -20,6 +20,7 @@ use App\Models\WorkOrderComment;
 use App\States\WorkOrder\Selesai;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\Attachments\AttachmentPanel;
+use App\Support\Comments\CommentHtml;
 use App\Support\WorkOrderTimeline;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -170,7 +171,7 @@ class WorkOrderController extends Controller
 
         return Inertia::render('work-orders/Show', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
-            'timeline' => WorkOrderTimeline::for($workOrder, $user),
+            'timeline' => WorkOrderTimeline::for($workOrder, $user, $request),
             // Only the transitions this user may perform (FLOW.md §5).
             'transitions' => array_values(array_map(
                 fn (string $to): array => $this->transitionOption($workOrder, $to, $user),
@@ -186,8 +187,15 @@ class WorkOrderController extends Controller
                 'correctInvoice' => $invoice !== null && ! $invoice->isPaid() && $user->can('correctInvoice', $workOrder),
             ],
             'comments' => [
-                'max_length' => WorkOrderComment::MAX_BODY_LENGTH,
+                'max_length' => CommentHtml::MAX_TEXT_LENGTH,
+                'max_images' => config()->integer('work_order.comments.images.max_files'),
+                'max_documents' => config()->integer('work_order.comments.documents.max_files'),
                 'read_only' => ! $workOrder->status->acceptsComments(),
+                // For the editor, which uploads files before the comment is posted.
+                'uploads' => [
+                    WorkOrderComment::IMAGES => $workOrder->attachmentCollections()[WorkOrder::COMMENT_IMAGE_UPLOADS]->toFrontend(),
+                    WorkOrderComment::DOCUMENTS => $workOrder->attachmentCollections()[WorkOrder::COMMENT_FILE_UPLOADS]->toFrontend(),
+                ],
             ],
             'attachments' => AttachmentPanel::props($workOrder, WorkOrder::DOCUMENTS, $user, $request),
             'invoice' => $invoice ? new WorkOrderInvoiceResource($invoice->setRelation('workOrder', $workOrder))->resolve($request) : null,

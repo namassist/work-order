@@ -19,10 +19,13 @@ class WorkOrderCommentFactory extends Factory
      */
     public function definition(): array
     {
+        $text = fake()->sentence();
+
         return [
             'work_order_id' => WorkOrder::factory(),
             'user_id' => User::factory(),
-            'body' => fake()->sentence(),
+            'body' => '<p>'.e($text).'</p>',
+            'body_text' => $text,
         ];
     }
 }

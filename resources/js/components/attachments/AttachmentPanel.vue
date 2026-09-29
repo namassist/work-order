@@ -1,25 +1,13 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import {
-    Download,
-    Eye,
-    File as FileIcon,
-    FileImage,
-    FileSpreadsheet,
-    FileText,
-    Paperclip,
-    Trash2,
-    Upload,
-    X,
-} from '@lucide/vue';
-import type { LucideIcon } from '@lucide/vue';
+import { Paperclip, Trash2, Upload, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AttachmentController from '@/actions/App/Http/Controllers/Attachments/AttachmentController';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
+import AttachmentRow from '@/components/attachments/AttachmentRow.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
-import { useFormatDate } from '@/composables/useFormatDate';
-import { attachmentProblem } from '@/lib/attachments';
+import { attachmentIcon, attachmentProblem } from '@/lib/attachments';
 import { formatFileSize } from '@/lib/format';
 import type { Attachment, AttachmentPanelData, AttachmentRules } from '@/types';
 
@@ -50,8 +38,6 @@ const props = withDefaults(
 
 const pending = defineModel<File[]>('pending', { default: () => [] });
 
-const { formatDateTime } = useFormatDate();
-
 const isLive = computed(() => props.target !== undefined);
 const input = ref<HTMLInputElement | null>(null);
 const dragging = ref(false);
@@ -72,18 +58,6 @@ const limits = computed(
 const currentProgress = computed(() =>
     isLive.value ? (uploading.value?.percentage ?? null) : props.progress,
 );
-
-const ICONS: Record<string, LucideIcon> = {
-    pdf: FileText,
-    docx: FileText,
-    xlsx: FileSpreadsheet,
-    jpg: FileImage,
-    png: FileImage,
-    webp: FileImage,
-};
-
-const iconFor = (name: string, extension?: string | null): LucideIcon =>
-    ICONS[extension ?? name.split('.').pop()?.toLowerCase() ?? ''] ?? FileIcon;
 
 const addFiles = (files: FileList | null | undefined) => {
     problems.value = [];
@@ -267,61 +241,12 @@ const destroy = () => {
         </div>
 
         <ul v-if="isLive && items.length" class="divide-y rounded-lg border">
-            <li
+            <AttachmentRow
                 v-for="attachment in items"
                 :key="attachment.id"
-                class="flex items-center gap-3 px-3 py-2"
+                :attachment="attachment"
             >
-                <component
-                    :is="iconFor(attachment.name, attachment.extension)"
-                    class="size-5 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                />
-                <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm" :title="attachment.name">
-                        {{ attachment.name }}
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        <span class="tabular-nums">{{
-                            formatFileSize(attachment.size)
-                        }}</span>
-                        <template v-if="attachment.uploader">
-                            · {{ attachment.uploader.name }}
-                        </template>
-                        ·
-                        <span class="tabular-nums">{{
-                            formatDateTime(attachment.created_at)
-                        }}</span>
-                    </p>
-                </div>
-                <div class="flex shrink-0 items-center">
-                    <Button
-                        v-if="attachment.previewable"
-                        variant="ghost"
-                        size="icon"
-                        as-child
-                    >
-                        <a
-                            :href="AttachmentController.show.url(attachment.id)"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            :aria-label="`Pratinjau ${attachment.name}`"
-                        >
-                            <Eye />
-                        </a>
-                    </Button>
-                    <Button variant="ghost" size="icon" as-child>
-                        <a
-                            :href="
-                                AttachmentController.show.url(attachment.id, {
-                                    query: { download: 1 },
-                                })
-                            "
-                            :aria-label="`Unduh ${attachment.name}`"
-                        >
-                            <Download />
-                        </a>
-                    </Button>
+                <template #actions>
                     <Button
                         v-if="attachment.can_delete ?? canDelete"
                         variant="ghost"
@@ -331,8 +256,8 @@ const destroy = () => {
                     >
                         <Trash2 />
                     </Button>
-                </div>
-            </li>
+                </template>
+            </AttachmentRow>
         </ul>
 
         <ul
@@ -345,7 +270,7 @@ const destroy = () => {
                 class="flex items-center gap-3 px-3 py-2"
             >
                 <component
-                    :is="iconFor(file.name)"
+                    :is="attachmentIcon(file.name)"
                     class="size-5 shrink-0 text-muted-foreground"
                     aria-hidden="true"
                 />

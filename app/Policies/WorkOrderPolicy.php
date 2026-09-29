@@ -53,6 +53,22 @@ class WorkOrderPolicy
     }
 
     /**
+     * Determine whether the user can open one of the work order's files:
+     * whoever may view it, except a comment file still waiting for its
+     * comment, which only its uploader sees.
+     */
+    public function viewAttachment(User $user, WorkOrder $workOrder, Media $media): Response
+    {
+        $view = $this->view($user, $workOrder);
+
+        if ($view->denied() || ! WorkOrder::isCommentUploadCollection((string) $media->collection_name)) {
+            return $view;
+        }
+
+        return $media->uploaded_by === $user->id ? Response::allow() : Response::denyAsNotFound();
+    }
+
+    /**
      * Determine whether the user can list soft-deleted work orders.
      */
     public function viewTrashed(User $user): bool

@@ -1,0 +1,18 @@
+{
+    "_comment": "What the comment editor (CommentEditor.vue) produces for each feature. The server keeps each one unchanged (CommentHtmlTest), and the editor produces and reloads it unchanged (commentEditor.test.ts), so the two cannot drift. The image uuid is an upload the comment may show.",
+    "imageUuid": "0192f3a4-5b6c-7d8e-9f01-23456789abcd",
+    "cases": {
+        "paragraphs": "<p>Mohon dicek.</p><p>Terima kasih.</p>",
+        "marks": "<p><strong>tebal</strong> <em>miring</em> <s>coret</s> <code>kode()</code></p>",
+        "nested marks": "<p><strong><em>tebal miring</em></strong></p>",
+        "hard break": "<p>baris satu<br>baris dua</p>",
+        "bullet list": "<ul><li><p>satu</p></li><li><p>dua</p></li></ul>",
+        "ordered list": "<ol><li><p>pertama</p></li><li><p>kedua</p></li></ol>",
+        "nested list": "<ul><li><p>induk</p><ol><li><p>anak</p></li></ol></li></ul>",
+        "blockquote": "<blockquote><p>kutipan</p></blockquote>",
+        "link": "<p>Lihat <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://contoh.test/a?b=1&amp;c=2\">tautan</a>.</p>",
+        "mailto link": "<p><a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"mailto:admin@worder.test\">admin</a></p>",
+        "image": "<p>Foto:</p><img src=\"/attachments/0192f3a4-5b6c-7d8e-9f01-23456789abcd\" alt=\"foto.jpg\">",
+        "special characters": "<p>A &amp; B &lt;tag&gt; \"kutip\" 'apostrof'</p>"
+    }
+}

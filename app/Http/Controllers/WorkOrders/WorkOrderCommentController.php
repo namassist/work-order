@@ -29,7 +29,7 @@ class WorkOrderCommentController extends Controller
         $user = $request->user();
 
         return $this->attempt(
-            fn (): WorkOrderComment => $addComment->handle($workOrder, $user, $request->string('body')->toString()),
+            fn (): WorkOrderComment => $addComment->handle($workOrder, $user, $request->string('body')->toString(), $request->documentUuids()),
             __('Komentar ditambahkan.'),
         );
     }
@@ -43,7 +43,7 @@ class WorkOrderCommentController extends Controller
         $user = $request->user();
 
         return $this->attempt(
-            fn (): WorkOrderComment => $updateComment->handle($comment, $user, $request->string('body')->toString()),
+            fn (): WorkOrderComment => $updateComment->handle($comment, $user, $request->string('body')->toString(), $request->documentUuids()),
             __('Komentar diperbarui.'),
         );
     }

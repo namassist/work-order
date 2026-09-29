@@ -10,7 +10,8 @@ use App\Models\WorkOrderComment;
 
 /**
  * Shared by the work order comment actions: the status and edit-window
- * rules, and the audit entry, which names the comment but never its text.
+ * rules, and the audit entry, which names the comment and its files but
+ * never its text.
  */
 trait GuardsWorkOrderComments
 {
@@ -63,13 +64,27 @@ trait GuardsWorkOrderComments
         }
     }
 
-    protected function logCommentEvent(WorkOrder $workOrder, WorkOrderComment $comment, User $user, AuditEvent $event): void
+    /**
+     * Log the change on the work order: the comment's id, and the names of
+     * its files before and after when they changed. Never the text.
+     *
+     * @param  array{old: list<string>, new: list<string>}|null  $files
+     */
+    protected function logCommentEvent(WorkOrder $workOrder, WorkOrderComment $comment, User $user, AuditEvent $event, ?array $files = null): void
     {
-        activity()
+        $activity = activity()
             ->performedOn($workOrder)
             ->causedBy($user)
             ->event($event->value)
-            ->withProperties(['komentar_id' => $comment->id])
-            ->log($event->value);
+            ->withProperties(['komentar_id' => $comment->id]);
+
+        if ($files !== null) {
+            $activity->withChanges(array_filter([
+                'attributes' => $files['new'] === [] ? [] : ['lampiran' => implode(', ', $files['new'])],
+                'old' => $files['old'] === [] ? [] : ['lampiran' => implode(', ', $files['old'])],
+            ]));
+        }
+
+        $activity->log($event->value);
     }
 }

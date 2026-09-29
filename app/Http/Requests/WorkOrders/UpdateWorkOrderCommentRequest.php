@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\WorkOrders;
 
+use App\Concerns\WorkOrderCommentValidationRules;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderComment;
 use Illuminate\Auth\Access\Response;
@@ -11,6 +12,8 @@ use Illuminate\Support\Facades\Gate;
 
 class UpdateWorkOrderCommentRequest extends FormRequest
 {
+    use WorkOrderCommentValidationRules;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -27,9 +30,18 @@ class UpdateWorkOrderCommentRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
-            'body' => ['required', 'string', 'max:'.WorkOrderComment::MAX_BODY_LENGTH],
-        ];
+        return $this->commentRules();
+    }
+
+    /**
+     * The media uuids of the documents to attach.
+     *
+     * @return list<string>
+     */
+    public function documentUuids(): array
+    {
+        /** @var list<string> */
+        return array_values($this->array('attachments'));
     }
 
     /**
