@@ -5,11 +5,13 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\RegistrationStatusController;
 use App\Http\Controllers\WorkOrders\RequesterAccountController;
 use App\Http\Controllers\WorkOrders\WorkOrderCommentController;
+use App\Http\Controllers\WorkOrders\WorkOrderCommentUploadController;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
 use App\Http\Controllers\WorkOrders\WorkOrderExportController;
 use App\Http\Controllers\WorkOrders\WorkOrderInvoiceController;
 use App\Http\Controllers\WorkOrders\WorkOrderPaymentController;
 use App\Http\Controllers\WorkOrders\WorkOrderTransitionController;
+use App\Models\WorkOrderComment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +52,11 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('work-orders/{workOrder}/comments', [WorkOrderCommentController::class, 'store'])
         ->middleware('throttle:wo-comment-post')
         ->name('work-orders.comments.store');
+    // Files of a comment being written; the comment claims them when posted.
+    Route::post('work-orders/{workOrder}/comment-uploads/{kind}', [WorkOrderCommentUploadController::class, 'store'])
+        ->whereIn('kind', [WorkOrderComment::IMAGES, WorkOrderComment::DOCUMENTS])
+        ->middleware('throttle:wo-comment-upload')
+        ->name('work-orders.comment-uploads.store');
     Route::scopeBindings()->middleware('throttle:wo-comment-change')->group(function (): void {
         Route::patch('work-orders/{workOrder}/comments/{comment}', [WorkOrderCommentController::class, 'update'])
             ->name('work-orders.comments.update');

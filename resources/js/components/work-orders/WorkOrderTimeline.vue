@@ -65,7 +65,7 @@ const { formatDateTime } = useFormatDate();
                     <TimelineCommentEntry
                         :entry="entry"
                         :work-order-id="workOrderId"
-                        :max-length="comments.max_length"
+                        :settings="comments"
                     />
                 </template>
             </li>
@@ -74,7 +74,7 @@ const { formatDateTime } = useFormatDate();
         <CommentForm
             v-if="canComment"
             :work-order-id="workOrderId"
-            :max-length="comments.max_length"
+            :settings="comments"
         />
         <p v-else-if="comments.read_only" class="text-sm text-muted-foreground">
             Komentar work order ini hanya dapat dibaca.

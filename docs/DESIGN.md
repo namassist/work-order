@@ -71,6 +71,21 @@ sebagai badge dan tidak pernah memakai warna status, supaya tidak tertukar denga
   menampilkan penanda Mendesak (ikon + teks kecil) di sel utama, di baris kedua sebelum
   deskripsi, supaya judul tetap terbaca di layar sempit; level lain tidak ditampilkan di sana.
 
+## Komentar
+
+Komentar rich text tampil sebagai prosa biasa di timeline, tanpa kotak atau kartu. Gayanya ada di
+kelas `.comment-body` (`resources/css/app.css`), dipakai bersama oleh isi komentar dan editornya:
+
+- Paragraf berjarak `mt-2`; daftar berpoin/bernomor dengan indentasi `pl-5`.
+- Kutipan: garis kiri `border-l-2` dan teks `text-muted-foreground`, tanpa latar.
+- Kode inline: `bg-muted`, `font-mono`, sedikit lebih kecil.
+- Tautan: warna teks biasa dengan garis bawah (bukan warna aksen), selalu dibuka di tab baru.
+- Gambar: responsif (`max-w-full`, tinggi maks. `max-h-80`), sudut `rounded-md` dan border 1px;
+  klik atau Enter membukanya dalam ukuran penuh di dialog.
+- Dokumen: baris berkas yang sama dengan panel Dokumen (`AttachmentRow.vue`).
+- Toolbar editor: tombol ikon `ghost` kecil (`size-8`) yang membungkus di layar sempit, format
+  aktif ditandai `bg-muted` dan `aria-pressed`; setiap tombol punya label dan pintasan keyboard.
+
 ## Tipografi
 
 - Inter (`font-sans`): semua UI, body, tabel, form. Angka nominal pakai `tabular-nums`.

@@ -8,6 +8,7 @@ use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
+use App\Models\WorkOrderComment;
 use App\Policies\ActivityPolicy;
 use App\Policies\RolePolicy;
 use Carbon\CarbonImmutable;
@@ -68,6 +69,7 @@ class AppServiceProvider extends ServiceProvider
             'department' => Department::class,
             'wo-category' => WorkOrderCategory::class,
             'work-order' => WorkOrder::class,
+            'wo-comment' => WorkOrderComment::class,
             'role' => Role::class,
             'permission' => Permission::class,
             'media' => Media::class,
@@ -89,6 +91,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('wo-export', $perUserPerMinute(10));
         RateLimiter::for('wo-comment-post', $perUserPerMinute(10));
         RateLimiter::for('wo-comment-change', $perUserPerMinute(10));
+        RateLimiter::for('wo-comment-upload', $perUserPerMinute(20));
         RateLimiter::for('attachment-upload', $perUserPerMinute(30));
         RateLimiter::for('wo-requester-search', $perUserPerMinute(30));
         RateLimiter::for('wo-invoice', $perUserPerMinute(10));

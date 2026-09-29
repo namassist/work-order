@@ -24,6 +24,7 @@ use App\States\WorkOrder\Diajukan;
 use App\States\WorkOrder\Dibatalkan;
 use App\States\WorkOrder\Dikerjakan;
 use App\States\WorkOrder\Ditolak;
+use App\Support\Comments\CommentHtml;
 use App\Support\DisplayDate;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -351,6 +352,15 @@ Nanti saya kabari lagi.'],
      * deleted a minute later, so the timeline shows "Komentar dihapus".
      */
     private const string MISTAKEN_COMMENT = 'Maaf, komentar ini untuk WO lain.';
+
+    /**
+     * The pelaksana's progress report on some accepted work orders: a
+     * formatted comment with an inline photo (%s) and a document attached.
+     */
+    private const string PROGRESS_REPORT = '<p><strong>Laporan progres</strong></p>'
+        .'<ul><li><p>Pemeriksaan awal selesai.</p></li><li><p>Suku cadang sudah dipesan, perkiraan tiba <em>2 hari lagi</em>.</p></li></ul>'
+        .'<p>Foto kondisi terkini:</p>%s'
+        .'<p>Rincian pekerjaan terlampir. Pertanyaan bisa ke <a href="mailto:helpdesk@worder.test">helpdesk</a>.</p>';
 
     /**
      * How many work orders take each path through the flow (FLOW.md §5).
@@ -833,7 +843,10 @@ Nanti saya kabari lagi.'],
     /**
      * The target department's pelaksana accepts the work order, sometimes
      * with a note, and on every other one uploads a progress photo a day
-     * later (FLOW.md §5: the pelaksana adds documents while Dikerjakan).
+     * later (FLOW.md §5: the pelaksana adds documents while Dikerjakan). On
+     * every third one the pelaksana posts a formatted progress report with an
+     * inline photo and a document (FLOW.md §9), uploaded and claimed through
+     * the real actions.
      *
      * @param  array<int, WorkOrder>  $created  filled while the timeline runs
      * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
@@ -845,6 +858,12 @@ Nanti saya kabari lagi.'],
         if ($index % 2 === 0) {
             $events[] = ['at' => $at->addDay(), 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana): void {
                 $this->attachSample($created[$index], ['foto.jpg', 'Foto_Progres.jpg'], $pelaksana);
+            }];
+        }
+
+        if ($index % 3 === 1) {
+            $events[] = ['at' => $at->addHours(20), 'actor' => $pelaksana, 'run' => function () use (&$created, $index, $pelaksana): void {
+                $this->postProgressReport($created[$index], $pelaksana);
             }];
         }
 
@@ -931,7 +950,7 @@ Nanti saya kabari lagi.'],
             /** @var WorkOrderComment|null $comment */
             $comment = null;
             $events[] = ['at' => $at, 'actor' => $requester, 'run' => function () use (&$created, &$comment, $index, $requester): void {
-                $comment = $this->addComment->handle($created[$index], $requester, self::MISTAKEN_COMMENT);
+                $comment = $this->addComment->handle($created[$index], $requester, CommentHtml::fromPlainText(self::MISTAKEN_COMMENT));
             }];
             $events[] = ['at' => $at->addMinute(), 'actor' => $requester, 'run' => function () use (&$comment, $requester): void {
                 $this->deleteComment->handle($comment, $requester);
@@ -956,12 +975,12 @@ Nanti saya kabari lagi.'],
             /** @var WorkOrderComment|null $comment */
             $comment = null;
             $events[] = ['at' => $at, 'actor' => $author, 'run' => function () use (&$created, &$comment, $index, $author, $firstDraft): void {
-                $comment = $this->addComment->handle($created[$index], $author, $firstDraft);
+                $comment = $this->addComment->handle($created[$index], $author, CommentHtml::fromPlainText($firstDraft));
             }];
 
             if ($edited) {
                 $events[] = ['at' => $at->addMinutes(3), 'actor' => $author, 'run' => function () use (&$comment, $author, $body): void {
-                    $this->updateComment->handle($comment, $author, $body);
+                    $this->updateComment->handle($comment, $author, CommentHtml::fromPlainText($body));
                 }];
             }
 
@@ -1066,6 +1085,20 @@ Nanti saya kabari lagi.'],
             1 => [self::SAMPLE_FILES[1]],
             default => self::SAMPLE_FILES,
         };
+    }
+
+    /**
+     * Uploads the report's photo and document as the pelaksana's pending
+     * comment uploads, then posts the comment that claims them.
+     */
+    private function postProgressReport(WorkOrder $workOrder, User $pelaksana): void
+    {
+        $collections = $workOrder->attachmentCollections();
+        $photo = $this->addAttachment->handle($workOrder, $collections[WorkOrder::COMMENT_IMAGE_UPLOADS], $this->sampleUpload(['kondisi.jpg', 'Kondisi_Terkini.jpg']), $pelaksana);
+        $details = $this->addAttachment->handle($workOrder, $collections[WorkOrder::COMMENT_FILE_UPLOADS], $this->sampleUpload(['dokumen.pdf', 'Rincian_Pekerjaan.pdf']), $pelaksana);
+
+        $image = '<img src="/attachments/'.$photo->uuid.'" alt="'.e($photo->name).'">';
+        $this->addComment->handle($workOrder, $pelaksana, sprintf(self::PROGRESS_REPORT, $image), [$details->uuid]);
     }
 
     /**

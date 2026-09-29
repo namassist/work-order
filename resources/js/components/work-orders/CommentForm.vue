@@ -1,45 +1,58 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import WorkOrderCommentController from '@/actions/App/Http/Controllers/WorkOrders/WorkOrderCommentController';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import CommentEditor from '@/components/work-orders/CommentEditor.vue';
+import type { Attachment, WorkOrderCommentSettings } from '@/types';
 
 /**
- * Adds a plain-text comment at the bottom of the work order timeline.
+ * Adds a rich-text comment, with inline images and documents, at the bottom
+ * of the work order timeline.
  */
 const props = defineProps<{
     workOrderId: number;
-    maxLength: number;
+    settings: WorkOrderCommentSettings;
 }>();
 
-const form = useForm({ body: '' });
+const form = useForm({ body: '', attachments: [] as string[] });
+const documents = ref<Attachment[]>([]);
+const uploading = ref(false);
 
 const submit = () => {
-    form.submit(WorkOrderCommentController.store(props.workOrderId), {
+    form.transform((data) => ({
+        ...data,
+        attachments: documents.value.map((document) => document.id),
+    })).submit(WorkOrderCommentController.store(props.workOrderId), {
         preserveScroll: true,
-        onSuccess: () => form.reset(),
+        onSuccess: () => {
+            form.reset();
+            documents.value = [];
+        },
     });
 };
 </script>
 
 <template>
     <form class="grid gap-2" @submit.prevent="submit">
-        <Label for="comment-body">Komentar</Label>
-        <Textarea
-            id="comment-body"
+        <p id="comment-body-label" class="text-sm font-medium">Komentar</p>
+        <CommentEditor
             v-model="form.body"
-            rows="3"
-            required
-            :maxlength="maxLength"
+            v-model:documents="documents"
+            v-model:busy="uploading"
+            :work-order-id="workOrderId"
+            :settings="settings"
+            input-id="comment-body"
+            label="Komentar"
+            :invalid="!!form.errors.body"
         />
         <InputError :message="form.errors.body" />
-        <div class="flex items-center justify-between gap-2">
-            <span class="text-xs text-muted-foreground tabular-nums">
-                {{ form.body.length }}/{{ maxLength }}
-            </span>
-            <Button type="submit" :disabled="form.processing">Kirim</Button>
+        <InputError :message="form.errors.attachments" />
+        <div class="flex justify-end">
+            <Button type="submit" :disabled="form.processing || uploading">
+                Kirim
+            </Button>
         </div>
     </form>
 </template>

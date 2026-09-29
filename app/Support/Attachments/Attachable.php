@@ -8,8 +8,8 @@ use Spatie\MediaLibrary\HasMedia;
 
 /**
  * A model that can have attachments. Implement it with the HasAttachments
- * trait, and give the model's policy addAttachment and deleteAttachment
- * abilities; viewing and downloading use the policy's view ability.
+ * trait, and give the model's policy viewAttachment (viewing and
+ * downloading), addAttachment, and deleteAttachment abilities.
  */
 interface Attachable extends HasMedia
 {

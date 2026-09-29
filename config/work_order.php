@@ -72,10 +72,30 @@ return [
     | PROVISIONAL: how long after posting the author may still edit or
     | delete a comment, in minutes.
     |
+    | Files in comments: inline images (JPG, PNG, WEBP) and documents (every
+    | attachment type), each with its own per-comment count and size limit.
+    | Files are uploaded before the comment is posted and wait as pending
+    | uploads of their uploader on the work order until a comment claims
+    | them; each user may have `pending_uploads.max_files` waiting per work
+    | order, and `work-orders:prune-comment-uploads` (hourly) deletes the
+    | ones older than `prune_after_hours`.
+    |
     */
 
     'comments' => [
         'edit_window_minutes' => (int) env('WO_COMMENT_EDIT_MINUTES', 15),
+        'images' => [
+            'max_files' => (int) env('WO_COMMENT_MAX_IMAGES', 10),
+            'max_size_kb' => (int) env('WO_COMMENT_IMAGE_MAX_SIZE_KB', 5120),
+        ],
+        'documents' => [
+            'max_files' => (int) env('WO_COMMENT_MAX_DOCUMENTS', 5),
+            'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
+        ],
+        'pending_uploads' => [
+            'max_files' => (int) env('WO_COMMENT_MAX_PENDING_UPLOADS', 20),
+            'prune_after_hours' => (int) env('WO_COMMENT_UPLOAD_PRUNE_HOURS', 24),
+        ],
     ],
 
 ];

@@ -22,7 +22,9 @@ use Illuminate\Validation\ValidationException;
  * name, with the type detected from its content, and logged on the parent.
  * The collection's file limit is checked with the parent locked, so two
  * uploads at once cannot exceed it; a refused upload stores nothing. The
- * upload counts as activity on the parent, so its updated_at is bumped.
+ * upload counts as activity on the parent, so its updated_at is bumped,
+ * except in a collection of pending uploads, which is neither logged nor
+ * touched until a record claims the file.
  */
 class AddAttachment
 {
@@ -46,8 +48,13 @@ class AddAttachment
         return DB::transaction(function () use ($parent, $collection, $file, $uploader, $errorKey, $type): Media {
             $parent->newQuery()->whereKey($parent->getKey())->lockForUpdate()->first();
 
-            if ($parent->media()->where('collection_name', $collection->name)->count() >= $collection->maxFiles) {
-                throw ValidationException::withMessages([$errorKey => __('Lampiran sudah mencapai batas :max berkas.', ['max' => $collection->maxFiles])]);
+            $existing = $parent->media()->where('collection_name', $collection->name)
+                ->when($collection->holdsPendingUploads, fn ($query) => $query->where('uploaded_by', $uploader->id));
+
+            if ($existing->count() >= $collection->maxFiles) {
+                throw ValidationException::withMessages([$errorKey => $collection->holdsPendingUploads
+                    ? __('Unggahan komentar yang belum dikirim sudah mencapai batas :max berkas.', ['max' => $collection->maxFiles])
+                    : __('Lampiran sudah mencapai batas :max berkas.', ['max' => $collection->maxFiles])]);
             }
 
             /** @var Media $media */
@@ -62,6 +69,10 @@ class AddAttachment
             $disk = $media->disk;
             $directory = dirname($media->getPathRelativeToRoot());
             DB::afterRollBack(fn () => Storage::disk($disk)->deleteDirectory($directory));
+
+            if ($collection->holdsPendingUploads) {
+                return $media;
+            }
 
             // A query, not $parent->touch(): that would also save any unsaved change on $parent.
             $parent->newQuery()->whereKey($parent->getKey())->touch();

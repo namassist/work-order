@@ -4,14 +4,17 @@ namespace App\Actions\WorkOrders;
 
 use App\Concerns\GuardsWorkOrderComments;
 use App\Enums\AuditEvent;
+use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrderComment;
+use App\Support\Comments\CommentContent;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Soft-deletes a comment within the edit window. The timeline keeps its
- * place as "Komentar dihapus". Who may delete (the author) is the policy's
- * decision.
+ * place as "Komentar dihapus"; its files are deleted after the commit, and
+ * their names stay in the audit log. Who may delete (the author) is the
+ * policy's decision.
  */
 class DeleteWorkOrderComment
 {
@@ -27,9 +30,18 @@ class DeleteWorkOrderComment
             $locked = $this->lockLiveComment($comment);
             $this->ensureWithinEditWindow($locked);
 
-            $locked->delete();
+            $files = [
+                ...$locked->attachmentsIn(WorkOrderComment::IMAGES)->all(),
+                ...$locked->attachmentsIn(WorkOrderComment::DOCUMENTS)->all(),
+            ];
 
-            $this->logCommentEvent($workOrder, $locked, $user, AuditEvent::CommentDeleted);
+            $locked->delete();
+            CommentContent::deleteAfterCommit($files);
+
+            $this->logCommentEvent($workOrder, $locked, $user, AuditEvent::CommentDeleted, $files === [] ? null : [
+                'old' => array_map(fn (Media $media): string => $media->name, $files),
+                'new' => [],
+            ]);
         });
     }
 }

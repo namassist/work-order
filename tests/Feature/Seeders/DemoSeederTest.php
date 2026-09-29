@@ -16,6 +16,7 @@ use App\Models\WorkOrderComment;
 use App\Models\WorkOrderInvoice;
 use App\Models\WorkOrderStatusHistory;
 use App\States\WorkOrder\WorkOrderStatus;
+use App\Support\Comments\CommentHtml;
 use App\Support\DisplayDate;
 use Database\Seeders\DemoSeeder;
 use Illuminate\Support\Collection;
@@ -385,6 +386,34 @@ it('adds comments from the requester side and pelaksana while the work order sti
 
     expect(Activity::query()->where('event', AuditEvent::CommentAdded->value)->pluck('causer_id')->sort()->values()->all())
         ->toBe($comments->pluck('user_id')->sort()->values()->all());
+});
+
+it('writes rich comments with inline photos and documents through the real actions', function () {
+    $this->seed(DemoSeeder::class);
+
+    $comments = WorkOrderComment::query()->with(['media', 'author.roles', 'workOrder'])->get();
+    $reports = $comments->filter(fn (WorkOrderComment $comment): bool => $comment->media->isNotEmpty());
+
+    expect($reports->count())->toBeGreaterThanOrEqual(3)
+        ->and($comments->filter(fn (WorkOrderComment $comment): bool => str_contains($comment->body, '<strong>') && str_contains($comment->body, '<ul>')))->not->toBeEmpty()
+        // Nothing is left waiting: every upload was claimed by its comment.
+        ->and(Media::query()->whereIn('collection_name', [WorkOrder::COMMENT_IMAGE_UPLOADS, WorkOrder::COMMENT_FILE_UPLOADS])->exists())->toBeFalse();
+
+    $reports->each(function (WorkOrderComment $comment): void {
+        $image = $comment->media->firstWhere('collection_name', WorkOrderComment::IMAGES);
+
+        expect($comment->author->hasRole('pelaksana'))->toBeTrue()
+            ->and($image)->not->toBeNull()
+            ->and($comment->body)->toContain('<img src="/attachments/'.$image->uuid.'"')
+            ->and($comment->media->where('collection_name', WorkOrderComment::DOCUMENTS))->toHaveCount(1)
+            ->and($comment->body_text)->not->toBe('');
+        Storage::disk('attachments')->assertExists($image->getPathRelativeToRoot());
+    });
+
+    // Every body, plain-text threads included, is paragraph HTML exactly as the sanitizer keeps it.
+    $comments->each(function (WorkOrderComment $comment): void {
+        expect($comment->body)->toStartWith('<p>')->toBe(CommentHtml::forDisplay($comment->body));
+    });
 });
 
 it('attaches sample documents without touching the fixtures', function () {

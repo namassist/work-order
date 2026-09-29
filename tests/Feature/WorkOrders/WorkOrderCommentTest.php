@@ -35,14 +35,15 @@ function commentBy(?User $author = null, array $attributes = []): WorkOrderComme
 describe('posting', function () {
     it('adds a comment and logs it on the work order without its text', function () {
         $this->actingAs($this->user)
-            ->post(route('work-orders.comments.store', $this->workOrder), ['body' => "Mohon dicek.\nTerima kasih."])
+            ->post(route('work-orders.comments.store', $this->workOrder), ['body' => '<p>Mohon <strong>dicek</strong>.</p><p>Terima kasih.</p>'])
             ->assertRedirect()
             ->assertInertiaFlash('toast.message', 'Komentar ditambahkan.');
 
         $comment = $this->workOrder->comments()->sole();
         expect($comment)
             ->user_id->toBe($this->user->id)
-            ->body->toBe("Mohon dicek.\nTerima kasih.")
+            ->body->toBe('<p>Mohon <strong>dicek</strong>.</p><p>Terima kasih.</p>')
+            ->body_text->toBe("Mohon dicek.\n\nTerima kasih.")
             ->edited_at->toBeNull();
 
         $activity = Activity::query()->forSubject($this->workOrder)->where('event', 'comment_added')->sole();
@@ -52,24 +53,35 @@ describe('posting', function () {
             ->and(json_encode($activity->toArray()))->not->toContain('Mohon dicek');
     });
 
-    it('rejects an invalid body', function (mixed $body) {
+    it('rejects an invalid body', function (mixed $body, string $message) {
         $this->actingAs($this->user)
             ->post(route('work-orders.comments.store', $this->workOrder), ['body' => $body])
-            ->assertSessionHasErrors('body');
+            ->assertSessionHasErrors(['body' => $message]);
 
         expect($this->workOrder->comments()->exists())->toBeFalse();
     })->with([
-        'empty' => '',
-        'whitespace only' => "  \n  ",
-        'too long' => str_repeat('a', 2001),
+        'missing' => [null, 'Komentar tidak boleh kosong.'],
+        'whitespace only' => ["  \n  ", 'Komentar tidak boleh kosong.'],
+        'only empty paragraphs' => ['<p></p><p> </p>', 'Komentar tidak boleh kosong.'],
+        'nothing left after sanitizing' => ['<script>alert(1)</script><iframe src="https://evil.test"></iframe>', 'Komentar tidak boleh kosong.'],
+        'text too long' => ['<p>'.str_repeat('a', 5001).'</p>', 'Komentar tidak boleh lebih dari 5000 karakter.'],
+        'html too large' => ['<p>'.str_repeat('<strong></strong>', 4000).'a</p>', 'Komentar terlalu besar. Kurangi format atau pecah menjadi beberapa komentar.'],
     ]);
 
-    it('accepts a body of exactly 2000 characters', function () {
+    it('accepts exactly 5000 characters of text', function () {
         $this->actingAs($this->user)
-            ->post(route('work-orders.comments.store', $this->workOrder), ['body' => str_repeat('a', 2000)])
+            ->post(route('work-orders.comments.store', $this->workOrder), ['body' => '<p><strong>'.str_repeat('a', 4999).'</strong>b</p>'])
             ->assertSessionHasNoErrors();
 
-        expect($this->workOrder->comments()->count())->toBe(1);
+        expect(mb_strlen($this->workOrder->comments()->sole()->body_text))->toBe(5000);
+    });
+
+    it('sanitizes the body before storing it', function () {
+        $this->actingAs($this->user)
+            ->post(route('work-orders.comments.store', $this->workOrder), ['body' => '<p onclick="alert(1)">Halo <a href="javascript:alert(2)">klik</a></p><script>alert(3)</script>'])
+            ->assertSessionHasNoErrors();
+
+        expect($this->workOrder->comments()->sole()->body)->toBe('<p>Halo klik</p>');
     });
 
     it('counts posting separately from editing and other throttled routes', function () {
@@ -198,12 +210,13 @@ describe('editing', function () {
         $this->travel(59)->seconds();
 
         $this->actingAs($this->user)
-            ->patch(route('work-orders.comments.update', [$this->workOrder, $comment]), ['body' => 'Sudah diperbaiki'])
+            ->patch(route('work-orders.comments.update', [$this->workOrder, $comment]), ['body' => '<p>Sudah <em>diperbaiki</em></p>'])
             ->assertRedirect()
             ->assertInertiaFlash('toast.message', 'Komentar diperbarui.');
 
         expect($comment->refresh())
-            ->body->toBe('Sudah diperbaiki')
+            ->body->toBe('<p>Sudah <em>diperbaiki</em></p>')
+            ->body_text->toBe('Sudah diperbaiki')
             ->edited_at->toEqual(now());
         expect(Activity::query()->forSubject($this->workOrder)->where('event', 'comment_edited')->sole())
             ->causer_id->toBe($this->user->id)
@@ -337,17 +350,19 @@ describe('timeline', function () {
                 ->where('timeline.4.note', 'Salah input'));
     });
 
-    it('sends the body as plain text, unescaped and unstripped', function () {
-        commentBy(attributes: ['body' => "<script>alert('x')</script>\n<b>tebal</b>"]);
+    it('sends the body as HTML with the comment settings', function () {
+        commentBy(attributes: ['body' => '<p><strong>tebal</strong> &amp; &lt;biasa&gt;</p>']);
 
         $this->actingAs($this->user)
             ->get(route('work-orders.show', $this->workOrder))
             ->assertInertia(fn (Assert $page): AssertableInertia => $page
-                ->where('timeline.0.body', "<script>alert('x')</script>\n<b>tebal</b>")
+                ->where('timeline.0.body', '<p><strong>tebal</strong> &amp; &lt;biasa&gt;</p>')
+                ->where('timeline.0.attachments', [])
                 ->where('timeline.0.edited', false)
                 ->where('timeline.0.can', ['update' => true, 'delete' => true])
                 ->where('can.comment', true)
-                ->where('comments', ['max_length' => 2000, 'read_only' => false]));
+                ->where('comments.max_length', 5000)
+                ->where('comments.read_only', false));
     });
 
     it('offers edit and delete only to the author within the window', function () {

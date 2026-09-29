@@ -23,7 +23,7 @@ class AllowedAttachment implements ValidationRule
             : null;
 
         if ($type === null || ! $this->collection->accepts($type)) {
-            $fail(__('Jenis berkas :attribute tidak diizinkan. Gunakan :types.', ['types' => $this->collection->typeList()]));
+            $fail(__('Jenis berkas tidak diizinkan. Gunakan :types.', ['types' => $this->collection->typeList()]));
         }
     }
 }

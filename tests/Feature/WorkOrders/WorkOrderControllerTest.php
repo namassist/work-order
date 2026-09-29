@@ -382,7 +382,7 @@ describe('create and store', function () {
             ->and(Media::query()->count())->toBe(0)
             ->and($disk->allFiles())->toBe([]);
     })->with([
-        'disguised executable' => [[['program.exe', 'invoice.pdf']], 'attachments.0', 'Jenis berkas lampiran tidak diizinkan. Gunakan PDF, JPG, JPEG, PNG, WEBP, DOCX, XLSX.'],
+        'disguised executable' => [[['program.exe', 'invoice.pdf']], 'attachments.0', 'Jenis berkas tidak diizinkan. Gunakan PDF, JPG, JPEG, PNG, WEBP, DOCX, XLSX.'],
         'more than the limit' => [[['dokumen.pdf'], ['foto.png']], 'attachments', 'Lampiran maksimal terdiri dari 1 anggota.'],
     ]);
 });

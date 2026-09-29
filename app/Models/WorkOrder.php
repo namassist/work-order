@@ -83,6 +83,18 @@ class WorkOrder extends Model implements Attachable
     public const string PAYMENT_PROOF = 'bukti_bayar';
 
     /**
+     * A comment's inline images while they wait, as their uploader's pending
+     * uploads, for the comment that claims them (WorkOrderComment::IMAGES).
+     */
+    public const string COMMENT_IMAGE_UPLOADS = 'komentar_gambar';
+
+    /**
+     * A comment's documents while they wait for the comment that claims
+     * them (WorkOrderComment::DOCUMENTS).
+     */
+    public const string COMMENT_FILE_UPLOADS = 'komentar_lampiran';
+
+    /**
      * Types accepted for invoices and proof of payment: documents and scans.
      */
     private const array SCAN_TYPES = [AttachmentType::Pdf, AttachmentType::Jpeg, AttachmentType::Png, AttachmentType::Webp];
@@ -115,7 +127,48 @@ class WorkOrder extends Model implements Attachable
             self::INVOICE => $this->configuredCollection(self::INVOICE, self::SCAN_TYPES, minFiles: 1),
             self::BAST => $this->configuredCollection(self::BAST),
             self::PAYMENT_PROOF => $this->configuredCollection(self::PAYMENT_PROOF, self::SCAN_TYPES),
+            self::COMMENT_IMAGE_UPLOADS => $this->commentUploadCollection(self::COMMENT_IMAGE_UPLOADS, 'images', WorkOrderComment::IMAGE_TYPES),
+            self::COMMENT_FILE_UPLOADS => $this->commentUploadCollection(self::COMMENT_FILE_UPLOADS, 'documents'),
         ];
+    }
+
+    /**
+     * The pending uploads of one kind of comment file, keyed by the kind the
+     * upload route names: 'gambar' or 'lampiran'.
+     */
+    public function commentUploadCollectionFor(string $kind): ?AttachmentCollection
+    {
+        return match ($kind) {
+            WorkOrderComment::IMAGES => $this->attachmentCollections()[self::COMMENT_IMAGE_UPLOADS],
+            WorkOrderComment::DOCUMENTS => $this->attachmentCollections()[self::COMMENT_FILE_UPLOADS],
+            default => null,
+        };
+    }
+
+    /**
+     * Whether the collection holds files waiting for a comment.
+     */
+    public static function isCommentUploadCollection(string $collection): bool
+    {
+        return in_array($collection, [self::COMMENT_IMAGE_UPLOADS, self::COMMENT_FILE_UPLOADS], true);
+    }
+
+    /**
+     * Pending uploads of comment files: the size and types of the comment's
+     * collection, and a limit per uploader (config work_order.comments).
+     *
+     * @param  'images'|'documents'  $kind
+     * @param  list<AttachmentType>|null  $types
+     */
+    private function commentUploadCollection(string $name, string $kind, ?array $types = null): AttachmentCollection
+    {
+        return new AttachmentCollection(
+            $name,
+            maxFiles: config()->integer('work_order.comments.pending_uploads.max_files'),
+            maxSizeKb: config()->integer("work_order.comments.{$kind}.max_size_kb"),
+            types: $types,
+            holdsPendingUploads: true,
+        );
     }
 
     /**

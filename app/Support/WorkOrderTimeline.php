@@ -2,10 +2,14 @@
 
 namespace App\Support;
 
+use App\Http\Resources\AttachmentResource;
+use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderComment;
 use App\Models\WorkOrderStatusHistory;
+use App\Support\Comments\CommentHtml;
+use Illuminate\Http\Request;
 
 /**
  * A work order's status changes and comments as one chronological list for
@@ -20,12 +24,12 @@ class WorkOrderTimeline
      *
      * @return list<array<string, mixed>>
      */
-    public static function for(WorkOrder $workOrder, User $viewer): array
+    public static function for(WorkOrder $workOrder, User $viewer, Request $request): array
     {
         $workOrder->loadMissing([
             'requester',
             'statusHistories.user',
-            'comments' => fn ($query) => $query->withTrashed()->with('author'),
+            'comments' => fn ($query) => $query->withTrashed()->with(['author', 'documents.uploader']),
         ]);
 
         $acceptsComments = $workOrder->status->acceptsComments();
@@ -42,7 +46,7 @@ class WorkOrderTimeline
             ]),
             ...$workOrder->comments->map(fn (WorkOrderComment $comment): array => [
                 'sort' => [$comment->created_at->getTimestamp(), $comment->created_at->micro, 1, $comment->id],
-                'entry' => self::commentEntry($workOrder, $comment, $viewer, $acceptsComments),
+                'entry' => self::commentEntry($workOrder, $comment, $viewer, $acceptsComments, $request),
             ]),
         ];
 
@@ -52,9 +56,12 @@ class WorkOrderTimeline
     }
 
     /**
-     * @return array{type: 'comment', id: int, user: array{id: int, name: string}, body: string|null, deleted: bool, edited: bool, created_at: string, can: array{update: bool, delete: bool}}
+     * The body is sanitized again before it is sent (CommentHtml::forDisplay)
+     * and rendered as HTML; a deleted comment has neither body nor files.
+     *
+     * @return array{type: 'comment', id: int, user: array{id: int, name: string}, body: string|null, attachments: list<array<string, mixed>>, deleted: bool, edited: bool, created_at: string, can: array{update: bool, delete: bool}}
      */
-    private static function commentEntry(WorkOrder $workOrder, WorkOrderComment $comment, User $viewer, bool $acceptsComments): array
+    private static function commentEntry(WorkOrder $workOrder, WorkOrderComment $comment, User $viewer, bool $acceptsComments, Request $request): array
     {
         $deleted = $comment->trashed();
         $changeable = ! $deleted && $acceptsComments && $comment->isWithinEditWindow();
@@ -63,7 +70,10 @@ class WorkOrderTimeline
             'type' => 'comment',
             'id' => $comment->id,
             'user' => ['id' => $comment->author->id, 'name' => $comment->author->name],
-            'body' => $deleted ? null : $comment->body,
+            'body' => $deleted ? null : CommentHtml::forDisplay($comment->body),
+            'attachments' => $deleted ? [] : array_values($comment->documents
+                ->map(fn (Media $media): array => new AttachmentResource($media)->resolve($request))
+                ->all()),
             'deleted' => $deleted,
             'edited' => $comment->edited_at !== null,
             'created_at' => $comment->created_at->toIso8601String(),

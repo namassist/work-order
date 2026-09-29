@@ -1,3 +1,4 @@
+import type { Attachment, AttachmentRules } from './attachment';
 import type { DepartmentOption } from './admin';
 
 /** Badge colour tokens from docs/DESIGN.md. */
@@ -118,8 +119,13 @@ export type CommentEntry = {
     type: 'comment';
     id: number;
     user: { id: number; name: string };
-    /** Plain text; null once deleted. Never render as HTML. */
+    /**
+     * HTML sanitized by the server (CommentHtml::forDisplay); null once
+     * deleted. Render only through CommentBody.vue.
+     */
     body: string | null;
+    /** Documents listed below the body; empty once deleted. */
+    attachments: Attachment[];
     deleted: boolean;
     edited: boolean;
     created_at: string;
@@ -130,7 +136,12 @@ export type CommentEntry = {
 export type TimelineEntry = StatusHistoryEntry | CommentEntry;
 
 export type WorkOrderCommentSettings = {
+    /** Plain-text characters per comment. */
     max_length: number;
+    max_images: number;
+    max_documents: number;
+    /** Rules of the files uploaded while a comment is written. */
+    uploads: { gambar: AttachmentRules; lampiran: AttachmentRules };
     /** The status no longer accepts comments (e.g. Dibatalkan). */
     read_only: boolean;
 };

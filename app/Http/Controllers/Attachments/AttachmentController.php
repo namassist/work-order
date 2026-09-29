@@ -22,8 +22,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Attachments of any Attachable model. Every request is authorized against
- * the parent's policy: view to read, addAttachment/deleteAttachment to
- * change. Files are only ever served from here, never by URL on the disk.
+ * the parent's policy: viewAttachment to read, addAttachment/deleteAttachment
+ * to change. Files are only ever served from here, never by URL on the disk.
  */
 class AttachmentController extends Controller
 {
@@ -57,7 +57,7 @@ class AttachmentController extends Controller
      */
     public function show(Request $request, Media $media): StreamedResponse
     {
-        Gate::authorize('view', $this->parentOf($media));
+        Gate::authorize('viewAttachment', [$this->parentOf($media), $media]);
 
         $type = AttachmentType::tryFrom((string) $media->mime_type);
         $inline = $type?->isPreviewable() === true && ! $request->boolean('download');

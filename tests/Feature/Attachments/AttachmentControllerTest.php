@@ -75,7 +75,7 @@ describe('upload', function () {
 
         $this->actingAs($this->user)
             ->post(documentsUploadUrl($this->workOrder), ['file' => attachmentUpload($fixture, $clientName)])
-            ->assertSessionHasErrors(['file' => 'Jenis berkas berkas tidak diizinkan. Gunakan PDF, JPG, JPEG, PNG, WEBP, DOCX, XLSX.']);
+            ->assertSessionHasErrors(['file' => 'Jenis berkas tidak diizinkan. Gunakan PDF, JPG, JPEG, PNG, WEBP, DOCX, XLSX.']);
 
         expect(Media::query()->count())->toBe(0)
             ->and($disk->allFiles())->toBe([]);

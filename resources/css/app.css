@@ -242,3 +242,50 @@
         @apply bg-background text-foreground;
     }
 }
+
+/*
+  Rich-text comments (CommentBody.vue, and CommentEditor.vue while writing):
+  plain prose on the panel, no boxes. Only the elements CommentHtml allows.
+*/
+@layer components {
+    .comment-body > * + * {
+        @apply mt-2;
+    }
+
+    .comment-body ul {
+        @apply list-disc pl-5;
+    }
+
+    .comment-body ol {
+        @apply list-decimal pl-5;
+    }
+
+    .comment-body li > * + * {
+        @apply mt-1;
+    }
+
+    .comment-body blockquote {
+        @apply border-l-2 border-border pl-3 text-muted-foreground;
+    }
+
+    .comment-body code {
+        @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em];
+    }
+
+    .comment-body a {
+        @apply break-all underline underline-offset-2 hover:decoration-2;
+    }
+
+    .comment-body img {
+        @apply block h-auto max-h-80 max-w-full cursor-zoom-in rounded-md border focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none;
+    }
+
+    .comment-body img.ProseMirror-selectednode {
+        @apply ring-3 ring-ring/50;
+    }
+
+    .comment-body p.is-editor-empty:first-child::before {
+        @apply pointer-events-none float-left h-0 text-muted-foreground;
+        content: attr(data-placeholder);
+    }
+}

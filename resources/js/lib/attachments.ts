@@ -1,3 +1,10 @@
+import {
+    File as FileIcon,
+    FileImage,
+    FileSpreadsheet,
+    FileText,
+} from '@lucide/vue';
+import type { LucideIcon } from '@lucide/vue';
 import { formatFileSize } from '@/lib/format';
 import type { AttachmentRules } from '@/types';
 
@@ -25,4 +32,27 @@ export function attachmentProblem(
     }
 
     return null;
+}
+
+const ICONS: Record<string, LucideIcon> = {
+    pdf: FileText,
+    docx: FileText,
+    xlsx: FileSpreadsheet,
+    jpg: FileImage,
+    png: FileImage,
+    webp: FileImage,
+};
+
+/**
+ * The icon of a file by its detected extension, or by its name before the
+ * server has seen it.
+ */
+export function attachmentIcon(
+    name: string,
+    extension?: string | null,
+): LucideIcon {
+    return (
+        ICONS[extension ?? name.split('.').pop()?.toLowerCase() ?? ''] ??
+        FileIcon
+    );
 }
