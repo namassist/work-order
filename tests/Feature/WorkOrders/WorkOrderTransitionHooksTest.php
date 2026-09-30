@@ -7,18 +7,18 @@ use App\Actions\WorkOrders\Transitions\TransitionRequirement;
 use App\Actions\WorkOrders\TransitionWorkOrder;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Models\WorkOrderDailyReport;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\States\WorkOrder\WorkOrderTransition;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| The extension points of the later steps (FLOW.md §15): Pelaksanaan →
-| Review Dokumen requires a daily report (step 4), Review Dokumen → Approval
-| BAST generates the BAST (step 5). Both are PROVISIONAL placeholders that
-| pass and do nothing; these tests pin where they are declared and how
-| TransitionWorkOrder runs a requirement and an effect.
+| The extension points of the flow (FLOW.md §15): Pelaksanaan → Review
+| Dokumen requires a daily report (step 4, DailyReportRequirementTest),
+| Review Dokumen → Approval BAST generates the BAST (step 5, a PROVISIONAL
+| placeholder that does nothing yet). These tests pin where they are
+| declared and how TransitionWorkOrder runs a requirement and an effect.
 */
 
 it('declares the daily report requirement and the BAST effect on their transitions only', function () {
@@ -39,8 +39,9 @@ it('declares the daily report requirement and the BAST effect on their transitio
     ]);
 });
 
-it('passes and does nothing until steps 4 and 5 fill them in', function () {
+it('does nothing for the BAST until step 5 fills it in', function () {
     $workOrder = WorkOrder::factory()->inProgress()->create();
+    WorkOrderDailyReport::factory()->for($workOrder)->create();
     $action = app(TransitionWorkOrder::class);
 
     $action->handle($workOrder, 'review_dokumen', adminUser());
@@ -52,9 +53,9 @@ it('passes and does nothing until steps 4 and 5 fill them in', function () {
 it('refuses the transition when a requirement is not met, leaving no trace', function () {
     app()->bind(EnsureDailyReport::class, fn (): TransitionRequirement => new class implements TransitionRequirement
     {
-        public function ensureMet(WorkOrder $workOrder, User $user): void
+        public function unmetReason(WorkOrder $workOrder, User $user): string
         {
-            throw ValidationException::withMessages(['status' => 'Belum ada laporan harian.']);
+            return 'Belum ada laporan harian.';
         }
     });
     $workOrder = WorkOrder::factory()->inProgress()->create();
@@ -74,11 +75,13 @@ it('checks a requirement with the work order locked, before the status changes',
     {
         public function __construct(private ArrayObject $seen) {}
 
-        public function ensureMet(WorkOrder $workOrder, User $user): void
+        public function unmetReason(WorkOrder $workOrder, User $user): ?string
         {
             $this->seen['status'] = $workOrder->status->getValue();
             $this->seen['level'] = DB::transactionLevel();
             $this->seen['user'] = $user->id;
+
+            return null;
         }
     });
     $user = adminUser();

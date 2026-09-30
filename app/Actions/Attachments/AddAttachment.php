@@ -77,7 +77,9 @@ class AddAttachment
             // A query, not $parent->touch(): that would also save any unsaved change on $parent.
             $parent->newQuery()->whereKey($parent->getKey())->touch();
 
-            $this->logAuditChange($parent, AuditEvent::AttachmentAdded, [], ['lampiran' => $media->name, 'ukuran' => $media->size]);
+            if (! $collection->loggedByRecord) {
+                $this->logAuditChange($parent, AuditEvent::AttachmentAdded, [], ['lampiran' => $media->name, 'ukuran' => $media->size]);
+            }
 
             return $media;
         });

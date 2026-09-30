@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
+use App\Models\WorkOrderDailyReport;
 use App\Models\WorkOrderInvoice;
 use App\Models\WorkOrderStatusHistory;
 use App\States\WorkOrder\WorkOrderStatus;
@@ -49,8 +50,11 @@ it('creates the visual-check accounts with their fixed password, outside the dem
 
     expect($accounts->mapWithKeys(fn (User $user): array => [$user->email => $user->roles->pluck('name')->all()])->sortKeys()->all())->toBe([
         'visual.adminwo@worder.test' => ['admin-wo'],
+        'visual.direktur@worder.test' => ['direktur'],
         'visual.finance@worder.test' => ['finance'],
         'visual.lead@worder.test' => ['lead-operational'],
+        'visual.pictimesheet@worder.test' => ['pic-timesheet'],
+        'visual.rental@worder.test' => ['rental'],
         'visual.viewer@worder.test' => ['viewer'],
         'visual@worder.test' => [SystemRole::Admin->value],
     ])
@@ -408,6 +412,33 @@ it('writes rich comments with inline photos and documents through the real actio
     $comments->each(function (WorkOrderComment $comment): void {
         expect($comment->body)->toStartWith('<p>')->toBe(CommentHtml::forDisplay($comment->body));
     });
+});
+
+it('posts daily reports during Pelaksanaan through the real actions, leaving a few missing today', function () {
+    $this->seed(DemoSeeder::class);
+
+    $reports = WorkOrderDailyReport::query()->with(['workOrder.statusHistories', 'reporter', 'files'])->get();
+    $today = DisplayDate::today();
+
+    expect($reports->count())->toBeGreaterThan(50)
+        ->and($reports->every(fn (WorkOrderDailyReport $report): bool => $report->reporter->hasRole('pic-timesheet')))->toBeTrue()
+        ->and($reports->every(fn (WorkOrderDailyReport $report): bool => $report->links !== [] || $report->files->isNotEmpty()))->toBeTrue()
+        ->and($reports->flatMap->links->every(fn (string $link): bool => str_starts_with($link, 'https://')))->toBeTrue()
+        ->and($reports->flatMap->files->pluck('mime_type')->unique()->all())->toBe(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+        ->and($reports->whereNotNull('updated_by')->count())->toBeGreaterThan(0)
+        ->and(Activity::query()->where('event', AuditEvent::DailyReportAdded->value)->count())->toBe($reports->count());
+
+    // Every submission for review had a report, filed while the work order was in Pelaksanaan.
+    foreach (WorkOrderStatusHistory::query()->where('to_status', 'review_dokumen')->get() as $review) {
+        expect($reports->where('work_order_id', $review->work_order_id)->contains(fn (WorkOrderDailyReport $report): bool => $report->created_at->lessThan($review->created_at)))
+            ->toBeTrue("WO {$review->work_order_id} reviewed without a report");
+    }
+
+    $withoutToday = WorkOrder::query()->where('status', 'pelaksanaan')
+        ->whereDoesntHave('dailyReports', fn ($query) => $query->where('report_date', $today))
+        ->count();
+
+    expect($withoutToday)->toBeGreaterThanOrEqual(3);
 });
 
 it('attaches sample documents without touching the fixtures', function () {

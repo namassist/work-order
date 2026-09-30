@@ -6,6 +6,7 @@ use App\Http\Controllers\RegistrationStatusController;
 use App\Http\Controllers\WorkOrders\WorkOrderCommentController;
 use App\Http\Controllers\WorkOrders\WorkOrderCommentUploadController;
 use App\Http\Controllers\WorkOrders\WorkOrderController;
+use App\Http\Controllers\WorkOrders\WorkOrderDailyReportController;
 use App\Http\Controllers\WorkOrders\WorkOrderExportController;
 use App\Http\Controllers\WorkOrders\WorkOrderInvoiceController;
 use App\Http\Controllers\WorkOrders\WorkOrderPaymentController;
@@ -43,6 +44,13 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             ->name('work-orders.invoice.update');
         Route::post('work-orders/{workOrder}/payment', [WorkOrderPaymentController::class, 'store'])
             ->name('work-orders.payment.store');
+    });
+    // Daily reports during Pelaksanaan (FLOW.md §7): with uploads, so throttled like them.
+    Route::scopeBindings()->middleware('throttle:wo-daily-report')->group(function (): void {
+        Route::post('work-orders/{workOrder}/daily-reports', [WorkOrderDailyReportController::class, 'store'])
+            ->name('work-orders.daily-reports.store');
+        Route::patch('work-orders/{workOrder}/daily-reports/{dailyReport}', [WorkOrderDailyReportController::class, 'update'])
+            ->name('work-orders.daily-reports.update');
     });
     Route::post('work-orders/{workOrder}/comments', [WorkOrderCommentController::class, 'store'])
         ->middleware('throttle:wo-comment-post')

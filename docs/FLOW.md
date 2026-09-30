@@ -121,13 +121,21 @@ link kept outside the application.
 - A report contains: the date, a short note, and **at least one** of:
     - Excel file(s) (the existing attachment allowlist, private disk, access follows the WO)
     - link(s) (http/https only)
-- A report can be edited on its own day; changes are audit-logged.
+- A report can be edited on the day it was created (setting: extra days); changes are audit-logged.
+  Any PIC Timesheet may edit a report, since there is one per WO per day; the editor is recorded.
+- Reports on days that are not working days are allowed but never required.
 - Discussion about the work uses the existing WO comments.
-- **Missing report:** a WO in Pelaksanaan with no report for today after the cutoff time is flagged
-  "Belum lapor" (list, detail, dashboard).
-- **(Provisional):** working days (default Monday–Friday), public holidays, cutoff time
-  (default 17:00 WITA), whether late (back-dated) reports are allowed and for how many days, and
-  whether links are restricted to company domains (e.g. SharePoint/OneDrive).
+- **Missing report ("Belum lapor"):** a WO in Pelaksanaan with no report for today after the cutoff time
+  on a working day. The day the WO entered Pelaksanaan (approval or a return for revision) is exempt.
+  Shown on the list (marker and filter), the detail page, and the dashboard. It is a **daily signal of
+  its own**, not an overdue basis (§11).
+- **Review after a return:** after Rental returns the WO for revision, Pelaksanaan → Review Dokumen
+  needs a report created or edited after that return.
+- **(Provisional)** settings with their defaults: working days Monday–Friday; public holidays as a
+  configured list of dates (an admin-managed list comes later); cutoff 17:00 WITA; back-dated reports
+  up to 2 working days; files XLSX and PDF (5 per report, 10 MB each); links http/https only (5 per
+  report, 2048 characters), optionally restricted to company domains (e.g. SharePoint/OneDrive),
+  default off.
 
 ## 8. BAST
 
@@ -173,7 +181,7 @@ Belum ditagih → Ditagih → Lunas
 ## 11. Deadlines and overdue
 
 - **Target date:** late while Diajukan, Pelaksanaan or Review Dokumen and past the target date.
-- **Missing daily report:** §7.
+- The missing daily report ("Belum lapor", §7) is a separate daily signal, not an overdue basis.
 - **Payment due date:** late while Ditagih and past the due date.
 - A WO without the relevant date is never late on that basis.
 
@@ -187,7 +195,8 @@ payment overdue (Finance). The actor is never notified of their own action.
 ## 13. Open points
 
 - Official BAST format and a sample document.
-- Working days, holidays, report cutoff time, back-dated reports, link domain restriction (§7).
+- Confirm the daily report defaults (§7): working days, holidays, cutoff time, back-dating, file
+  types, link domain restriction.
 - Whether PIC Work Order is recorded on the WO; keep or remove the target department (§4).
 - Cancellation rules (§5.2).
 - Mail (Microsoft 365 SMTP) and Microsoft sign-in (SSO).

@@ -73,6 +73,23 @@ Jalur pembayaran WO Closed (FLOW.md §10) bukan status WO, jadi badge-nya selalu
 label "Pembayaran" (`components/work-orders/PaymentStatusBadge.vue`), tidak pernah menggantikan badge
 status: Belum ditagih → `secondary`, Ditagih → `warning` (menunggu Finance), Lunas → `success`.
 
+## Laporan harian
+
+Laporan harian (FLOW.md §7) punya bagian sendiri di detail WO ("Laporan Harian"), bukan di timeline:
+`components/work-orders/DailyReportSection.vue` dengan dialog `DailyReportDialog.vue`.
+
+- Strip hari kerja terakhir (10 hari, terlama di kiri): kotak `size-8` bergaris per hari, ikon plus
+  label untuk pembaca layar. Sudah lapor `Check` dengan `border-success text-success`; belum lapor
+  `X` dengan `border-destructive text-destructive`; hari ini sebelum batas waktu `Clock` netral;
+  tidak wajib `Minus` muted tanpa garis. Status tidak hanya dibedakan lewat warna.
+- "Belum lapor" bukan badge dan bukan status: ikon `ClipboardX` (`text-destructive`) plus teks kecil
+  tebal, di bawah badge status di tabel dan di atas strip di detail. Di dashboard hanya baris
+  keterangan di kartu Pelaksanaan ("2 belum lapor hari ini"), bukan kartu baru.
+- Tautan: teks biasa bergaris bawah dengan ikon `ExternalLink`, label host plus nama berkas, selalu
+  tab baru (`rel="noopener noreferrer nofollow"`). Berkas memakai `AttachmentRow.vue`.
+- Tombol transisi yang syaratnya belum terpenuhi (mis. belum ada laporan) tampil nonaktif dengan
+  alasannya di bawah tombol, bukan disembunyikan.
+
 ## Urgensi Work Order
 
 Urgensi (Rendah, Normal, Tinggi, Mendesak) tampil sebagai ikon lucide + teks, tidak pernah

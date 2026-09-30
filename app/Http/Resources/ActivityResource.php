@@ -71,6 +71,9 @@ class ActivityResource extends JsonResource
         'jumlah' => 'Jumlah tagihan',
         'jatuh_tempo' => 'Jatuh tempo',
         'tanggal_bayar' => 'Tanggal pembayaran',
+        'tanggal_laporan' => 'Tanggal laporan',
+        'catatan' => 'Catatan',
+        'tautan' => 'Tautan',
     ];
 
     /**

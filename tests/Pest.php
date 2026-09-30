@@ -4,6 +4,8 @@ use App\Enums\Permission;
 use App\Enums\SystemRole;
 use App\Models\Department;
 use App\Models\User;
+use App\Models\WorkOrder;
+use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -112,6 +114,23 @@ function icUser(Permission ...$permissions): User
 function unggulUser(Permission ...$permissions): User
 {
     return userInDepartment(Department::factory()->create(), ...$permissions);
+}
+
+/**
+ * Record that the work order entered Pelaksanaan at the given moment (UTC),
+ * by approval or, with $fromStatus review_dokumen, by a return for revision.
+ * Factory states set the status without any history.
+ */
+function enteredExecutionAt(WorkOrder $workOrder, string $utc, string $fromStatus = 'diajukan'): WorkOrder
+{
+    $history = $workOrder->statusHistories()->create([
+        'from_status' => $fromStatus,
+        'to_status' => 'pelaksanaan',
+        'user_id' => $workOrder->created_by,
+    ]);
+    $history->forceFill(['created_at' => CarbonImmutable::parse($utc, 'UTC')])->save();
+
+    return $workOrder;
 }
 
 /**

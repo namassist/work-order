@@ -204,5 +204,10 @@ return [
         'proof_files' => 'bukti bayar',
         'proof_files.*' => 'bukti bayar',
         'remove_files' => 'berkas yang dihapus',
+        'report_date' => 'tanggal laporan',
+        'links' => 'tautan',
+        'links.*' => 'tautan',
+        'files' => 'berkas',
+        'files.*' => 'berkas',
     ],
 ];

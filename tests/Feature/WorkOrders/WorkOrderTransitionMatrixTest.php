@@ -5,6 +5,7 @@ use App\Models\Company;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Models\WorkOrderDailyReport;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Carbon;
@@ -92,7 +93,8 @@ function transitionWorld(string $userKey): array
             'draft' => $factory->create(),
             'diajukan' => $factory->submitted()->create(),
             'ditolak' => $factory->rejected()->create(),
-            'pelaksanaan' => $factory->inProgress()->create(),
+            // With a daily report, so only permissions decide (FLOW.md §7, DailyReportRequirementTest).
+            'pelaksanaan' => tap($factory->inProgress()->create(), fn (WorkOrder $workOrder) => WorkOrderDailyReport::factory()->for($workOrder)->create()),
             'review_dokumen' => $factory->inReview()->create(),
             'approval_bast' => $factory->awaitingBastApproval()->create(),
             'bast_disetujui' => $factory->bastApproved()->create(),

@@ -93,6 +93,47 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Daily Reports
+    |--------------------------------------------------------------------------
+    |
+    | Daily progress reports during Pelaksanaan (FLOW.md §7), read through
+    | App\Support\DailyReports\ReportCalendar. PROVISIONAL defaults until the
+    | business confirms them.
+    |
+    | working_days: ISO weekdays (1 = Monday … 7 = Sunday) a report is due.
+    | holidays: ISO dates (Y-m-d) on which no report is due, e.g.
+    |   "2026-12-25,2026-12-26". Reports may still be filed on any day.
+    | cutoff: the time (H:i, display timezone) after which a working day
+    |   without a report is flagged "Belum lapor".
+    | backdate_working_days: how many working days back a report may be
+    |   dated (0: today only).
+    | edit_extra_days: a report may be edited until the end of the day it was
+    |   created, plus this many calendar days.
+    | files, links: per report. links.domains limits links to these hosts and
+    |   their subdomains (e.g. "sharepoint.com,1drv.ms"); empty allows any.
+    |
+    */
+
+    'daily_reports' => [
+        'working_days' => array_values(array_map(intval(...), array_filter(explode(',', (string) env('WO_REPORT_WORKING_DAYS', '1,2,3,4,5')), is_numeric(...)))),
+        'holidays' => array_values(array_filter(array_map(trim(...), explode(',', (string) env('WO_REPORT_HOLIDAYS', ''))))),
+        'cutoff' => (string) env('WO_REPORT_CUTOFF', '17:00'),
+        'backdate_working_days' => (int) env('WO_REPORT_BACKDATE_DAYS', 2),
+        'edit_extra_days' => (int) env('WO_REPORT_EDIT_EXTRA_DAYS', 0),
+        'note_max_length' => 1000,
+        'files' => [
+            'max_files' => (int) env('WO_REPORT_MAX_FILES', 5),
+            'max_size_kb' => (int) env('WO_ATTACHMENT_MAX_SIZE_KB', 10240),
+        ],
+        'links' => [
+            'max_links' => (int) env('WO_REPORT_MAX_LINKS', 5),
+            'max_length' => 2048,
+            'domains' => array_values(array_filter(array_map(fn (string $domain): string => mb_strtolower(trim($domain)), explode(',', (string) env('WO_REPORT_LINK_DOMAINS', ''))))),
+        ],
+    ],
+
     'comments' => [
         'edit_window_minutes' => (int) env('WO_COMMENT_EDIT_MINUTES', 15),
         'images' => [

@@ -96,6 +96,7 @@ const popoverCount = computed(
             filters.category !== ALL,
             filters.payment !== ALL,
             filters.overdue,
+            filters.missing_report,
             filters.from !== '' || filters.to !== '',
             filters.trashed,
         ].filter(Boolean).length,
@@ -116,7 +117,11 @@ const clear = (key: WorkOrderFilterChipKey) => {
         filters.search = '';
     } else if (key === 'created') {
         setCreated({ from: '', to: '' });
-    } else if (key === 'trashed' || key === 'overdue') {
+    } else if (
+        key === 'trashed' ||
+        key === 'overdue' ||
+        key === 'missing_report'
+    ) {
         filters[key] = false;
     } else {
         filters[key] = ALL;
@@ -132,6 +137,7 @@ const FILTER_KEYS: WorkOrderFilterChipKey[] = [
     'target',
     'category',
     'overdue',
+    'missing_report',
     'created',
     'trashed',
 ];
@@ -236,6 +242,18 @@ const reset = () => FILTER_KEYS.forEach(clear);
                     <Label for="filter-overdue">Hanya yang terlambat</Label>
                 </div>
                 <div
+                    class="flex items-center gap-2"
+                    data-test="filter-missing-report"
+                >
+                    <Checkbox
+                        id="filter-missing-report"
+                        v-model="filters.missing_report"
+                    />
+                    <Label for="filter-missing-report">
+                        Hanya yang belum lapor
+                    </Label>
+                </div>
+                <div
                     v-if="canRestore"
                     class="flex items-center gap-2"
                     data-test="filter-trashed"
@@ -322,6 +340,15 @@ const reset = () => FILTER_KEYS.forEach(clear);
                 <div class="flex items-center gap-2">
                     <Checkbox id="sheet-overdue" v-model="filters.overdue" />
                     <Label for="sheet-overdue">Hanya yang terlambat</Label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <Checkbox
+                        id="sheet-missing-report"
+                        v-model="filters.missing_report"
+                    />
+                    <Label for="sheet-missing-report">
+                        Hanya yang belum lapor
+                    </Label>
                 </div>
                 <div v-if="canRestore" class="flex items-center gap-2">
                     <Checkbox id="sheet-trashed" v-model="filters.trashed" />

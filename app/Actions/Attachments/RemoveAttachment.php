@@ -20,7 +20,9 @@ class RemoveAttachment
     public function handle(Model&Attachable $parent, Media $media): void
     {
         DB::transaction(function () use ($parent, $media): void {
-            $this->logAuditChange($parent, AuditEvent::AttachmentRemoved, ['lampiran' => $media->name, 'ukuran' => $media->size], []);
+            if ($parent->attachmentCollection((string) $media->collection_name)?->loggedByRecord !== true) {
+                $this->logAuditChange($parent, AuditEvent::AttachmentRemoved, ['lampiran' => $media->name, 'ukuran' => $media->size], []);
+            }
 
             $media->delete();
 

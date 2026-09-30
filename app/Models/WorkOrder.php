@@ -12,10 +12,14 @@ use App\Enums\WorkOrderDeadline;
 use App\Enums\WorkOrderUrgency;
 use App\States\WorkOrder\Closed;
 use App\States\WorkOrder\Diajukan;
+use App\States\WorkOrder\Pelaksanaan;
+use App\States\WorkOrder\ReviewDokumen;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\Support\Attachments\Attachable;
 use App\Support\Attachments\AttachmentCollection;
+use App\Support\DailyReports\ReportCalendar;
 use App\Support\DisplayDate;
+use Carbon\CarbonInterface;
 use Database\Factories\WorkOrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -53,6 +57,7 @@ use Spatie\ModelStates\HasStates;
  * @property-read User $enteredBy
  * @property-read Collection<int, WorkOrderComment> $comments
  * @property-read WorkOrderInvoice|null $invoice
+ * @property-read Collection<int, WorkOrderDailyReport> $dailyReports
  */
 #[Fillable(['title', 'description', 'requester_department_id', 'requester_name', 'pic_name', 'work_order_category_id', 'target_department_id', 'urgency', 'target_date'])]
 class WorkOrder extends Model implements Attachable
@@ -256,6 +261,64 @@ class WorkOrder extends Model implements Attachable
     }
 
     /**
+     * Daily reports (FLOW.md §7), newest date first.
+     *
+     * @return HasMany<WorkOrderDailyReport, $this>
+     */
+    public function dailyReports(): HasMany
+    {
+        return $this->hasMany(WorkOrderDailyReport::class)->latest('report_date');
+    }
+
+    /**
+     * The date (display timezone) the work order first entered
+     * Pelaksanaan, or null when its status history does not say so.
+     */
+    public function executionStartedOn(): ?string
+    {
+        /** @var CarbonInterface|null $entered */
+        $entered = $this->statusHistories()->where('to_status', Pelaksanaan::getMorphClass())->value('created_at');
+
+        return $entered === null ? null : ReportCalendar::dateOf($entered);
+    }
+
+    /**
+     * When Rental last returned the work order from Review Dokumen for
+     * revision, or null when it never did.
+     */
+    public function lastReturnedForRevisionAt(): ?CarbonInterface
+    {
+        /** @var CarbonInterface|null */
+        return $this->statusHistories()
+            ->reorder()
+            ->where('from_status', ReviewDokumen::getMorphClass())
+            ->where('to_status', Pelaksanaan::getMorphClass())
+            ->latest('created_at')
+            ->latest('id')
+            ->value('created_at');
+    }
+
+    /**
+     * Whether the work order is flagged "Belum lapor" (FLOW.md §7): in
+     * Pelaksanaan, today is a working day past its cutoff, and there is no
+     * report dated today. The day the work order entered Pelaksanaan (by
+     * approval or a return for revision) is exempt. A daily signal of its
+     * own, not an overdue basis (FLOW.md §11). Must agree with
+     * scopeMissingDailyReport().
+     */
+    public function isMissingDailyReport(): bool
+    {
+        if (! ReportCalendar::isReportDueNow() || ! $this->status->equals(Pelaksanaan::class)) {
+            return false;
+        }
+
+        $today = ReportCalendar::today();
+
+        return ! $this->statusHistories()->where('to_status', Pelaksanaan::getMorphClass())->where('created_at', '>=', DisplayDate::startOfDayUtc($today))->exists()
+            && ! $this->dailyReports()->where('report_date', $today)->exists();
+    }
+
+    /**
      * The number, or "Draft" until the work order is submitted.
      */
     public function displayNumber(): string
@@ -399,6 +462,30 @@ class WorkOrder extends Model implements Attachable
                 });
             }
         });
+    }
+
+    /**
+     * Work orders flagged "Belum lapor", see isMissingDailyReport(). Before
+     * the cutoff, and on days that are not working days, none are.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function missingDailyReport(Builder $query): void
+    {
+        if (! ReportCalendar::isReportDueNow()) {
+            $query->whereRaw('false');
+
+            return;
+        }
+
+        $today = ReportCalendar::today();
+
+        $query->where('status', Pelaksanaan::getMorphClass())
+            ->whereDoesntHave('statusHistories', fn (Builder $history) => $history
+                ->where('to_status', Pelaksanaan::getMorphClass())
+                ->where('created_at', '>=', DisplayDate::startOfDayUtc($today)))
+            ->whereDoesntHave('dailyReports', fn (Builder $report) => $report->where('report_date', $today));
     }
 
     /**

@@ -85,6 +85,12 @@ php artisan optimize
   new permissions no existing role holds. The step 3 migration refuses a database with work orders,
   status history, or manual BAST files of the v1 flow, and `RolePermissionSeeder` refuses one that
   still has `work-orders.process`. Start from a fresh database (no production data exists yet).
+- **Daily reports (FLOW.md v2 step 4).** New permission `work-orders.report` (PIC Timesheet: post
+  and edit daily reports, and add documents during Pelaksanaan, which `work-orders.submit-review` no
+  longer allows). On an existing database, grant it to PIC Timesheet on the Role page, or reseed.
+  Settings (`WO_REPORT_*`, `config/work_order.php` › `daily_reports`): working days, holidays
+  (`WO_REPORT_HOLIDAYS`, ISO dates, comma-separated; update it every year), cutoff, back-dating, edit
+  window, file and link limits, and the optional link domain allowlist (`WO_REPORT_LINK_DOMAINS`).
 - **Payment segregation** is off by default; set `WO_PAYMENT_SEGREGATION=true` to require that the
   person who issued or last corrected an invoice never confirms its payment.
 - `php artisan optimize` caches config, routes, and events; rerun it whenever `.env` changes.

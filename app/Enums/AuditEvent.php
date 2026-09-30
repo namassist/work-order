@@ -24,6 +24,8 @@ enum AuditEvent: string
     case InvoiceIssued = 'invoice_issued';
     case InvoiceCorrected = 'invoice_corrected';
     case PaymentConfirmed = 'payment_confirmed';
+    case DailyReportAdded = 'daily_report_added';
+    case DailyReportEdited = 'daily_report_edited';
     case Registered = 'registered';
     case RegistrationApproved = 'registration_approved';
     case RegistrationRejected = 'registration_rejected';
@@ -58,6 +60,8 @@ enum AuditEvent: string
             self::InvoiceIssued => 'Invoice diterbitkan',
             self::InvoiceCorrected => 'Invoice dikoreksi',
             self::PaymentConfirmed => 'Pembayaran dikonfirmasi',
+            self::DailyReportAdded => 'Laporan harian ditambahkan',
+            self::DailyReportEdited => 'Laporan harian diubah',
             self::Registered => 'Mendaftar',
             self::RegistrationApproved => 'Pendaftaran disetujui',
             self::RegistrationRejected => 'Pendaftaran ditolak',

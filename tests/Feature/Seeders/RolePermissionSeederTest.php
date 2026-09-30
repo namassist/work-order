@@ -55,7 +55,7 @@ it('gives each initial role exactly its work order permissions', function (strin
 })->with([
     'Admin WO' => ['admin-wo', [Permission::WorkOrdersView, Permission::WorkOrdersCreate, Permission::WorkOrdersUpdate, Permission::WorkOrdersDelete, Permission::WorkOrdersSubmit, Permission::WorkOrdersClose, Permission::WorkOrdersCancel, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
     'Lead Operational' => ['lead-operational', [Permission::WorkOrdersView, Permission::WorkOrdersApprove, Permission::WorkOrdersCancelExecution, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
-    'PIC Timesheet' => ['pic-timesheet', [Permission::WorkOrdersView, Permission::WorkOrdersSubmitReview, Permission::WorkOrdersComment]],
+    'PIC Timesheet' => ['pic-timesheet', [Permission::WorkOrdersView, Permission::WorkOrdersSubmitReview, Permission::WorkOrdersReport, Permission::WorkOrdersComment]],
     'Rental' => ['rental', [Permission::WorkOrdersView, Permission::WorkOrdersReview, Permission::WorkOrdersComment]],
     'Direktur' => ['direktur', [Permission::WorkOrdersView, Permission::WorkOrdersApproveBast, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],
     'Finance' => ['finance', [Permission::WorkOrdersView, Permission::WorkOrdersBill, Permission::WorkOrdersConfirmPayment, Permission::WorkOrdersComment, Permission::WorkOrdersExport]],

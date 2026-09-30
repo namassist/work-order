@@ -9,6 +9,7 @@ const reject: WorkOrderTransition = {
     destructive: true,
     requires_note: true,
     note_label: 'Alasan penolakan',
+    blocked_reason: null,
 };
 
 const accept: WorkOrderTransition = {
@@ -17,6 +18,7 @@ const accept: WorkOrderTransition = {
     destructive: false,
     requires_note: false,
     note_label: 'Catatan',
+    blocked_reason: null,
 };
 
 async function render(transition: WorkOrderTransition) {

@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Models\WorkOrderDailyReport;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\States\WorkOrder\WorkOrderTransition;
 use Database\Seeders\RolePermissionSeeder;
@@ -87,7 +88,7 @@ it('sets every status property per FLOW.md §5.3', function () {
         'draft' => ['tone' => 'secondary', 'active' => false, 'editable' => true, 'deletable' => true, 'comments' => true, 'deadline' => null, 'numbered' => false, 'number' => false, 'files' => ['dokumen' => 'work-orders.update'], 'waits' => ['work-orders.submit']],
         'diajukan' => ['tone' => 'warning', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'numbered' => true, 'number' => true, 'files' => [], 'waits' => ['work-orders.approve']],
         'ditolak' => ['tone' => 'destructive', 'active' => true, 'editable' => true, 'deletable' => false, 'comments' => true, 'deadline' => null, 'numbered' => true, 'number' => false, 'files' => ['dokumen' => 'work-orders.update'], 'waits' => ['work-orders.submit']],
-        'pelaksanaan' => ['tone' => 'info', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'numbered' => true, 'number' => false, 'files' => ['dokumen' => 'work-orders.submit-review'], 'waits' => ['work-orders.submit-review']],
+        'pelaksanaan' => ['tone' => 'info', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'numbered' => true, 'number' => false, 'files' => ['dokumen' => 'work-orders.report'], 'waits' => ['work-orders.submit-review']],
         'review_dokumen' => ['tone' => 'review', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => 'target_date', 'numbered' => true, 'number' => false, 'files' => [], 'waits' => ['work-orders.review']],
         'approval_bast' => ['tone' => 'approval', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => null, 'numbered' => true, 'number' => false, 'files' => [], 'waits' => ['work-orders.approve-bast']],
         'bast_disetujui' => ['tone' => 'approved', 'active' => true, 'editable' => false, 'deletable' => false, 'comments' => true, 'deadline' => null, 'numbered' => true, 'number' => false, 'files' => [], 'waits' => ['work-orders.close']],
@@ -480,8 +481,8 @@ describe('detail page', function () {
             ->get(route('work-orders.show', $workOrder))
             ->assertInertia(fn (Assert $page): Assert => $page
                 ->where('transitions', [
-                    ['value' => 'pelaksanaan', 'label' => 'Kembalikan untuk revisi', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Data yang perlu dilengkapi'],
-                    ['value' => 'approval_bast', 'label' => 'Ajukan BAST', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan'],
+                    ['value' => 'pelaksanaan', 'label' => 'Kembalikan untuk revisi', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Data yang perlu dilengkapi', 'blocked_reason' => null],
+                    ['value' => 'approval_bast', 'label' => 'Ajukan BAST', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'blocked_reason' => null],
                 ]));
     });
 });
@@ -501,8 +502,14 @@ it('walks the whole flow and shows it in the timeline and the Riwayat', function
         ['closed', $this->adminWo, null],
     ];
 
-    foreach ($steps as [$to, $user, $note]) {
+    foreach ($steps as $step => [$to, $user, $note]) {
         $this->travel(1)->minutes();
+
+        // Review needs a daily report since entering (or returning to) Pelaksanaan (FLOW.md §7).
+        if ($to === 'review_dokumen') {
+            WorkOrderDailyReport::factory()->for($this->workOrder)->on(now()->subDays($step)->toDateString())->create(['created_by' => $this->pic->id]);
+        }
+
         $action->handle($this->workOrder, $to, $user, $note);
     }
 

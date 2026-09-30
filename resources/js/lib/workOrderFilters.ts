@@ -21,6 +21,8 @@ export type WorkOrderFilters = {
     category: string;
     /** Only work orders late against their status's deadline. */
     overdue: boolean;
+    /** Only work orders in Pelaksanaan without today's daily report ("Belum lapor"). */
+    missing_report: boolean;
     /** Created on or after this WITA calendar day (Y-m-d). */
     from: string;
     /** Created on or before this WITA calendar day (Y-m-d). */
@@ -42,6 +44,7 @@ export const EMPTY_WORK_ORDER_FILTERS: WorkOrderFilters = {
     target: '',
     category: '',
     overdue: false,
+    missing_report: false,
     from: '',
     to: '',
     trashed: false,
@@ -73,6 +76,7 @@ export type WorkOrderFilterChipKey =
     | 'target'
     | 'category'
     | 'overdue'
+    | 'missing_report'
     | 'created'
     | 'trashed';
 
@@ -153,6 +157,10 @@ export function workOrderFilterChips(
 
     if (filters.overdue) {
         chips.push({ key: 'overdue', label: 'Terlambat' });
+    }
+
+    if (filters.missing_report) {
+        chips.push({ key: 'missing_report', label: 'Belum lapor' });
     }
 
     if (filters.from || filters.to) {

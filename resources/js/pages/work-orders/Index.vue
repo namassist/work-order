@@ -6,6 +6,7 @@ import {
     CircleCheckBig,
     CircleDot,
     ClipboardList,
+    ClipboardX,
     Download,
     FileCheck,
     FilePen,
@@ -274,6 +275,17 @@ const openHistory = (workOrder: WorkOrderListItem) => {
                             v-else
                             :status="workOrder.status"
                         />
+                        <span
+                            v-if="workOrder.missing_daily_report"
+                            class="mt-1 flex items-center gap-1 text-xs font-medium"
+                            data-test="missing-daily-report"
+                        >
+                            <ClipboardX
+                                class="size-3.5 text-destructive"
+                                aria-hidden="true"
+                            />
+                            Belum lapor
+                        </span>
                     </TableCell>
                     <TableCell class="hidden lg:table-cell">
                         <WorkOrderUrgency :urgency="workOrder.urgency" />

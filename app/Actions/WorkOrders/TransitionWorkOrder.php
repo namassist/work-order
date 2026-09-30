@@ -54,7 +54,11 @@ class TransitionWorkOrder
             foreach ($transition->requirements as $requirement) {
                 /** @var TransitionRequirement $check */
                 $check = app($requirement);
-                $check->ensureMet($locked, $user);
+                $reason = $check->unmetReason($locked, $user);
+
+                if ($reason !== null) {
+                    throw ValidationException::withMessages(['status' => $reason]);
+                }
             }
 
             $target = new $transition->to($locked);

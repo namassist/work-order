@@ -45,6 +45,7 @@ describe('workOrderFilterChips', () => {
                     target: '7',
                     category: '2',
                     overdue: true,
+                    missing_report: true,
                     from: '2026-09-01',
                     to: '2026-09-27',
                     trashed: true,
@@ -61,6 +62,7 @@ describe('workOrderFilterChips', () => {
             { key: 'target', label: 'Dept. tujuan: ENG' },
             { key: 'category', label: 'Kategori: Perbaikan' },
             { key: 'overdue', label: 'Terlambat' },
+            { key: 'missing_report', label: 'Belum lapor' },
             { key: 'created', label: 'Dibuat: 1 Sep 2026 – 27 Sep 2026' },
             { key: 'trashed', label: 'Terhapus' },
         ]);
