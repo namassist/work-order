@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Attachments\AddAttachment;
+use App\Actions\WorkOrders\AddDailyReport;
 use App\Enums\Permission;
 use App\Models\Company;
 use App\Models\Department;
@@ -16,7 +17,7 @@ use OpenSpout\Reader\XLSX\Reader;
 
 /*
 | FLOW.md v2 §6 as a matrix: every role against every kind of work order, on
-| every surface that shows work orders. Each surface goes through
+| every surface that shows work orders (daily reports included). Each surface goes through
 | WorkOrder::isVisibleTo() or scopeVisibleTo(); this file proves they agree
 | with the spec and with each other.
 |
@@ -252,6 +253,19 @@ it('downloads attachments only of visible work orders', function (string $userKe
     }
 })->with('visibility matrix');
 
+it('downloads daily report files only of visible work orders, never as a client company user', function (string $userKey, array $visible) {
+    Storage::fake('attachments');
+    ['user' => $user, 'workOrders' => $workOrders] = visibilityWorld($userKey);
+    $workOrder = $workOrders['in progress'];
+    $report = app(AddDailyReport::class)->handle($workOrder, userWithRole('pic-timesheet'), [
+        'report_date' => '2026-09-25', 'note' => 'Progres.', 'links' => [],
+    ], [attachmentUpload('anggaran.xlsx')]);
+
+    // Reports are internal (Unggul) data: IC users never get them, even on their own department's WO.
+    $this->actingAs($user)->get(route('attachments.show', $report->files()->sole()))
+        ->assertStatus(in_array('in progress', $visible, true) && ! $user->isClient() ? 200 : 404);
+})->with('visibility matrix');
+
 it('shows invoices and downloads their files only on visible work orders', function (string $userKey, array $visible) {
     Storage::fake('attachments');
     ['user' => $user, 'workOrders' => $workOrders] = visibilityWorld($userKey);
@@ -279,6 +293,8 @@ it('shows invoices and downloads their files only on visible work orders', funct
 it('counts and lists only visible work orders on the dashboard', function (string $userKey, array $visible, bool $mayList) {
     ['user' => $user, 'workOrders' => $workOrders] = visibilityWorld($userKey);
     $count = fn (array $keys): int => count(array_intersect($visible, $keys));
+    // 18:00 WITA, past the daily report cutoff: the Pelaksanaan work order has no report today.
+    Carbon::setTestNow('2026-09-25 10:00:00');
 
     $response = $this->actingAs($user)->get(route('dashboard'))->assertOk();
 
@@ -297,6 +313,7 @@ it('counts and lists only visible work orders on the dashboard', function (strin
                 'submitted' => $count(MATRIX_PENDING),
                 'in_progress' => $count(['in progress']),
                 'billing' => $count(['billed']),
+                'missing_report' => $count(['in progress']),
                 'overdue' => $count([...MATRIX_OVERDUE_TARGET, ...MATRIX_OVERDUE_PAYMENT]),
                 'overdue_by' => ['target_date' => $count(MATRIX_OVERDUE_TARGET), 'payment_due_date' => $count(MATRIX_OVERDUE_PAYMENT)],
             ])

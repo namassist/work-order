@@ -36,6 +36,9 @@ enum Permission: string
     case WorkOrdersExport = 'work-orders.export';
     case WorkOrdersComment = 'work-orders.comment';
 
+    /* Daily reports during Pelaksanaan (FLOW.md §7). */
+    case WorkOrdersReport = 'work-orders.report';
+
     /* Status changes (FLOW.md §5.1, §5.2), see WorkOrderStatus::transitions(). */
     case WorkOrdersSubmit = 'work-orders.submit';
     case WorkOrdersApprove = 'work-orders.approve';

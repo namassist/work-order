@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Actions\Attachments\AddAttachment;
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Registrations\RejectRegistration;
+use App\Actions\WorkOrders\AddDailyReport;
 use App\Actions\WorkOrders\AddWorkOrderComment;
 use App\Actions\WorkOrders\BillWorkOrder;
 use App\Actions\WorkOrders\ConfirmWorkOrderPayment;
@@ -12,6 +13,7 @@ use App\Actions\WorkOrders\CorrectInvoice;
 use App\Actions\WorkOrders\CreateWorkOrder;
 use App\Actions\WorkOrders\DeleteWorkOrderComment;
 use App\Actions\WorkOrders\TransitionWorkOrder;
+use App\Actions\WorkOrders\UpdateDailyReport;
 use App\Actions\WorkOrders\UpdateWorkOrderComment;
 use App\Models\Company;
 use App\Models\Department;
@@ -20,6 +22,7 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
+use App\Models\WorkOrderDailyReport;
 use App\States\WorkOrder\ApprovalBast;
 use App\States\WorkOrder\BastDisetujui;
 use App\States\WorkOrder\Closed;
@@ -29,6 +32,7 @@ use App\States\WorkOrder\Ditolak;
 use App\States\WorkOrder\Pelaksanaan;
 use App\States\WorkOrder\ReviewDokumen;
 use App\Support\Comments\CommentHtml;
+use App\Support\DailyReports\ReportCalendar;
 use App\Support\DisplayDate;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -142,6 +146,9 @@ class DemoSeeder extends Seeder
         'visual@worder.test' => ['Visual Check Admin', 'IT', 'admin'],
         'visual.adminwo@worder.test' => ['Visual Check Admin WO', 'GA', 'admin-wo'],
         'visual.lead@worder.test' => ['Visual Check Lead Operational', 'ENG', 'lead-operational'],
+        'visual.pictimesheet@worder.test' => ['Visual Check PIC Timesheet', 'GA', 'pic-timesheet'],
+        'visual.rental@worder.test' => ['Visual Check Rental', 'GA', 'rental'],
+        'visual.direktur@worder.test' => ['Visual Check Direktur', 'DIR', 'direktur'],
         'visual.finance@worder.test' => ['Visual Check Finance', 'KEU', 'finance'],
         'visual.viewer@worder.test' => ['Visual Check Viewer', 'IT', 'viewer'],
     ];
@@ -343,6 +350,39 @@ class DemoSeeder extends Seeder
     ];
 
     /**
+     * Notes of the daily reports (FLOW.md §7), in turn.
+     *
+     * @var list<string>
+     */
+    private const array DAILY_REPORT_NOTES = [
+        'Pekerjaan berjalan sesuai jadwal. Timesheet tim lapangan terlampir.',
+        'Material tiba siang hari, pemasangan dilanjutkan sore.',
+        'Pengecekan akhir bagian pertama selesai, lanjut bagian berikutnya besok.',
+        'Dua teknisi tambahan membantu hari ini karena target dikejar.',
+        'Pekerjaan tertunda satu jam karena hujan, sisanya sesuai rencana.',
+        'Area kerja dibersihkan dan dirapikan setelah pekerjaan.',
+    ];
+
+    /**
+     * Appended to a report corrected the same day.
+     */
+    private const string DAILY_REPORT_CORRECTION = ' Koreksi: jam kerja tim B sampai 16.30.';
+
+    /**
+     * Where the timesheets live outside the application: a SharePoint folder
+     * per work order; every fourth report shares a OneDrive link instead.
+     */
+    private const string TIMESHEET_FOLDER = 'https://unggulgroup.sharepoint.com/sites/Operasional/Shared%20Documents/Timesheet/';
+
+    /**
+     * Pelaksanaan work orders left without today's report, per path, so
+     * the list and dashboard show a few "Belum lapor" after the cutoff.
+     *
+     * @var array<string, int> the first n of the path
+     */
+    private const array MISSING_TODAY = ['in_progress' => 2, 'in_progress_overdue' => 1];
+
+    /**
      * Comment threads between the target department's PIC Timesheet
      * ('pelaksana') and the Admin WO who entered the work order
      * ('requester'), in order. A work order gets the first one to three
@@ -505,6 +545,8 @@ Nanti saya kabari lagi.'],
         private readonly AddWorkOrderComment $addComment,
         private readonly UpdateWorkOrderComment $updateComment,
         private readonly DeleteWorkOrderComment $deleteComment,
+        private readonly AddDailyReport $addDailyReport,
+        private readonly UpdateDailyReport $updateDailyReport,
     ) {}
 
     /**
@@ -833,11 +875,23 @@ Nanti saya kabari lagi.'],
                 $events[] = $this->transitionEvent($created, $index, $decidedAt, $actor, Dibatalkan::getMorphClass(), $this->faker->randomElement(self::SUBMITTED_CANCEL_NOTES));
             }
 
+            $stage = self::STAGES[$path] ?? ($cancelledInReview ? 1 : 0);
+
             if (in_array($path, self::ACCEPTED_PATHS, true)) {
                 array_push($events, ...$this->planAcceptance($created, $index, $decidedAt, $lead, $pic));
-            }
 
-            $stage = self::STAGES[$path] ?? ($cancelledInReview ? 1 : 0);
+                // Daily reports while in Pelaksanaan: until review, a cancellation, or now.
+                $executionEnd = match (true) {
+                    $stage >= 1 => $reviewAt,
+                    $path === 'cancelled_execution' => $executionCancelledAt,
+                    default => CarbonImmutable::now(),
+                };
+                array_push($events, ...$this->planDailyReports($created, $index, $decidedAt, $executionEnd, $pic, $nth <= (self::MISSING_TODAY[$path] ?? 0)));
+
+                if ($path === 'returned') {
+                    array_push($events, ...$this->planDailyReports($created, $index, $reviewedAt, CarbonImmutable::now(), $pic, false));
+                }
+            }
 
             if ($stage >= 1) {
                 $events[] = $this->transitionEvent($created, $index, $reviewAt, $pic, ReviewDokumen::getMorphClass());
@@ -940,6 +994,87 @@ Nanti saya kabari lagi.'],
         if ($index % 3 === 1) {
             $events[] = ['at' => $at->addHours(20), 'actor' => $pic, 'run' => function () use (&$created, $index, $pic): void {
                 $this->postProgressReport($created[$index], $pic);
+            }];
+        }
+
+        return $events;
+    }
+
+    /**
+     * PIC Timesheet's daily reports (FLOW.md §7) from the day after $from
+     * until $until: on most working days at about 15:30 WITA (today's only
+     * once that moment has passed, or earlier when it is already past 09:00),
+     * with a link to the timesheet and, on every third, the timesheet itself.
+     * With none planned before $until (a short period over a weekend), one
+     * shortly before $until, since review needs a report. The first report
+     * of every fifth work order is corrected twenty minutes later.
+     *
+     * @param  array<int, WorkOrder>  $created  filled while the timeline runs
+     * @param  bool  $skipToday  leave today unreported ("Belum lapor" after the cutoff)
+     * @return list<array{at: CarbonImmutable, actor: User, run: Closure(): void}>
+     */
+    private function planDailyReports(array &$created, int $index, CarbonImmutable $from, CarbonImmutable $until, User $pic, bool $skipToday): array
+    {
+        $now = CarbonImmutable::now();
+        $today = DisplayDate::today();
+        $last = DisplayDate::local($until->min($now))->startOfDay();
+        $moments = [];
+
+        for ($day = DisplayDate::local($from)->startOfDay()->addDay(); $day->lessThanOrEqualTo($last); $day = $day->addDay()) {
+            $date = $day->toDateString();
+
+            // An occasional working day goes unreported.
+            if (! ReportCalendar::isWorkingDay($date) || ($index + $day->dayOfYear) % 7 === 0 || ($date === $today && $skipToday)) {
+                continue;
+            }
+
+            $at = $day->setTime(15, 30 + $index % 25)->utc();
+
+            if ($date === $today && $at->greaterThanOrEqualTo($now) && $now->greaterThan($day->setTime(9, 0))) {
+                $at = $now->subMinutes(30);
+            }
+
+            if ($at->lessThan($until) && $at->lessThan($now)) {
+                $moments[] = $at;
+            }
+        }
+
+        if ($moments === [] && $until->lessThan($now)) {
+            $moments[] = $until->subHours(2);
+        }
+
+        $events = [];
+        /** @var array<int, WorkOrderDailyReport> $reports */
+        $reports = [];
+
+        foreach ($moments as $nth => $at) {
+            $events[] = ['at' => $at, 'actor' => $pic, 'run' => function () use (&$created, &$reports, $index, $nth, $at, $pic): void {
+                $workOrder = $created[$index];
+                $date = DisplayDate::local($at)->toDateString();
+                $stamp = str_replace('-', '', $date);
+                $withFile = $nth % 3 === 2;
+                $link = $nth % 4 === 3
+                    ? 'https://1drv.ms/x/s!Ag'.substr(md5($workOrder->number.$date), 0, 14)
+                    : self::TIMESHEET_FOLDER.rawurlencode(str_replace('/', '-', (string) $workOrder->number)).'/Timesheet_'.$stamp.'.xlsx';
+
+                $reports[$nth] = $this->addDailyReport->handle($workOrder, $pic, [
+                    'report_date' => $date,
+                    'note' => self::DAILY_REPORT_NOTES[($index + $nth) % count(self::DAILY_REPORT_NOTES)],
+                    // A file alone on every other report with one.
+                    'links' => $withFile && $nth % 2 === 0 ? [] : [$link],
+                ], $withFile ? [$this->sampleUpload(['timesheet.xlsx', 'Timesheet_'.$stamp.'.xlsx'])] : []);
+            }];
+        }
+
+        $correctedAt = isset($moments[0]) ? $moments[0]->addMinutes(20) : null;
+
+        if ($index % 5 === 0 && $correctedAt !== null && $correctedAt->lessThan($until) && $correctedAt->lessThan($now)) {
+            $events[] = ['at' => $correctedAt, 'actor' => $pic, 'run' => function () use (&$created, &$reports, $index, $pic): void {
+                $report = $reports[0];
+                $this->updateDailyReport->handle($created[$index], $report, $pic, [
+                    'note' => $report->note.self::DAILY_REPORT_CORRECTION,
+                    'links' => $report->links,
+                ]);
             }];
         }
 

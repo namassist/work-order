@@ -156,6 +156,30 @@ describe('WorkOrderListFilters', () => {
         expect(lastQuery()).toEqual({ overdue: 1 });
     });
 
+    it('sends missing_report as 1 when Hanya yang belum lapor is checked, and clears it with its chip', async () => {
+        const wrapper = mountFilters();
+        await openPopover(wrapper);
+
+        (inBody('#filter-missing-report') as HTMLElement).click();
+        await flushPromises();
+
+        expect(lastQuery()).toEqual({ missing_report: 1 });
+
+        const reported = mountFilters({ missing_report: true });
+        expect(chipLabels(reported)).toEqual(['Belum lapor']);
+        expect(
+            reported.get('[data-test="filter-popover-trigger"]').text(),
+        ).toContain('1');
+
+        await reported
+            .findAll('[data-test="filter-chip"]')
+            .find((chip) => chip.text() === 'Belum lapor')
+            ?.trigger('click');
+        await flushPromises();
+
+        expect(lastQuery()).toEqual({});
+    });
+
     it('opens an existing filtered URL with its chips, and none for the sort', () => {
         const wrapper = mountFilters({
             status: 'diajukan',

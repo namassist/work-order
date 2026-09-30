@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { WorkOrderCounts } from '@/lib/dashboardMetrics';
-import { dashboardMetrics, overdueHint } from '@/lib/dashboardMetrics';
+import {
+    dashboardMetrics,
+    missingReportHint,
+    overdueHint,
+} from '@/lib/dashboardMetrics';
 
 const counts: WorkOrderCounts = {
     submitted: 4,
     in_progress: 3,
     billing: 2,
+    missing_report: 1,
     overdue: 5,
     overdue_by: { target_date: 3, payment_due_date: 2 },
 };
@@ -69,6 +74,18 @@ describe('overdueHint', () => {
                 overdue: 0,
                 overdue_by: { target_date: 0, payment_due_date: 0 },
             }),
+        ).toBeUndefined();
+    });
+});
+
+describe('missingReportHint', () => {
+    it("counts Pelaksanaan work orders without today's report, on the Pelaksanaan card", () => {
+        expect(missingReportHint(counts)).toBe('1 belum lapor hari ini');
+        expect(dashboardMetrics(counts)[1]?.hint).toBe(
+            '1 belum lapor hari ini',
+        );
+        expect(
+            missingReportHint({ ...counts, missing_report: 0 }),
         ).toBeUndefined();
     });
 });

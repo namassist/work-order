@@ -40,6 +40,7 @@ class ExportWorkOrdersRequest extends ListWorkOrdersRequest
             'Dept. tujuan' => $filters['target'] === '' ? '' : $this->codeOf(Department::withTrashed(), $filters['target']),
             'Kategori' => $filters['category'] === '' ? '' : $this->codeOf(WorkOrderCategory::withTrashed(), $filters['category']),
             'Terlambat' => $filters['overdue'] ? 'Ya' : '',
+            'Belum lapor' => $filters['missing_report'] ? 'Ya' : '',
             'Dari' => $filters['from'],
             'Sampai' => $filters['to'],
             'Terhapus' => $filters['trashed'] ? 'Ya' : '',

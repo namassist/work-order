@@ -175,6 +175,19 @@ class WorkOrderPolicy
     }
 
     /**
+     * Determine whether the user can post and edit the work order's daily
+     * reports (FLOW.md §7): whoever may view it and holds
+     * work-orders.report (PIC Timesheet). Any holder edits any report, since
+     * there is one per work order per day. Whether the work order is in
+     * Pelaksanaan, the date, and the edit window are checked by the actions,
+     * which refuse with a message.
+     */
+    public function report(User $user, WorkOrder $workOrder): Response
+    {
+        return $this->ifViewable($user, $workOrder, $this->holds($user, Permission::WorkOrdersReport));
+    }
+
+    /**
      * Determine whether the user can comment on the work order. Anyone who
      * can view it reads its comments; writing needs work-orders.comment.
      * Whether the status still accepts comments is checked by the comment

@@ -9,9 +9,9 @@ use App\Models\WorkOrder;
 
 /**
  * Approved by Lead Operational (or returned by Rental for revision) and
- * being carried out. PIC Timesheet adds documents (and, from step 4, the
- * daily reports) and submits it for document review; Lead Operational may
- * cancel it.
+ * being carried out. PIC Timesheet adds documents and posts the daily
+ * reports (FLOW.md §7), then submits it for document review; Lead
+ * Operational may cancel it.
  */
 class Pelaksanaan extends WorkOrderStatus
 {
@@ -51,13 +51,12 @@ class Pelaksanaan extends WorkOrderStatus
     }
 
     /**
-     * PIC Timesheet adds documents while the work is carried out.
-     * PROVISIONAL: guarded by work-orders.submit-review until step 4 decides
-     * whether daily reports get a permission of their own.
+     * PIC Timesheet adds documents while the work is carried out, with the
+     * permission that also posts the daily reports (FLOW.md §5.3, §7).
      */
     public function attachmentPermissions(): array
     {
-        return [WorkOrder::DOCUMENTS => Permission::WorkOrdersSubmitReview];
+        return [WorkOrder::DOCUMENTS => Permission::WorkOrdersReport];
     }
 
     public function waitingMessage(): string

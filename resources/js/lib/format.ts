@@ -82,6 +82,16 @@ export function formatShortCalendarDate(date: string): string {
     return formatCalendarDate(date).split(' ').slice(0, 2).join(' ');
 }
 
+const WEEKDAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+/**
+ * The weekday of a date-only value (Y-m-d) as "Sen", for the daily report
+ * strip. Like formatCalendarDate, never timezone-converted.
+ */
+export function formatCalendarWeekday(date: string): string {
+    return WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()] ?? '';
+}
+
 const calendarDateFormatters = new Map<string, Intl.DateTimeFormat>();
 
 /**

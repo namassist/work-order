@@ -63,6 +63,7 @@ class ListWorkOrdersRequest extends FormRequest
             'target' => ['nullable', 'integer'],
             'category' => ['nullable', 'integer'],
             'overdue' => ['nullable', 'boolean'],
+            'missing_report' => ['nullable', 'boolean'],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
             'trashed' => ['nullable', 'boolean'],
@@ -73,7 +74,7 @@ class ListWorkOrdersRequest extends FormRequest
     /**
      * The validated filters and sort, with an empty string (or false) for each one not set.
      *
-     * @return array{search: string, status: string, urgency: string, payment: string, department: string, target: string, category: string, overdue: bool, from: string, to: string, trashed: bool, sort: string}
+     * @return array{search: string, status: string, urgency: string, payment: string, department: string, target: string, category: string, overdue: bool, missing_report: bool, from: string, to: string, trashed: bool, sort: string}
      */
     public function filters(): array
     {
@@ -86,6 +87,7 @@ class ListWorkOrdersRequest extends FormRequest
             'target' => (string) $this->validated('target'),
             'category' => (string) $this->validated('category'),
             'overdue' => (bool) $this->validated('overdue'),
+            'missing_report' => (bool) $this->validated('missing_report'),
             'from' => (string) $this->validated('from'),
             'to' => (string) $this->validated('to'),
             'trashed' => (bool) $this->validated('trashed'),
@@ -114,6 +116,7 @@ class ListWorkOrdersRequest extends FormRequest
             ->when($filters['target'], fn (Builder $query, string $id) => $query->where('target_department_id', (int) $id))
             ->when($filters['category'], fn (Builder $query, string $id) => $query->where('work_order_category_id', (int) $id))
             ->when($filters['overdue'], fn (Builder $query) => $query->overdue())
+            ->when($filters['missing_report'], fn (Builder $query) => $query->missingDailyReport())
             ->when($filters['from'], fn (Builder $query, string $from) => $query
                 ->where('created_at', '>=', DisplayDate::startOfDayUtc($from)))
             ->when($filters['to'], fn (Builder $query, string $to) => $query

@@ -75,6 +75,7 @@ function dashboardCounts(array $counts = []): array
         'submitted' => 0,
         'in_progress' => 0,
         'billing' => 0,
+        'missing_report' => 0,
         'overdue' => 0,
         'overdue_by' => ['target_date' => 0, 'payment_due_date' => 0],
     ], $counts);

@@ -73,11 +73,11 @@ class DashboardController extends Controller
 
     /**
      * The stat strip's counts over the work orders the user may see:
-     * Diajukan, Pelaksanaan, closed work orders waiting for payment (payment
-     * Ditagih), and "Terlambat" (WorkOrder::overdue()) with its split by the
+     * Diajukan, Pelaksanaan (with how many are missing today's daily report),
+     * closed work orders waiting for payment (payment Ditagih), and "Terlambat" (WorkOrder::overdue()) with its split by the
      * date the work order is late against.
      *
-     * @return array{submitted: int, in_progress: int, billing: int, overdue: int, overdue_by: array<string, int>}
+     * @return array{submitted: int, in_progress: int, billing: int, missing_report: int, overdue: int, overdue_by: array<string, int>}
      */
     private function workOrderCounts(User $user): array
     {
@@ -90,6 +90,9 @@ class DashboardController extends Controller
 
         $billing = WorkOrder::query()->visibleTo($user)->inPaymentStatus(PaymentStatus::Ditagih)->count();
 
+        // "Belum lapor" (FLOW.md §7): a daily signal of its own, not part of "Terlambat".
+        $missingReport = WorkOrder::query()->visibleTo($user)->missingDailyReport()->count();
+
         $overdueBy = [];
 
         foreach (WorkOrderDeadline::cases() as $deadline) {
@@ -100,6 +103,7 @@ class DashboardController extends Controller
             'submitted' => (int) $counts?->submitted,
             'in_progress' => (int) $counts?->in_progress,
             'billing' => $billing,
+            'missing_report' => $missingReport,
             // Each status has at most one deadline, so the groups never overlap.
             'overdue' => array_sum($overdueBy),
             'overdue_by' => $overdueBy,

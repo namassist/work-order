@@ -9,6 +9,7 @@ import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import ListToolbar from '@/components/ListToolbar.vue';
 import PagePanel from '@/components/PagePanel.vue';
 import { Button } from '@/components/ui/button';
+import DailyReportSection from '@/components/work-orders/DailyReportSection.vue';
 import InvoiceDialog from '@/components/work-orders/InvoiceDialog.vue';
 import PaymentDialog from '@/components/work-orders/PaymentDialog.vue';
 import TransitionDialog from '@/components/work-orders/TransitionDialog.vue';
@@ -24,6 +25,9 @@ import type {
     PaymentStatusOption,
     TimelineEntry,
     WorkOrder,
+    WorkOrderDailyReport,
+    WorkOrderDailyReportDay,
+    WorkOrderDailyReportSettings,
     WorkOrderCommentSettings,
     WorkOrderInvoice,
     WorkOrderStatusNote,
@@ -45,6 +49,8 @@ const props = defineProps<{
         bill: boolean;
         correctInvoice: boolean;
         confirmPayment: boolean;
+        /** Post daily reports: work-orders.report, in Pelaksanaan. */
+        report: boolean;
     };
     comments: WorkOrderCommentSettings;
     attachments: AttachmentPanelData;
@@ -60,6 +66,13 @@ const props = defineProps<{
     >;
     /** Upload rules for the invoice and payment forms. */
     invoiceRules: Record<'invoice' | 'bukti_bayar', AttachmentRules>;
+    /** Daily reports (FLOW.md §7), newest first. */
+    dailyReports: WorkOrderDailyReport[];
+    /** Recent working days; empty unless in Pelaksanaan or reported before. */
+    dailyReportDays: WorkOrderDailyReportDay[];
+    dailyReportSettings: WorkOrderDailyReportSettings;
+    /** "Belum lapor": no report today after the cutoff. */
+    missingDailyReport: boolean;
 }>();
 
 defineOptions({
@@ -100,6 +113,22 @@ const deleting = ref(false);
 const primaryTransition = computed(
     () =>
         props.transitions.find((transition) => !transition.destructive)?.value,
+);
+
+/** Why some buttons are disabled, e.g. no daily report yet (FLOW.md §5.1). */
+const blockedReasons = computed(() => [
+    ...new Set(
+        props.transitions.flatMap((transition) =>
+            transition.blocked_reason ? [transition.blocked_reason] : [],
+        ),
+    ),
+]);
+
+const showDailyReports = computed(
+    () =>
+        props.can.report ||
+        props.dailyReports.length > 0 ||
+        props.dailyReportDays.length > 0,
 );
 
 const destroy = () => {
@@ -143,6 +172,12 @@ const destroy = () => {
                                 ? 'default'
                                 : 'outline'
                         "
+                        :disabled="transition.blocked_reason !== null"
+                        :aria-describedby="
+                            transition.blocked_reason
+                                ? 'wo-transition-blocked'
+                                : undefined
+                        "
                         @click="openTransition(transition)"
                     >
                         {{ transition.label }}
@@ -173,6 +208,14 @@ const destroy = () => {
                         class="basis-full text-xs text-muted-foreground"
                     >
                         {{ waitingFor }}
+                    </p>
+                    <p
+                        v-if="blockedReasons.length > 0"
+                        id="wo-transition-blocked"
+                        class="basis-full text-xs text-muted-foreground"
+                        data-test="transition-blocked"
+                    >
+                        {{ blockedReasons.join(' ') }}
                     </p>
                 </div>
             </template>
@@ -285,6 +328,16 @@ const destroy = () => {
                 :can-delete="attachments.can.delete"
             />
         </section>
+
+        <DailyReportSection
+            v-if="showDailyReports"
+            :work-order-id="workOrder.id"
+            :reports="dailyReports"
+            :days="dailyReportDays"
+            :settings="dailyReportSettings"
+            :missing="missingDailyReport"
+            :can-report="can.report"
+        />
 
         <WorkOrderPaymentSection
             v-if="paymentStatus"

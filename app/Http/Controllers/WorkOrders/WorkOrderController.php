@@ -5,6 +5,7 @@ namespace App\Http\Controllers\WorkOrders;
 use App\Actions\Attachments\AddAttachment;
 use App\Actions\WorkOrders\CreateWorkOrder;
 use App\Actions\WorkOrders\InvoiceNotAllowed;
+use App\Actions\WorkOrders\Transitions\TransitionRequirement;
 use App\Enums\PaymentStatus;
 use App\Enums\Permission;
 use App\Enums\WorkOrderUrgency;
@@ -19,10 +20,12 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
+use App\States\WorkOrder\Pelaksanaan;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\States\WorkOrder\WorkOrderTransition;
 use App\Support\Attachments\AttachmentPanel;
 use App\Support\Comments\CommentHtml;
+use App\Support\DailyReports\DailyReportPanel;
 use App\Support\WorkOrderTimeline;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -60,9 +63,17 @@ class WorkOrderController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        // "Belum lapor" (FLOW.md §7) for the rows of this page, in one query.
+        $missingReport = WorkOrder::query()
+            ->whereKey($workOrders->getCollection()->modelKeys())
+            ->missingDailyReport()
+            ->pluck('id')
+            ->all();
+
         return Inertia::render('work-orders/Index', [
             'workOrders' => $workOrders->through(fn (WorkOrder $workOrder): array => [
                 ...new WorkOrderResource($workOrder)->resolve($request),
+                'missing_daily_report' => in_array($workOrder->id, $missingReport, true),
                 'can' => [
                     'update' => $user->can('update', $workOrder),
                     'delete' => $user->can('delete', $workOrder) && $workOrder->status->isDeletable(),
@@ -154,13 +165,14 @@ class WorkOrderController extends Controller
         $status = $workOrder->status;
         $invoice = $workOrder->invoice;
         $paymentStatus = $workOrder->paymentStatus();
+        $mayReport = $user->can('report', $workOrder);
 
         return Inertia::render('work-orders/Show', [
             'workOrder' => new WorkOrderResource($workOrder)->resolve($request),
             'timeline' => WorkOrderTimeline::for($workOrder, $user, $request),
             // Only the transitions this user may perform (FLOW.md §5).
             'transitions' => array_values(array_map(
-                $this->transitionOption(...),
+                fn (WorkOrderTransition $transition): array => $this->transitionOption($transition, $workOrder, $user),
                 array_filter($status->transitions(), fn (WorkOrderTransition $transition): bool => $user->can('transition', [$workOrder, $transition->toName()])),
             )),
             'waitingFor' => $this->waitingFor($workOrder, $user),
@@ -172,7 +184,16 @@ class WorkOrderController extends Controller
                 'bill' => $paymentStatus === PaymentStatus::BelumDitagih && $user->can('bill', $workOrder),
                 'correctInvoice' => $paymentStatus === PaymentStatus::Ditagih && $user->can('bill', $workOrder),
                 'confirmPayment' => $paymentStatus === PaymentStatus::Ditagih && $user->can('confirmPayment', $workOrder),
+                'report' => $mayReport && $status->equals(Pelaksanaan::class),
             ],
+            // Daily reports (FLOW.md §7): their own section, not the timeline. Internal
+            // (Unggul) data, so client company users never get them (the v1 safeguard).
+            'dailyReports' => $user->isClient() ? [] : DailyReportPanel::reports($workOrder, $mayReport, $request),
+            'dailyReportDays' => ! $user->isClient() && ($status->equals(Pelaksanaan::class) || $workOrder->dailyReports()->exists())
+                ? DailyReportPanel::days($workOrder)
+                : [],
+            'dailyReportSettings' => DailyReportPanel::settings($workOrder),
+            'missingDailyReport' => ! $user->isClient() && $workOrder->isMissingDailyReport(),
             // Why confirming the payment is refused, instead of letting the user try (segregation of duties).
             'paymentBlockedReason' => $paymentStatus === PaymentStatus::Ditagih && $invoice?->segregationBlocks($user)
                 ? InvoiceNotAllowed::preparedByPayer()->getMessage()
@@ -393,9 +414,9 @@ class WorkOrderController extends Controller
     }
 
     /**
-     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string}
+     * @return array{value: string, label: string, destructive: bool, requires_note: bool, note_label: string, blocked_reason: string|null}
      */
-    private function transitionOption(WorkOrderTransition $transition): array
+    private function transitionOption(WorkOrderTransition $transition, WorkOrder $workOrder, User $user): array
     {
         return [
             'value' => $transition->toName(),
@@ -403,7 +424,27 @@ class WorkOrderController extends Controller
             'destructive' => $transition->isDestructive,
             'requires_note' => $transition->requiresNote,
             'note_label' => $transition->noteLabel,
+            // Why the button is disabled, e.g. no daily report yet (FLOW.md §5.1).
+            'blocked_reason' => $this->unmetRequirement($transition, $workOrder, $user),
         ];
+    }
+
+    /**
+     * The first unmet requirement's reason, or null when the transition may run.
+     */
+    private function unmetRequirement(WorkOrderTransition $transition, WorkOrder $workOrder, User $user): ?string
+    {
+        foreach ($transition->requirements as $requirement) {
+            /** @var TransitionRequirement $check */
+            $check = app($requirement);
+            $reason = $check->unmetReason($workOrder, $user);
+
+            if ($reason !== null) {
+                return $reason;
+            }
+        }
+
+        return null;
     }
 
     /**

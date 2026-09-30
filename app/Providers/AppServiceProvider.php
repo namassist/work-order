@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
+use App\Models\WorkOrderDailyReport;
 use App\Policies\ActivityPolicy;
 use App\Policies\RolePolicy;
 use Carbon\CarbonImmutable;
@@ -70,6 +71,7 @@ class AppServiceProvider extends ServiceProvider
             'wo-category' => WorkOrderCategory::class,
             'work-order' => WorkOrder::class,
             'wo-comment' => WorkOrderComment::class,
+            'wo-daily-report' => WorkOrderDailyReport::class,
             'role' => Role::class,
             'permission' => Permission::class,
             'media' => Media::class,
@@ -94,6 +96,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('wo-comment-upload', $perUserPerMinute(20));
         RateLimiter::for('attachment-upload', $perUserPerMinute(30));
         RateLimiter::for('wo-invoice', $perUserPerMinute(10));
+        RateLimiter::for('wo-daily-report', $perUserPerMinute(10));
 
         // Public, so per IP. Offices share an IP, hence the hourly headroom.
         RateLimiter::for('registration', fn (Request $request): array => [

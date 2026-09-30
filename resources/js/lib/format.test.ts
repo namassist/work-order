@@ -10,6 +10,7 @@ import {
     formatRupiah,
     parseRupiahInput,
     formatShortCalendarDate,
+    formatCalendarWeekday,
 } from '@/lib/format';
 
 const WITA = 'Asia/Makassar';
@@ -158,5 +159,12 @@ describe('parseRupiahInput', () => {
         expect(parseRupiahInput('1.50.000')).toBeNull();
         expect(parseRupiahInput('-5')).toBeNull();
         expect(parseRupiahInput('1500.125')).toBeNull();
+    });
+});
+
+describe('formatCalendarWeekday', () => {
+    it('names the weekday of the calendar day without shifting it', () => {
+        expect(formatCalendarWeekday('2026-09-28')).toBe('Sen');
+        expect(formatCalendarWeekday('2026-10-04')).toBe('Min');
     });
 });

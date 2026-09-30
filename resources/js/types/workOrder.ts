@@ -61,6 +61,8 @@ export type WorkOrder = {
 
 export type WorkOrderListItem = WorkOrder & {
     can: { update: boolean; delete: boolean; restore: boolean };
+    /** In Pelaksanaan without today's daily report, after the cutoff (FLOW.md §7). */
+    missing_daily_report: boolean;
 };
 
 /** A status change this user may perform (FLOW.md §5.1, §5.2). */
@@ -73,6 +75,8 @@ export type WorkOrderTransition = {
     requires_note: boolean;
     /** E.g. "Alasan penolakan"; "Catatan" when nothing more specific fits. */
     note_label: string;
+    /** Why the button is disabled, e.g. no daily report yet; null when it may run. */
+    blocked_reason: string | null;
 };
 
 /**
@@ -171,4 +175,39 @@ export type UrgentWorkOrder = {
     status: WorkOrderStatusOption;
     /** ISO moment of the first submission. */
     submitted_at: string | null;
+};
+
+/** A daily progress report during Pelaksanaan (FLOW.md §7). */
+export type WorkOrderDailyReport = {
+    id: number;
+    /** Calendar date (Y-m-d); format with formatCalendarDate. */
+    report_date: string;
+    note: string;
+    /** http(s) links, validated by the server; render with safeHttpUrl(). */
+    links: string[];
+    files: Attachment[];
+    reporter: { name: string };
+    editor: { name: string } | null;
+    created_at: string;
+    updated_at: string | null;
+    can_edit: boolean;
+};
+
+/** One working day of the report strip, oldest first. */
+export type WorkOrderDailyReportDay = {
+    date: string;
+    state: 'reported' | 'missing' | 'pending' | 'not_required';
+};
+
+/** What the report form needs (DailyReportPanel::settings()). */
+export type WorkOrderDailyReportSettings = {
+    /** Calendar dates (Y-m-d) a new report may be dated between. */
+    today: string;
+    earliest_date: string;
+    note_max_length: number;
+    max_links: number;
+    link_max_length: number;
+    /** Links must be on one of these domains or a subdomain; any when empty. */
+    link_domains: string[];
+    files: AttachmentRules;
 };

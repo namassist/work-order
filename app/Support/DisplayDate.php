@@ -36,6 +36,18 @@ class DisplayDate
     }
 
     /**
+     * A date-only value (Y-m-d, e.g. a daily report's date) as "29 Sep
+     * 2026". It names a calendar day, so it is never timezone-converted;
+     * matches formatCalendarDate() in resources/js/lib/format.ts.
+     */
+    public static function calendarDate(string $date): string
+    {
+        [$year, $month, $day] = array_map(intval(...), explode('-', $date));
+
+        return $day.' '.self::MONTHS[$month].' '.$year;
+    }
+
+    /**
      * The first moment, in UTC, of a user-entered display-timezone day (Y-m-d).
      */
     public static function startOfDayUtc(string $date): CarbonImmutable

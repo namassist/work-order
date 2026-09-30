@@ -457,8 +457,8 @@ describe('show', function () {
                 ->where('timeline.0.to', ['value' => 'draft', 'label' => 'Draft'])
                 ->where('timeline.0.user.name', $user->name)
                 ->where('transitions', [
-                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan'],
-                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan'],
+                    ['value' => 'diajukan', 'label' => 'Ajukan', 'destructive' => false, 'requires_note' => false, 'note_label' => 'Catatan', 'blocked_reason' => null],
+                    ['value' => 'dibatalkan', 'label' => 'Batalkan', 'destructive' => true, 'requires_note' => true, 'note_label' => 'Alasan pembatalan', 'blocked_reason' => null],
                 ])
                 ->where('waitingFor', null)
                 ->where('statusNote', null)
