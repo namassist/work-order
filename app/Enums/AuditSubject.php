@@ -13,6 +13,7 @@ enum AuditSubject: string
     case WorkOrderCategory = 'wo-category';
     case WorkOrder = 'work-order';
     case Role = 'role';
+    case BastTemplate = 'bast-template';
 
     /**
      * The label shown in the activity log.
@@ -26,6 +27,7 @@ enum AuditSubject: string
             self::WorkOrderCategory => 'Kategori WO',
             self::WorkOrder => 'Work Order',
             self::Role => 'Role',
+            self::BastTemplate => 'Template BAST',
         };
     }
 

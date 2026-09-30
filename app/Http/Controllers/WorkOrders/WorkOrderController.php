@@ -24,6 +24,7 @@ use App\States\WorkOrder\Pelaksanaan;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\States\WorkOrder\WorkOrderTransition;
 use App\Support\Attachments\AttachmentPanel;
+use App\Support\Bast\BastPanel;
 use App\Support\Comments\CommentHtml;
 use App\Support\DailyReports\DailyReportPanel;
 use App\Support\WorkOrderTimeline;
@@ -194,6 +195,8 @@ class WorkOrderController extends Controller
                 : [],
             'dailyReportSettings' => DailyReportPanel::settings($workOrder),
             'missingDailyReport' => ! $user->isClient() && $workOrder->isMissingDailyReport(),
+            // The BAST (FLOW.md §8): internal data, never shown to client company users.
+            'bast' => BastPanel::props($workOrder, $user, $request),
             // Why confirming the payment is refused, instead of letting the user try (segregation of duties).
             'paymentBlockedReason' => $paymentStatus === PaymentStatus::Ditagih && $invoice?->segregationBlocks($user)
                 ? InvoiceNotAllowed::preparedByPayer()->getMessage()

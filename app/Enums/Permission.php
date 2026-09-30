@@ -67,6 +67,9 @@ enum Permission: string
 
     case ActivityLogView = 'activity-log.view';
 
+    /* The BAST template (FLOW.md §9): edit its draft, preview, publish, and activate a version. */
+    case BastTemplatesManage = 'bast-templates.manage';
+
     /**
      * The resource this permission belongs to, e.g. "departments".
      */
@@ -78,7 +81,7 @@ enum Permission: string
     /**
      * Whether only users of the executor company may use this permission:
      * master data, user and role management, registration review, the
-     * activity log, and every work order permission except reading one
+     * activity log, the BAST template, and every work order permission except reading one
      * (FLOW.md §2, §6: IC never logs in, and a possible future IC access
      * would be read-only). Only executor-scoped roles may include it, and
      * client company users never hold it, even through a direct grant (see
@@ -98,6 +101,7 @@ enum Permission: string
             'work-order-categories',
             'companies',
             'activity-log',
+            'bast-templates',
         ], true);
     }
 

@@ -10,6 +10,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.4",
+        "dompdf/dompdf": "^3",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",
@@ -91,6 +92,7 @@
         ],
         "ci:check": [
             "Composer\\Config::disableProcessTimeout",
+            "@composer audit --locked",
             "npm run check",
             "@check"
         ],

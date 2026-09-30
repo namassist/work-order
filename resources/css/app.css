@@ -303,4 +303,58 @@
         @apply pointer-events-none float-left h-0 text-muted-foreground;
         content: attr(data-placeholder);
     }
+
+    /* The BAST template editor (BastTemplateEditor.vue): a document page, as the PDF lays it out. */
+    .bast-template > * + * {
+        @apply mt-2;
+    }
+
+    .bast-template h1 {
+        @apply text-xl font-semibold;
+    }
+
+    .bast-template h2 {
+        @apply text-lg font-semibold;
+    }
+
+    .bast-template h3 {
+        @apply text-base font-semibold;
+    }
+
+    .bast-template ul {
+        @apply list-disc pl-5;
+    }
+
+    .bast-template ol {
+        @apply list-decimal pl-5;
+    }
+
+    .bast-template hr {
+        @apply my-3 border-t border-foreground/60;
+    }
+
+    .bast-template table {
+        @apply w-full table-fixed border-collapse;
+    }
+
+    .bast-template th,
+    .bast-template td {
+        @apply border border-border px-2 py-1 align-top;
+    }
+
+    .bast-template th {
+        @apply bg-muted text-left font-semibold;
+    }
+
+    .bast-template .selectedCell {
+        @apply bg-ring/20;
+    }
+
+    .bast-template img {
+        @apply mx-auto block h-auto max-w-full;
+    }
+
+    .bast-template img.ProseMirror-selectednode {
+        @apply ring-3 ring-ring/50;
+    }
 }

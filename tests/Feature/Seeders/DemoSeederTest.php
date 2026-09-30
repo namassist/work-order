@@ -5,11 +5,13 @@ use App\Enums\AuditEvent;
 use App\Enums\CompanyScope;
 use App\Enums\PaymentStatus;
 use App\Enums\SystemRole;
+use App\Models\BastTemplateVersion;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Models\WorkOrderBast;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
 use App\Models\WorkOrderDailyReport;
@@ -19,6 +21,7 @@ use App\States\WorkOrder\WorkOrderStatus;
 use App\States\WorkOrder\WorkOrderTransition;
 use App\Support\Comments\CommentHtml;
 use App\Support\DisplayDate;
+use Database\Seeders\BastTemplateSeeder;
 use Database\Seeders\DemoSeeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
@@ -278,6 +281,38 @@ it('bills closed work orders and confirms payments through the real actions', fu
                 ->and($invoice->paid_on?->toDateString())->toBe(DisplayDate::local($confirmed->created_at)->toDateString());
         }
     });
+});
+
+it('generates BASTs from Approval BAST on through the real actions, from the default template', function () {
+    $this->seed(DemoSeeder::class);
+
+    $version = BastTemplateVersion::active();
+    $withBast = WorkOrder::query()->whereIn('status', ['approval_bast', 'bast_disetujui', 'closed'])->with('bast.draftFile', 'bast.finalFile', 'bast.submitter', 'bast.approver')->get();
+
+    expect($version->version)->toBe(1)
+        ->and($version->html)->toBe(BastTemplateSeeder::DEFAULT_HTML)
+        ->and($withBast)->toHaveCount(18)
+        ->and(WorkOrderBast::query()->count())->toBe(18);
+
+    foreach ($withBast as $workOrder) {
+        $bast = $workOrder->bast;
+        $approved = $workOrder->status->getValue() !== 'approval_bast';
+
+        expect($bast->bast_template_version_id)->toBe($version->id)
+            ->and($bast->number)->toStartWith('BAST/')
+            ->and($bast->submitter->hasRole('rental'))->toBeTrue()
+            ->and($bast->draftFile)->not->toBeNull()
+            ->and($bast->isApproved())->toBe($approved);
+
+        if ($approved) {
+            expect($bast->approver->hasRole('direktur'))->toBeTrue()
+                ->and(hash('sha256', (string) Storage::disk('attachments')->get($bast->finalFile->getPathRelativeToRoot())))->toBe($bast->final_sha256);
+        }
+    }
+
+    // Numbered in submission order: the counter never skips or repeats.
+    expect(WorkOrderBast::query()->orderBy('submitted_at')->pluck('number')->all())
+        ->toBe(WorkOrderBast::query()->orderBy('number')->pluck('number')->all());
 });
 
 it('mixes urgencies realistically: about 10% rendah, 60% normal, 20% tinggi, 10% mendesak', function () {

@@ -4,6 +4,7 @@ import {
     Building,
     Building2,
     ClipboardList,
+    FileSignature,
     History,
     LayoutGrid,
     ShieldCheck,
@@ -13,6 +14,7 @@ import {
 } from '@lucide/vue';
 import { computed } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/Admin/ActivityLogController';
+import BastTemplateController from '@/actions/App/Http/Controllers/Admin/BastTemplateController';
 import CompanyController from '@/actions/App/Http/Controllers/Admin/CompanyController';
 import DepartmentController from '@/actions/App/Http/Controllers/Admin/DepartmentController';
 import RegistrationController from '@/actions/App/Http/Controllers/Admin/RegistrationController';
@@ -105,6 +107,12 @@ const navGroups = computed<NavGroup[]>(() => [
                 href: RoleController.index(),
                 icon: ShieldCheck,
                 permission: 'roles.manage',
+            },
+            {
+                title: 'Template BAST',
+                href: BastTemplateController.edit(),
+                icon: FileSignature,
+                permission: 'bast-templates.manage',
             },
             {
                 title: 'Log Aktivitas',

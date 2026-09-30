@@ -9,7 +9,8 @@ notes of earlier PRs; each PR still lists the steps specific to it.
   which uses PHP 8.4's HTML5 parser). PENDING: the production PHP version is not confirmed yet;
   see `CLAUDE.md` › Conventions for the fallback if it is 8.3.
 - PHP extensions Laravel needs, plus `pdo_pgsql`, `dom`, `fileinfo` and `zip` (attachment type
-  detection), and `intl` (file sizes in the activity log).
+  detection), `intl` (file sizes in the activity log), and `gd` and `mbstring` (BAST PDFs, see
+  below).
 - **PostgreSQL** (CI runs 16).
 - Node is needed only to build the frontend (`npm run build`), not to run it.
 
@@ -26,11 +27,31 @@ Start from `.env.example`. Required on every server:
 
 Optional, with their defaults in `.env.example` and `config/`: `REGISTRATION_ENABLED` (the kill
 switch for self-registration, the first response to a wave of spam sign-ups),
-`ACTIVITYLOG_CLEAN_AFTER_DAYS`, `WO_NUMBER_FORMAT`, `WO_EXPORT_MAX_ROWS`,
+`ACTIVITYLOG_CLEAN_AFTER_DAYS`, `WO_NUMBER_FORMAT`, `BAST_NUMBER_FORMAT`, `WO_EXPORT_MAX_ROWS`,
 `WO_COMMENT_EDIT_MINUTES`, the attachment limits (`WO_ATTACHMENT_*`, `WO_INVOICE_MAX_FILES`,
-`WO_BAST_MAX_FILES`, `WO_PAYMENT_PROOF_MAX_FILES`, `MEDIA_MAX_FILE_SIZE_MB`), and the comment file
+`WO_PAYMENT_PROOF_MAX_FILES`, `MEDIA_MAX_FILE_SIZE_MB`), the BAST template image limits
+(`BAST_TEMPLATE_MAX_IMAGES`, `BAST_TEMPLATE_IMAGE_MAX_SIZE_KB`), and the comment file
 limits (`WO_COMMENT_MAX_IMAGES`, `WO_COMMENT_IMAGE_MAX_SIZE_KB`, `WO_COMMENT_MAX_DOCUMENTS`,
 `WO_COMMENT_MAX_PENDING_UPLOADS`, `WO_COMMENT_UPLOAD_PRUNE_HOURS`).
+
+## BAST PDFs (dompdf)
+
+BASTs (FLOW.md §8) are rendered by **dompdf** (`dompdf/dompdf` ^3), a pure-PHP engine: no browser,
+no binary, no separate service. It needs:
+
+- `gd` (PNG and JPEG images: the letterhead) and `mbstring`, plus `dom`.
+- A writable `storage/app/dompdf/` (font cache, temporary files, and an empty chroot). The app
+  creates the directories; the deploy user and PHP must be able to write there.
+- Nothing else: fonts are the DejaVu fonts bundled with dompdf.
+
+The app locks it down (`App\Support\Bast\DompdfBastPdfRenderer`): remote loading, JavaScript, and
+inline PHP are off, `data:` is the only protocol allowed (so it neither fetches a URL nor reads a
+local file), and template images are embedded by the application. `BastPdfRendererTest` proves no
+connection is attempted.
+
+**Keep dompdf updated.** It parses HTML and CSS and has had security advisories in the past. CI
+runs `composer audit --locked` (in `composer ci:check`), so a known vulnerability in dompdf or any
+other package fails the build; update it (`composer update dompdf/dompdf`) as soon as a fix is out.
 
 ## Upload limits (PHP and web server)
 
@@ -65,6 +86,7 @@ composer install --no-dev --optimize-autoloader
 npm ci && npm run build
 php artisan migrate --force
 php artisan db:seed --class=RolePermissionSeeder --force
+php artisan db:seed --class=BastTemplateSeeder --force
 php artisan optimize
 ```
 
@@ -91,6 +113,14 @@ php artisan optimize
   Settings (`WO_REPORT_*`, `config/work_order.php` › `daily_reports`): working days, holidays
   (`WO_REPORT_HOLIDAYS`, ISO dates, comma-separated; update it every year), cutoff, back-dating, edit
   window, file and link limits, and the optional link domain allowlist (`WO_REPORT_LINK_DOMAINS`).
+- **BAST templates and generation (FLOW.md v2 step 5).** New permission `bast-templates.manage`
+  (system admin only by default; `RolePermissionSeeder` syncs it to admin). `BastTemplateSeeder`
+  publishes the default template (PROVISIONAL, a generic Indonesian layout until the business sends
+  its official sample) as version 1 when no version exists, and does nothing afterwards; without an
+  active version Rental cannot submit a BAST. BAST numbers use `BAST_NUMBER_FORMAT` (default
+  `BAST/{YYYY}/{MM}/{SEQ:4}`; `{DEPT_CODE}` is the requester department's code). Work orders that
+  reached Approval BAST before this step have no BAST; start from a fresh database (no production
+  data exists yet).
 - **Payment segregation** is off by default; set `WO_PAYMENT_SEGREGATION=true` to require that the
   person who issued or last corrected an invoice never confirms its payment.
 - `php artisan optimize` caches config, routes, and events; rerun it whenever `.env` changes.

@@ -26,6 +26,11 @@ enum AuditEvent: string
     case PaymentConfirmed = 'payment_confirmed';
     case DailyReportAdded = 'daily_report_added';
     case DailyReportEdited = 'daily_report_edited';
+    case BastGenerated = 'bast_generated';
+    case BastApproved = 'bast_approved';
+    case BastTemplateSaved = 'bast_template_saved';
+    case BastTemplatePublished = 'bast_template_published';
+    case BastTemplateActivated = 'bast_template_activated';
     case Registered = 'registered';
     case RegistrationApproved = 'registration_approved';
     case RegistrationRejected = 'registration_rejected';
@@ -62,6 +67,11 @@ enum AuditEvent: string
             self::PaymentConfirmed => 'Pembayaran dikonfirmasi',
             self::DailyReportAdded => 'Laporan harian ditambahkan',
             self::DailyReportEdited => 'Laporan harian diubah',
+            self::BastGenerated => 'BAST dibuat',
+            self::BastApproved => 'BAST disetujui',
+            self::BastTemplateSaved => 'Draf template disimpan',
+            self::BastTemplatePublished => 'Template diterbitkan',
+            self::BastTemplateActivated => 'Versi template diaktifkan',
             self::Registered => 'Mendaftar',
             self::RegistrationApproved => 'Pendaftaran disetujui',
             self::RegistrationRejected => 'Pendaftaran ditolak',
