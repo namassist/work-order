@@ -32,6 +32,9 @@ use Spatie\ModelStates\Exceptions\CouldNotPerformTransition;
 beforeEach(function () {
     $this->seed(RolePermissionSeeder::class);
     $this->travelTo(Carbon::parse('2026-09-25 02:00', 'UTC'));
+    // Submitting the BAST generates it from the active template (BastGenerationTest).
+    Storage::fake('attachments');
+    activeBastTemplate();
 
     $this->requesterDepartment = Department::factory()->client()->create(['code' => 'PRD']);
     $this->ops = Department::factory()->create(['code' => 'OPS']);
@@ -536,5 +539,7 @@ it('walks the whole flow and shows it in the timeline and the Riwayat', function
         ->getJson(route('admin.activity-log.history', ['work-order', $this->workOrder->id]))
         ->assertOk()
         ->assertJsonPath('data.0.changes.0', ['field' => 'status', 'label' => 'Status', 'old' => 'BAST Disetujui', 'new' => 'Closed'])
-        ->assertJsonPath('data.4.changes.0', ['field' => 'status', 'label' => 'Status', 'old' => 'Review Dokumen', 'new' => 'Pelaksanaan']);
+        ->assertJsonPath('data.1.changes.0', ['field' => 'nomor_bast', 'label' => 'Nomor BAST', 'old' => null, 'new' => 'BAST/2026/09/0001'])
+        // Newest first: Closed, BAST approved, BAST Disetujui, BAST generated, Approval BAST, Review Dokumen, then the return.
+        ->assertJsonPath('data.6.changes.0', ['field' => 'status', 'label' => 'Status', 'old' => 'Review Dokumen', 'new' => 'Pelaksanaan']);
 });

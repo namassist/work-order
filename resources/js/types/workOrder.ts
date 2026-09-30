@@ -211,3 +211,19 @@ export type WorkOrderDailyReportSettings = {
     link_domains: string[];
     files: AttachmentRules;
 };
+
+/** The BAST of a work order (FLOW.md §8), from App\Support\Bast\BastPanel. */
+export type WorkOrderBast = {
+    number: string;
+    /** The template version it was generated from. */
+    template_version: number;
+    submitted_by: string;
+    submitted_at: string;
+    /** Set once the Direktur approved it. */
+    approver_name: string | null;
+    approved_at: string | null;
+    /** SHA-256 of the final PDF, once approved. */
+    final_sha256: string | null;
+    /** The final PDF once approved, the draft before. */
+    file: Attachment | null;
+};

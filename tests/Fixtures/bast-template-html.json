@@ -1,0 +1,19 @@
+{
+    "_comment": "What the BAST template editor (BastTemplateEditor.vue) produces for each feature. The server keeps each one unchanged (BastTemplateHtmlTest), and the editor produces and reloads it unchanged (bastTemplateEditor.test.ts), so the two cannot drift. The image uuid is an upload of the template.",
+    "imageUuid": "0192f3a4-5b6c-7d8e-9f01-23456789abcd",
+    "cases": {
+        "paragraphs": "<p>Pada hari ini telah diserahterimakan pekerjaan.</p><p>Demikian berita acara ini dibuat.</p>",
+        "headings": "<h1>BERITA ACARA</h1><h2>Pekerjaan</h2><h3>Rincian</h3>",
+        "alignment": "<h1 style=\"text-align: center;\">BERITA ACARA SERAH TERIMA</h1><p style=\"text-align: right;\">kanan</p><p style=\"text-align: justify;\">rata kiri kanan</p><p style=\"text-align: left;\">kiri</p>",
+        "marks": "<p><strong>tebal</strong> <em>miring</em> <u>garis bawah</u> <s>coret</s></p>",
+        "nested marks": "<p><strong><u>tebal bergaris</u></strong></p>",
+        "hard break": "<p>baris satu<br>baris dua</p>",
+        "bullet list": "<ul><li><p>satu</p></li><li><p>dua</p></li></ul>",
+        "ordered list": "<ol><li><p>pertama</p></li><li><p>kedua</p></li></ol>",
+        "horizontal rule": "<p>atas</p><hr><p>bawah</p>",
+        "table": "<table><tbody><tr><th colspan=\"1\" rowspan=\"1\"><p>Pihak Pertama</p></th><th colspan=\"1\" rowspan=\"1\"><p>Pihak Kedua</p></th></tr><tr><td colspan=\"1\" rowspan=\"1\"><p>{{nama_pengaju_bast}}</p></td><td colspan=\"1\" rowspan=\"1\"><p>{{kontak_pemohon}}</p></td></tr><tr><td colspan=\"2\" rowspan=\"1\"><p style=\"text-align: center;\">{{nama_direktur}}</p></td></tr></tbody></table>",
+        "image": "<img src=\"/attachments/0192f3a4-5b6c-7d8e-9f01-23456789abcd\" alt=\"kop.png\"><p>Isi</p>",
+        "placeholders": "<p>Nomor: {{nomor_bast}}, tanggal {{tanggal_bast}}</p><p>{{tabel_laporan_harian}}</p>",
+        "special characters": "<p>A &amp; B &lt;tag&gt; \"kutip\" 'apostrof' {{ bukan placeholder $x }}</p>"
+    }
+}

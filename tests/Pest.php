@@ -2,6 +2,7 @@
 
 use App\Enums\Permission;
 use App\Enums\SystemRole;
+use App\Models\BastTemplateVersion;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
@@ -131,6 +132,17 @@ function enteredExecutionAt(WorkOrder $workOrder, string $utc, string $fromStatu
     $history->forceFill(['created_at' => CarbonImmutable::parse($utc, 'UTC')])->save();
 
     return $workOrder;
+}
+
+/**
+ * Publishes a BAST template version and makes it the only active one, so
+ * Review Dokumen → Approval BAST can generate the BAST.
+ */
+function activeBastTemplate(?string $html = null): BastTemplateVersion
+{
+    BastTemplateVersion::query()->where('is_active', true)->update(['is_active' => false]);
+
+    return BastTemplateVersion::factory()->active()->create($html === null ? [] : ['html' => $html]);
 }
 
 /**

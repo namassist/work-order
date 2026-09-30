@@ -572,6 +572,16 @@ Nanti saya kabari lagi.'],
         $this->call(RolePermissionSeeder::class);
         $this->purgeOrphanedAttachments();
 
+        // Published before the oldest demo work order, as the BASTs are generated from it.
+        $now = Date::getTestNow();
+
+        try {
+            Date::setTestNow(now()->subMonths(4));
+            $this->call(BastTemplateSeeder::class);
+        } finally {
+            Date::setTestNow($now);
+        }
+
         $departments = $this->seedDepartments($this->seedCompanies());
         $categories = $this->seedCategories();
         $users = $this->seedUsers($departments, $password);

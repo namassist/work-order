@@ -15,7 +15,9 @@ import type { Attachment, AttachmentPanelData, AttachmentRules } from '@/types';
  * Attachments of one collection. With a `target` (a saved record) files
  * upload at once and the list comes from the server. Without one (a create
  * form) files are held in v-model:pending and sent with the parent form,
- * which passes its upload `progress` and `error` back in.
+ * which passes its upload `progress` and `error` back in. `preserveState`
+ * keeps the page's local state (e.g. an editor's unsaved text) across the
+ * reload that follows an upload or removal.
  */
 const props = withDefaults(
     defineProps<{
@@ -26,6 +28,7 @@ const props = withDefaults(
         canDelete?: boolean;
         progress?: number | null;
         error?: string;
+        preserveState?: boolean;
     }>(),
     {
         target: undefined,
@@ -33,6 +36,7 @@ const props = withDefaults(
         canDelete: false,
         progress: null,
         error: undefined,
+        preserveState: false,
     },
 );
 
@@ -116,6 +120,7 @@ const uploadNext = () => {
         {
             forceFormData: true,
             preserveScroll: true,
+            preserveState: props.preserveState,
             onProgress: (event) => {
                 if (uploading.value) {
                     uploading.value.percentage = event?.percentage ?? 0;
@@ -165,6 +170,7 @@ const destroy = () => {
 
     router.delete(AttachmentController.destroy.url(toDelete.value.id), {
         preserveScroll: true,
+        preserveState: props.preserveState,
         onStart: () => (deleting.value = true),
         onFinish: () => {
             deleting.value = false;

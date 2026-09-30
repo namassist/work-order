@@ -2,9 +2,9 @@
 
 namespace App\Support\Comments;
 
+use App\Support\Html\HtmlFragment;
 use Closure;
 use Dom\Element;
-use Dom\HTMLDocument;
 use Dom\Node;
 use Dom\Text;
 use Symfony\Component\HtmlSanitizer\HtmlSanitizer;
@@ -35,13 +35,6 @@ final class CommentHtml
     /** The only image source kept: the attachment route of one upload. */
     private const string IMAGE_SOURCE = '#\A/attachments/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\z#i';
 
-    /** Elements removed with their content; anything else unknown keeps its text. */
-    private const array DROPPED_ELEMENTS = [
-        'script', 'style', 'template', 'noscript', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet',
-        'svg', 'math', 'title', 'textarea', 'select', 'noembed', 'noframes', 'xmp', 'plaintext',
-        'head', 'meta', 'link', 'base', 'video', 'audio', 'source', 'track', 'picture', 'canvas', 'map', 'area',
-    ];
-
     private static ?HtmlSanitizer $allowlist = null;
 
     /**
@@ -51,7 +44,7 @@ final class CommentHtml
      */
     public static function sanitize(string $html, Closure $imageName): SanitizedComment
     {
-        $body = self::parse(self::allowlist()->sanitize(self::withoutDroppedElements($html)));
+        $body = HtmlFragment::parse(self::allowlist()->sanitize(HtmlFragment::withoutDroppedElements($html)));
         $images = [];
 
         foreach (iterator_to_array($body->querySelectorAll('img')) as $image) {
@@ -90,7 +83,7 @@ final class CommentHtml
             return '';
         }
 
-        $body = self::parse('');
+        $body = HtmlFragment::parse('');
 
         foreach (preg_split('/\n{2,}/', $text) ?: [] as $paragraph) {
             $element = $body->ownerDocument->createElement('p');
@@ -104,22 +97,6 @@ final class CommentHtml
             }
 
             $body->append($element);
-        }
-
-        return $body->innerHTML;
-    }
-
-    /**
-     * Remove the elements whose content must go with them. The allowlist
-     * cannot drop <style>, <title>, and other head elements in a body, so it
-     * would keep their text.
-     */
-    private static function withoutDroppedElements(string $html): string
-    {
-        $body = self::parse($html);
-
-        foreach (iterator_to_array($body->querySelectorAll(implode(',', self::DROPPED_ELEMENTS))) as $element) {
-            $element->remove();
         }
 
         return $body->innerHTML;
@@ -156,13 +133,6 @@ final class CommentHtml
         return self::$allowlist = new HtmlSanitizer($config);
     }
 
-    private static function parse(string $html): Element
-    {
-        $document = HTMLDocument::createFromString('<!DOCTYPE html><body>'.$html.'</body>', LIBXML_NOERROR);
-
-        return $document->body;
-    }
-
     /**
      * Keep the image only if its source is one upload the comment may show,
      * rewritten to the canonical path with alt text (the file name by
@@ -186,7 +156,7 @@ final class CommentHtml
         }
 
         $alt = trim((string) $image->getAttribute('alt'));
-        self::removeAttributes($image);
+        HtmlFragment::removeAttributes($image);
         $image->setAttribute('src', '/attachments/'.$uuid);
         $image->setAttribute('alt', $alt !== '' ? $alt : $name);
 
@@ -207,17 +177,10 @@ final class CommentHtml
             return;
         }
 
-        self::removeAttributes($link);
+        HtmlFragment::removeAttributes($link);
         $link->setAttribute('target', '_blank');
         $link->setAttribute('rel', self::LINK_REL);
         $link->setAttribute('href', $href);
-    }
-
-    private static function removeAttributes(Element $element): void
-    {
-        foreach ($element->getAttributeNames() as $attribute) {
-            $element->removeAttribute($attribute);
-        }
     }
 
     /**

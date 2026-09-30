@@ -2,6 +2,7 @@
 
 use App\Enums\AuditSubject;
 use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\BastTemplateController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\RegistrationController;
@@ -44,6 +45,14 @@ Route::middleware(['auth', 'verified', 'internal'])->prefix('admin')->name('admi
     Route::get('registrations', [RegistrationController::class, 'index'])->name('registrations.index');
     Route::post('registrations/{user}/approve', [RegistrationController::class, 'approve'])->name('registrations.approve');
     Route::post('registrations/{user}/reject', [RegistrationController::class, 'reject'])->name('registrations.reject');
+
+    Route::get('bast-template', [BastTemplateController::class, 'edit'])->name('bast-template.edit');
+    Route::put('bast-template', [BastTemplateController::class, 'update'])->name('bast-template.update');
+    Route::post('bast-template/publish', [BastTemplateController::class, 'publish'])->name('bast-template.publish');
+    Route::post('bast-template/versions/{version}/activate', [BastTemplateController::class, 'activate'])->name('bast-template.activate');
+    Route::get('bast-template/preview', [BastTemplateController::class, 'preview'])
+        ->middleware('throttle:bast-template-preview')
+        ->name('bast-template.preview');
 
     Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log.index');
     Route::get('activity-log/{subjectType}/{subjectId}', [ActivityLogController::class, 'history'])

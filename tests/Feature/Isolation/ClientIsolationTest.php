@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Permission;
+use App\Models\BastTemplateVersion;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\User;
@@ -24,7 +25,12 @@ use Spatie\Permission\Models\Role;
  * Route name segments of the resources only the executor company manages.
  * A route whose name contains one must be internal, wherever it is defined.
  */
-const INTERNAL_RESOURCES = ['users', 'roles', 'departments', 'work-order-categories', 'companies', 'activity-log', 'registrations'];
+const INTERNAL_RESOURCES = ['users', 'roles', 'departments', 'work-order-categories', 'companies', 'activity-log', 'registrations', 'bast-template'];
+
+/**
+ * Query parameters a route needs besides its route parameters, by route name.
+ */
+const ADMIN_ROUTE_QUERIES = ['admin.bast-template.preview' => ['work_order']];
 
 /**
  * Every admin.* route with the HTTP method to call it with.
@@ -62,6 +68,9 @@ function adminRouteParameters(): array
         'role' => Role::findByName('viewer')->id,
         'subjectType' => 'company',
         'subjectId' => $company->id,
+        'version' => BastTemplateVersion::factory()->create()->id,
+        // A submitted work order, which the BAST template preview is filled from.
+        'work_order' => WorkOrder::factory()->submitted()->create()->id,
     ];
 }
 
@@ -72,7 +81,9 @@ function adminRouteParameters(): array
  */
 function adminRouteUrl(RoutingRoute $route, array $parameters): string
 {
-    return route((string) $route->getName(), array_intersect_key($parameters, array_flip($route->parameterNames())));
+    $names = [...$route->parameterNames(), ...(ADMIN_ROUTE_QUERIES[$route->getName()] ?? [])];
+
+    return route((string) $route->getName(), array_intersect_key($parameters, array_flip($names)));
 }
 
 /**
@@ -159,9 +170,9 @@ describe('internal routes', function () {
         expect($unguarded)->toBe([]);
     });
 
-    it('covers users, roles, registrations, departments, categories, companies, and the activity log', function () {
+    it('covers users, roles, registrations, departments, categories, companies, the activity log, and the BAST template', function () {
         expect(collect(adminRoutes())->pluck('name')->map(fn (string $name): string => explode('.', $name)[1])->unique()->sort()->values()->all())
-            ->toBe(['activity-log', 'companies', 'departments', 'registrations', 'roles', 'users', 'work-order-categories']);
+            ->toBe(['activity-log', 'bast-template', 'companies', 'departments', 'registrations', 'roles', 'users', 'work-order-categories']);
     });
 
     it('answers 404 to an IC user on every admin route, whatever they hold', function (Closure $icUser) {

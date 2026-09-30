@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(RolePermissionSeeder::class);
+        $this->call(BastTemplateSeeder::class);
 
         Company::factory()->client()->create(['code' => 'IC', 'name' => 'IC', 'email_domains' => []]);
         $executor = Company::factory()->create(['code' => 'UGL', 'name' => 'Unggul', 'email_domains' => []]);

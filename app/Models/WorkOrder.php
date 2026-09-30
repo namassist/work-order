@@ -58,6 +58,7 @@ use Spatie\ModelStates\HasStates;
  * @property-read Collection<int, WorkOrderComment> $comments
  * @property-read WorkOrderInvoice|null $invoice
  * @property-read Collection<int, WorkOrderDailyReport> $dailyReports
+ * @property-read WorkOrderBast|null $bast
  */
 #[Fillable(['title', 'description', 'requester_department_id', 'requester_name', 'pic_name', 'work_order_category_id', 'target_department_id', 'urgency', 'target_date'])]
 class WorkOrder extends Model implements Attachable
@@ -258,6 +259,16 @@ class WorkOrder extends Model implements Attachable
     public function invoice(): HasOne
     {
         return $this->hasOne(WorkOrderInvoice::class);
+    }
+
+    /**
+     * The BAST, generated when Rental submits it (FLOW.md §8).
+     *
+     * @return HasOne<WorkOrderBast, $this>
+     */
+    public function bast(): HasOne
+    {
+        return $this->hasOne(WorkOrderBast::class);
     }
 
     /**

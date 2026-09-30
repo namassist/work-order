@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\Department;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Models\WorkOrderBast;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderInvoice;
 use App\States\WorkOrder\ApprovalBast;
@@ -119,13 +120,14 @@ class WorkOrderFactory extends Factory
     }
 
     /**
-     * A work order whose BAST waits for the Direktur (Approval BAST).
+     * A work order whose BAST waits for the Direktur (Approval BAST), with a
+     * BAST record (no files).
      */
     public function awaitingBastApproval(): static
     {
         return $this->submitted()->state(fn (array $attributes): array => [
             'status' => ApprovalBast::class,
-        ]);
+        ])->afterCreating(fn (WorkOrder $workOrder) => WorkOrderBast::factory()->for($workOrder)->create());
     }
 
     /**

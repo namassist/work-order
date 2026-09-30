@@ -21,6 +21,7 @@ final readonly class AttachmentCollection
      * @param  int  $minFiles  files that must stay once the parent needs them (e.g. an invoice's file); removal below it is refused
      * @param  bool  $holdsPendingUploads  uploads waiting for a record to claim them (a comment's files): $maxFiles counts each uploader's own, and adding one is neither logged nor counted as activity on the parent
      * @param  bool  $loggedByRecord  files the parent's own action logs together with its other fields (a daily report's files, logged on its work order), so adding or removing one logs nothing by itself
+     * @param  int|null  $maxImageSide  the most pixels an image may have on either side (read from its header, never decoded), or null for no limit
      */
     public function __construct(
         public string $name,
@@ -30,6 +31,7 @@ final readonly class AttachmentCollection
         public int $minFiles = 0,
         public bool $holdsPendingUploads = false,
         public bool $loggedByRecord = false,
+        public ?int $maxImageSide = null,
     ) {
         $this->types = $types ?? AttachmentType::cases();
     }
@@ -41,7 +43,7 @@ final readonly class AttachmentCollection
      */
     public function withRoomFor(int $count): self
     {
-        return new self($this->name, $this->maxFiles + max(0, $count), $this->maxSizeKb, $this->types, $this->minFiles, $this->holdsPendingUploads, $this->loggedByRecord);
+        return new self($this->name, $this->maxFiles + max(0, $count), $this->maxSizeKb, $this->types, $this->minFiles, $this->holdsPendingUploads, $this->loggedByRecord, $this->maxImageSide);
     }
 
     public function accepts(AttachmentType $type): bool

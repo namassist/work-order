@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\WorkOrders\Transitions\ApproveBast;
+use App\Actions\WorkOrders\Transitions\EnsureActiveBastTemplate;
 use App\Actions\WorkOrders\Transitions\EnsureDailyReport;
 use App\Actions\WorkOrders\Transitions\GenerateBast;
 use App\Actions\WorkOrders\Transitions\TransitionEffect;
@@ -7,7 +9,6 @@ use App\Actions\WorkOrders\Transitions\TransitionRequirement;
 use App\Actions\WorkOrders\TransitionWorkOrder;
 use App\Models\User;
 use App\Models\WorkOrder;
-use App\Models\WorkOrderDailyReport;
 use App\States\WorkOrder\WorkOrderStatus;
 use App\States\WorkOrder\WorkOrderTransition;
 use Illuminate\Support\Facades\DB;
@@ -16,12 +17,13 @@ use Spatie\Activitylog\Models\Activity;
 /*
 | The extension points of the flow (FLOW.md §15): Pelaksanaan → Review
 | Dokumen requires a daily report (step 4, DailyReportRequirementTest),
-| Review Dokumen → Approval BAST generates the BAST (step 5, a PROVISIONAL
-| placeholder that does nothing yet). These tests pin where they are
-| declared and how TransitionWorkOrder runs a requirement and an effect.
+| Review Dokumen → Approval BAST requires an active BAST template and
+| generates the BAST, Approval BAST → BAST Disetujui generates its final PDF
+| (step 5, BastGenerationTest). These tests pin where they are declared and
+| how TransitionWorkOrder runs a requirement and an effect.
 */
 
-it('declares the daily report requirement and the BAST effect on their transitions only', function () {
+it('declares the daily report and BAST requirements and the BAST effects on their transitions only', function () {
     $hooks = [];
 
     foreach (WorkOrderStatus::flowOrder() as $from) {
@@ -35,19 +37,9 @@ it('declares the daily report requirement and the BAST effect on their transitio
 
     expect($hooks)->toBe([
         'pelaksanaan → review_dokumen' => [[EnsureDailyReport::class], []],
-        'review_dokumen → approval_bast' => [[], [GenerateBast::class]],
+        'review_dokumen → approval_bast' => [[EnsureActiveBastTemplate::class], [GenerateBast::class]],
+        'approval_bast → bast_disetujui' => [[], [ApproveBast::class]],
     ]);
-});
-
-it('does nothing for the BAST until step 5 fills it in', function () {
-    $workOrder = WorkOrder::factory()->inProgress()->create();
-    WorkOrderDailyReport::factory()->for($workOrder)->create();
-    $action = app(TransitionWorkOrder::class);
-
-    $action->handle($workOrder, 'review_dokumen', adminUser());
-    $action->handle($workOrder, 'approval_bast', adminUser());
-
-    expect($workOrder->refresh()->status->getValue())->toBe('approval_bast');
 });
 
 it('refuses the transition when a requirement is not met, leaving no trace', function () {
@@ -104,6 +96,7 @@ it('runs an effect once, after the status changed, in the same transaction', fun
         }
     });
 
+    activeBastTemplate();
     app(TransitionWorkOrder::class)->handle(WorkOrder::factory()->inReview()->create(), 'approval_bast', adminUser());
 
     expect($seen->getArrayCopy())->toBe([['approval_bast', 1, 2]]);
@@ -117,6 +110,7 @@ it('rolls the status change back when an effect fails', function () {
             throw new RuntimeException('Template BAST belum ada.');
         }
     });
+    activeBastTemplate();
     $workOrder = WorkOrder::factory()->inReview()->create();
 
     expect(fn () => app(TransitionWorkOrder::class)->handle($workOrder, 'approval_bast', adminUser()))

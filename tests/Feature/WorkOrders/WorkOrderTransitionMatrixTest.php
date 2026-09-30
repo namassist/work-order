@@ -129,6 +129,9 @@ dataset('transition matrix users', [
 it('allows each status change only with its permission, from the statuses FLOW.md allows', function (string $userKey, array $permissions, array $visible) {
     // Dozens of status changes in one frozen minute; throttling has its own tests.
     $this->withoutMiddleware(ThrottleRequests::class);
+    // Submitting the BAST generates it from the active template (BastGenerationTest).
+    Storage::fake('attachments');
+    activeBastTemplate();
 
     ['user' => $user, 'workOrder' => $makeWorkOrder] = transitionWorld($userKey);
     $changesStatus = array_intersect($permissions, FLOW_TRANSITION_PERMISSIONS) !== [];

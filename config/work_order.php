@@ -150,4 +150,34 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | BAST
+    |--------------------------------------------------------------------------
+    |
+    | The BAST (FLOW.md §8, §9). Its number is assigned when Rental submits
+    | it. Tokens: {DEPT_CODE} (the requester department's code), {YYYY},
+    | {YY}, {MM}, and {SEQ:n} (required). Dates are taken in the display
+    | timezone, and each distinct rendering of the other tokens has its own
+    | counter, so the default format restarts at 0001 every month.
+    |
+    | Template images (the letterhead) are PNG or JPEG only; they are embedded
+    | in the PDF by the application, never fetched by the PDF engine.
+    |
+    */
+
+    'bast' => [
+        'number_format' => env('BAST_NUMBER_FORMAT', 'BAST/{YYYY}/{MM}/{SEQ:4}'),
+        'template_max_html_bytes' => 131_072,
+        // The deepest element nesting a template may have; bounds the sanitizer's cost.
+        'template_max_depth' => 24,
+        'images' => [
+            'max_files' => (int) env('BAST_TEMPLATE_MAX_IMAGES', 3),
+            'max_size_kb' => (int) env('BAST_TEMPLATE_IMAGE_MAX_SIZE_KB', 1024),
+            // Pixels per side: a small PNG can declare a huge bitmap that the PDF engine would decode.
+            'max_side_px' => 4000,
+        ],
+        'pdf_max_size_kb' => 20480,
+    ],
+
 ];

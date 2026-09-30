@@ -2,16 +2,21 @@
 
 namespace App\Providers;
 
+use App\Models\BastTemplate;
+use App\Models\BastTemplateVersion;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\WorkOrder;
+use App\Models\WorkOrderBast;
 use App\Models\WorkOrderCategory;
 use App\Models\WorkOrderComment;
 use App\Models\WorkOrderDailyReport;
 use App\Policies\ActivityPolicy;
 use App\Policies\RolePolicy;
+use App\Support\Bast\BastPdfRenderer;
+use App\Support\Bast\DompdfBastPdfRenderer;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -41,7 +46,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(BastPdfRenderer::class, DompdfBastPdfRenderer::class);
     }
 
     /**
@@ -72,6 +77,9 @@ class AppServiceProvider extends ServiceProvider
             'work-order' => WorkOrder::class,
             'wo-comment' => WorkOrderComment::class,
             'wo-daily-report' => WorkOrderDailyReport::class,
+            'wo-bast' => WorkOrderBast::class,
+            'bast-template' => BastTemplate::class,
+            'bast-template-version' => BastTemplateVersion::class,
             'role' => Role::class,
             'permission' => Permission::class,
             'media' => Media::class,
@@ -97,6 +105,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('attachment-upload', $perUserPerMinute(30));
         RateLimiter::for('wo-invoice', $perUserPerMinute(10));
         RateLimiter::for('wo-daily-report', $perUserPerMinute(10));
+        RateLimiter::for('bast-template-preview', $perUserPerMinute(10));
 
         // Public, so per IP. Offices share an IP, hence the hourly headroom.
         RateLimiter::for('registration', fn (Request $request): array => [

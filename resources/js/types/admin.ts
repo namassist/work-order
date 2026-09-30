@@ -194,3 +194,38 @@ export type HistorySubjectType =
     | 'department'
     | 'wo-category'
     | 'work-order';
+
+/** A placeholder the BAST template may use (App\Support\Bast\BastPlaceholder::options()). */
+export type BastPlaceholderOption = {
+    key: string;
+    token: string;
+    label: string;
+    /** Stands alone in its paragraph; the application builds its HTML. */
+    block: boolean;
+};
+
+/** The BAST template's draft (FLOW.md §9). */
+export type BastTemplateDraft = {
+    draft_html: string;
+    draft_updated_at: string | null;
+    draft_editor: string | null;
+    /** The draft is what the latest version holds: nothing waits to be published. */
+    is_published: boolean;
+};
+
+/** A published, immutable version of the BAST template. */
+export type BastTemplateVersion = {
+    id: number;
+    version: number;
+    published_at: string;
+    /** Null for the default template published by the seeder. */
+    publisher: string | null;
+    is_active: boolean;
+};
+
+/** A work order the template can be previewed with. */
+export type BastPreviewWorkOrder = {
+    id: number;
+    number: string;
+    title: string;
+};

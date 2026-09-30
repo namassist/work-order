@@ -9,6 +9,7 @@ import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import ListToolbar from '@/components/ListToolbar.vue';
 import PagePanel from '@/components/PagePanel.vue';
 import { Button } from '@/components/ui/button';
+import BastSection from '@/components/work-orders/BastSection.vue';
 import DailyReportSection from '@/components/work-orders/DailyReportSection.vue';
 import InvoiceDialog from '@/components/work-orders/InvoiceDialog.vue';
 import PaymentDialog from '@/components/work-orders/PaymentDialog.vue';
@@ -25,6 +26,7 @@ import type {
     PaymentStatusOption,
     TimelineEntry,
     WorkOrder,
+    WorkOrderBast,
     WorkOrderDailyReport,
     WorkOrderDailyReportDay,
     WorkOrderDailyReportSettings,
@@ -73,6 +75,8 @@ const props = defineProps<{
     dailyReportSettings: WorkOrderDailyReportSettings;
     /** "Belum lapor": no report today after the cutoff. */
     missingDailyReport: boolean;
+    /** From Approval BAST on; null for client company users (FLOW.md §8). */
+    bast: WorkOrderBast | null;
 }>();
 
 defineOptions({
@@ -338,6 +342,8 @@ const destroy = () => {
             :missing="missingDailyReport"
             :can-report="can.report"
         />
+
+        <BastSection v-if="bast" :bast="bast" />
 
         <WorkOrderPaymentSection
             v-if="paymentStatus"
